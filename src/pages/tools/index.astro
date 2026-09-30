@@ -1,0 +1,41 @@
+---
+import Page from '../../layouts/Page.astro';
+import ToolCard from '../../components/ToolCard.astro';
+import { allTools, categories } from '../../data/tools';
+
+const groups = categories
+	.map((c) => ({
+		...c,
+		items: allTools.filter((t) => t.category === c.key),
+	}))
+	.filter((g) => g.items.length > 0);
+---
+
+<Page title="工具与应用" active="tools">
+	<div class="row-between">
+		<div>
+			<h1 class="page-title">工具与应用</h1>
+			<p class="page-lead">{allTools.length} 个，全部在浏览器本地运行</p>
+		</div>
+		<mdui-chip variant="tonal">
+			<mdui-icon-check-circle></mdui-icon-check-circle>
+			无数据上传
+		</mdui-chip>
+	</div>
+
+	{
+		groups.map((g) => (
+			<section style="margin-top: 2.75rem">
+				<h2 class="section-title row" style="margin-bottom: 0.9rem; gap: 0.4rem">
+					{g.label}
+					<span class="faint text-sm">{g.items.length}</span>
+				</h2>
+				<div class="tool-grid">
+					{g.items.map((t) => (
+						<ToolCard tool={t} tone={g.tone} />
+					))}
+				</div>
+			</section>
+		))
+	}
+</Page>

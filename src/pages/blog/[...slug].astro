@@ -1,0 +1,98 @@
+---
+import { getCollection, render } from 'astro:content';
+import Page from '../../layouts/Page.astro';
+
+export async function getStaticPaths() {
+	const posts = await getCollection('blog', ({ data }) => !data.draft);
+	return posts.map((p) => ({ params: { slug: p.id }, props: { post: p } }));
+}
+
+const { post } = Astro.props;
+const { Content, headings } = await render(post);
+
+const fmt = (d: Date) =>
+	d.toLocaleDateString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric' });
+
+const toc = headings.filter((h) => h.depth === 2);
+---
+
+<Page
+	title={post.data.title}
+	description={post.data.description}
+	image={post.data.hero}
+	type="article"
+	active="blog"
+>
+	<article class="article">
+		<a href="/blog/" class="back-link">← 博客</a>
+
+		<header class="article-head">
+			<h1 class="page-title">{post.data.title}</h1>
+			<div class="row" style="margin-top: 0.75rem; gap: 0.85rem">
+				<time datetime={post.data.pubDate.toISOString()} class="text-sm muted"
+					>{fmt(post.data.pubDate)}</time
+				>
+				{
+					post.data.tags.map((t) => (
+						<mdui-chip variant="tonal" size="small">
+							#{t}
+						</mdui-chip>
+					))
+				}
+			</div>
+			{
+				post.data.description && (
+					<p class="muted" style="margin-top: 0.6rem">{post.data.description}</p>
+				)
+			}
+		</header>
+
+		{
+			toc.length > 2 && (
+				<nav class="panel" style="margin-top: 1.5rem" aria-label="目录">
+					<p class="block-title" style="margin-bottom: 0.4rem">目录</p>
+					<ul class="stack-xs">
+						{toc.map((h) => (
+							<li>
+								<a
+									href={`#${h.slug}`}
+									class="muted"
+									style="text-decoration: none"
+								>
+									{h.text}
+								</a>
+							</li>
+						))}
+					</ul>
+				</nav>
+			)
+		}
+
+		<div class="prose" style="margin-top: 2rem">
+			<Content />
+		</div>
+	</article>
+</Page>
+
+<style is:global>
+	.article {
+		max-width: 42rem;
+		margin-inline: auto;
+	}
+
+	.back-link {
+		font-size: var(--mdui-typescale-body-medium-size);
+		color: rgb(var(--mdui-color-primary));
+		text-decoration: none;
+	}
+
+	.back-link:hover {
+		text-decoration: underline;
+	}
+
+	.article-head {
+		margin-top: 1.25rem;
+		padding-bottom: 1.5rem;
+		border-bottom: 1px solid rgb(var(--mdui-color-outline-variant));
+	}
+</style>

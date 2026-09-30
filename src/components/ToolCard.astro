@@ -1,0 +1,79 @@
+---
+import type { Tool } from '../data/tools';
+import { statusLabel } from '../data/tools';
+
+interface Props {
+	tool: Tool;
+	tone?: 'primary' | 'secondary' | 'tertiary';
+}
+
+const { tool, tone = 'primary' } = Astro.props;
+
+/*
+	图标是自定义元素（<mdui-icon-xxx>），Astro 无法静态分析动态标签名。
+	用 set:html 显式输出标签字符串，图标本身已在 src/lib/icons.ts 中注册。
+	tool.icon 来自本仓库的 tools.ts，非用户输入。
+*/
+const iconTag = `<mdui-icon-${tool.icon}></mdui-icon-${tool.icon}>`;
+---
+
+{/*
+	mdui-card 是 shadow DOM 组件。卡片整体可点（href），配色通过自定义属性
+	从外部传入，由卡内元素引用。
+*/}
+<mdui-card href={tool.href} variant="elevated" class={`tool-card tool-card--${tone}`}>
+	<span class="stack-sm card-body">
+		<span
+			class="card-icon"
+			style="background-color: rgb(var(--card-tone-container)); color: rgb(var(--card-tone-on));"
+			set:html={iconTag}
+		></span>
+
+		<span class="stack-xs card-text">
+			<span class="card-title">{tool.name}</span>
+			<span class="card-desc">{tool.desc}</span>
+		</span>
+
+		<mdui-chip variant="outlined" size="small" class="card-chip"
+			>{statusLabel[tool.status]}</mdui-chip
+		>
+	</span>
+</mdui-card>
+
+<style is:global>
+	.card-body {
+		height: 100%;
+		box-sizing: border-box;
+	}
+
+	.card-icon {
+		display: grid;
+		place-items: center;
+		width: 2.75rem;
+		height: 2.75rem;
+		border-radius: var(--mdui-shape-corner-medium);
+		flex-shrink: 0;
+	}
+
+	.card-text {
+		flex: 1;
+	}
+
+	.card-title {
+		font-size: var(--mdui-typescale-body-large-size);
+		font-weight: 600;
+		line-height: 1.4;
+		color: rgb(var(--mdui-color-on-surface));
+	}
+
+	.card-desc {
+		font-size: var(--mdui-typescale-body-medium-size);
+		line-height: 1.6;
+		color: rgb(var(--mdui-color-on-surface-variant));
+	}
+
+	.card-chip {
+		margin-top: auto;
+		align-self: flex-start;
+	}
+</style>

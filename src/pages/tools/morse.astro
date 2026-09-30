@@ -1,0 +1,545 @@
+---
+import Page from '../../layouts/Page.astro';
+import { TABLE, STYLES } from '../../data/morse-table';
+import { KEYBOARD_LAYOUT } from '../../lib/telegraph';
+
+const codes = Object.entries(TABLE);
+---
+
+<Page title="摩尔斯电码与中文电报码" description="摩尔斯电码互转、音频发报，并支持《标准电码本》中文电码" active="tools">
+	<div class="tool-head">
+		<h1>摩尔斯电码与中文电报码</h1>
+		<p>摩尔斯双向转换与音频发报，另可查《标准电码本》中文四码</p>
+	</div>
+
+	<div class="panel-lg" style="margin-bottom: 1.5rem">
+		<div class="ctrl-row">
+			<div class="field" style="flex: 1 1 12rem">
+				<label for="style">符号风格</label>
+				<select id="style">
+					{STYLES.map((st) => <option value={st.value}>{st.label}</option>)}
+				</select>
+			</div>
+			<div class="field" style="flex: 1 1 12rem">
+				<label for="wpm">
+					语速：<span id="wpmVal" style="color: rgb(var(--mdui-color-primary))">20</span> WPM
+				</label>
+				<input type="range" id="wpm" min="5" max="40" value="20" step="1" />
+			</div>
+			<div class="field" style="flex: 0 0 auto; justify-content: flex-end">
+				<div class="row" style="gap: 0.5rem">
+					<mdui-button variant="filled" id="play">▶ 播放</mdui-button>
+					<mdui-button variant="outlined" id="stop" disabled>■ 停止</mdui-button>
+				</div>
+			</div>
+		</div>
+		<p class="text-xs faint" style="margin-top: 0.5rem">
+			音频发报用 Web Audio 实时合成，不加载任何音频文件。首次点击播放后浏览器才允许出声。
+			中文会先转成四位电码，再把这四位数字发成摩尔斯。
+		</p>
+	</div>
+
+	{/* ---------- 双向转换 ---------- */}
+	<div class="duo" style="margin-top: 1.5rem">
+		<div class="panel">
+			<h2 class="block-title" style="margin-bottom: 0.75rem">文字 → 电码</h2>
+			<textarea id="a" rows="4" class="mono" placeholder="英文字母、数字、标点或中文"
+				>SOS 915P 中文</textarea
+			>
+			<mdui-button variant="filled" id="enc" class="full-btn">转换</mdui-button>
+			<p id="tcNote" class="text-xs faint" style="margin-top: 0.6rem"></p>
+		</div>
+
+		<div class="panel">
+			<h2 class="block-title" style="margin-bottom: 0.75rem">电码 → 文字</h2>
+			<textarea id="b" rows="4" class="mono" placeholder="… — — …"></textarea>
+			<div class="mark-row">
+				<span class="text-xs faint">摩尔斯点划</span>
+				<button type="button" class="mark-key" data-mark=".">
+					<span class="mark-sign">·</span><span class="mark-name">点</span>
+				</button>
+				<button type="button" class="mark-key" data-mark="-">
+					<span class="mark-sign">−</span><span class="mark-name">划</span>
+				</button>
+				<span class="text-xs faint">点划直接追加到上方电码串，空格分词</span>
+			</div>
+			<mdui-button variant="outlined" id="dec" class="full-btn">转换</mdui-button>
+			<label class="options" style="margin-top: 0.7rem">
+				<input type="checkbox" id="asCn" checked />
+				把 4 位数字组按中文电码解释
+			</label>
+		</div>
+	</div>
+
+	<div id="playLine" class="panel" style="margin-top: 1rem" hidden>
+		<p class="block-title" style="margin-bottom: 0.5rem">正在播放</p>
+		<p id="playText" class="mono" style="word-break: break-all"></p>
+		<div class="play-track" aria-hidden="true"><span id="playBar"></span></div>
+	</div>
+
+	{/* ---------- 中文电报码 ---------- */}
+	<div class="panel-lg" style="margin-top: 1.5rem">
+		<div class="ctrl-row">
+			<div class="field" style="flex: 1 1 14rem">
+				<label for="variant">中文电码表</label>
+				<select id="variant">
+					<option value="cn" selected>《标准电码本》· 大陆</option>
+					<option value="tw">《標準電碼本》· 台港</option>
+				</select>
+			</div>
+			<p id="tcStat" class="text-xs faint" style="flex: 1 1 100%; align-self: flex-end">
+				正在加载码表…
+			</p>
+		</div>
+
+		<p class="text-sm muted" style="margin-top: 0.5rem">
+			中文不直接用摩尔斯，而是先查《标准电码本》取四位数字，再把这四位数字
+			发成摩尔斯 —— 上面的转换框已经自动完成这层转换，无需单独操作。
+			下面的键盘供你手动查码。
+		</p>
+
+		{/* 电码键盘 */}
+		<div class="kbd-wrap">
+			<div class="row-between" style="align-items: baseline; margin-bottom: 0.6rem">
+				<h3 class="block-title">电码键盘</h3>
+				<div class="row" style="gap: 0.75rem">
+					<span class="text-xs faint">每键为一个数字，标注的是该码代表的字</span>
+					<button type="button" id="kbdClear" class="link-btn">清空</button>
+				</div>
+			</div>
+
+			<div id="kbd" class="kbd">
+				{KEYBOARD_LAYOUT.map((k) => (
+					<button type="button" class="kbd-key" data-digit={k.digit}>
+						<span class="kbd-digit">{k.digit}</span>
+						<span class="kbd-char" data-char-for={k.digit}>·</span>
+					</button>
+				))}
+			</div>
+
+			<div class="kbd-out">
+				<span class="text-xs faint">正在输入</span>
+				<p id="kbdBuf" class="mono kbd-buf" aria-live="polite">
+					<b class="kbd-pending">0000</b>
+				</p>
+				<p id="kbdResult" class="kbd-result" aria-live="polite"></p>
+				<p id="kbdLog" class="mono kbd-log"></p>
+			</div>
+		</div>
+	</div>
+
+	<details class="panel" style="margin-top: 1.5rem">
+		<summary class="block-title" style="cursor: pointer">摩尔斯对照表（{codes.length} 项）</summary>
+		<div class="table-grid" style="margin-top: 1rem">
+			{codes.map(([k, v]) => <div class="table-cell"><span class="mono cell-key">{k}</span><span class="mono faint">{v}</span></div>)}
+		</div>
+	</details>
+
+	<p class="footnote">
+		中文电码（《标准电码本》的四位商用电码，一字一数）与摩尔斯电码是
+		<strong>两套彼此独立的体系</strong>：前者解决「汉字怎么编号」，后者解决
+		「编号怎么发报」。本站的做法是先把汉字转成四位数字，再按摩尔斯发这四位数字。
+		码表取自 Unicode Unihan 的 kMainlandTelegraph / kTaiwanTelegraph 字段
+		（Unicode 17.0.0），受 Unicode License 约束，详见仓库内
+		<code class="mono">THIRD_PARTY_NOTICES.md</code>。
+	</p>
+</Page>
+
+<style is:global>
+	.full-btn {
+		margin-top: 0.9rem;
+		width: 100%;
+	}
+
+	/* 控制条 */
+	.ctrl-row {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 1rem;
+	}
+
+	.table-grid {
+		display: grid;
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+		column-gap: 1.5rem;
+	}
+
+	@media (min-width: 600px) {
+		.table-grid {
+			grid-template-columns: repeat(4, minmax(0, 1fr));
+		}
+	}
+
+	.table-cell {
+		display: flex;
+		gap: 0.75rem;
+		padding-block: 0.25rem;
+		font-size: var(--mdui-typescale-body-medium-size);
+		border-bottom: 1px solid rgb(var(--mdui-color-outline-variant));
+	}
+
+	.cell-key {
+		width: 1.5rem;
+		flex-shrink: 0;
+		font-weight: 600;
+	}
+
+	/* 播放进度 */
+	.play-track {
+		height: 3px;
+		margin-top: 0.6rem;
+		border-radius: 999px;
+		background-color: rgb(var(--mdui-color-surface-container-highest));
+		overflow: hidden;
+	}
+
+	.play-track > span {
+		display: block;
+		height: 100%;
+		width: 0;
+		background-color: rgb(var(--mdui-color-primary));
+	}
+
+	/* 电码键盘 */
+	.kbd-wrap {
+		margin-top: 1.75rem;
+		padding-top: 1.5rem;
+		border-top: 1px solid rgb(var(--mdui-color-outline-variant));
+	}
+
+	.kbd {
+		display: grid;
+		grid-template-columns: repeat(5, minmax(0, 1fr));
+		gap: 0.5rem;
+	}
+
+	.kbd-key {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 0.1rem;
+		padding: 0.6rem 0.25rem;
+		border-radius: var(--mdui-shape-corner-medium);
+		cursor: pointer;
+		background-color: rgb(var(--mdui-color-surface-container-lowest));
+		box-shadow: inset 0 0 0 1px rgb(var(--mdui-color-outline-variant));
+		transition:
+			background-color var(--mdui-motion-duration-short2),
+			transform var(--mdui-motion-duration-short2);
+	}
+
+	.kbd-key:hover {
+		background-color: rgb(var(--mdui-color-surface-container-high));
+	}
+
+	.kbd-key:active {
+		transform: scale(0.94);
+	}
+
+	.kbd-digit {
+		font-size: var(--mdui-typescale-headline-small-size);
+		font-weight: 600;
+		line-height: 1.1;
+		color: rgb(var(--mdui-color-primary));
+	}
+
+	.kbd-char {
+		font-size: var(--mdui-typescale-body-medium-size);
+		color: rgb(var(--mdui-color-on-surface-variant));
+	}
+
+	/* 点划键 */
+	.mark-row {
+		display: flex;
+		align-items: center;
+		flex-wrap: wrap;
+		gap: 0.5rem;
+		margin-top: 0.85rem;
+	}
+
+	.mark-key {
+		display: inline-flex;
+		align-items: baseline;
+		gap: 0.4rem;
+		padding: 0.35rem 0.8rem;
+		border-radius: var(--mdui-shape-corner-medium);
+		cursor: pointer;
+		background-color: rgb(var(--mdui-color-surface-container-highest));
+		box-shadow: inset 0 0 0 1px rgb(var(--mdui-color-outline-variant));
+		transition:
+			background-color var(--mdui-motion-duration-short2),
+			transform var(--mdui-motion-duration-short2);
+	}
+
+	.mark-key:hover {
+		background-color: rgb(var(--mdui-color-surface-container-high));
+	}
+
+	.mark-key:active {
+		transform: scale(0.94);
+	}
+
+	.mark-sign {
+		font-size: var(--mdui-typescale-title-large-size);
+		font-weight: 600;
+		line-height: 1;
+		color: rgb(var(--mdui-color-primary));
+	}
+
+	.mark-name {
+		font-size: var(--mdui-typescale-body-medium-size);
+		color: rgb(var(--mdui-color-on-surface-variant));
+	}
+
+	.kbd-out {
+		margin-top: 1.25rem;
+		padding: 0.85rem 1rem;
+		border-radius: var(--mdui-shape-corner-medium);
+		background-color: rgb(var(--mdui-color-surface-container-highest));
+	}
+
+	.kbd-buf {
+		font-size: var(--mdui-typescale-headline-small-size);
+		letter-spacing: 0.35em;
+		font-variant-numeric: tabular-nums;
+		margin-top: 0.2rem;
+	}
+
+	.kbd-pending {
+		color: rgb(var(--mdui-color-outline));
+		font-weight: 400;
+	}
+
+	.kbd-result {
+		min-height: 1.6rem;
+		margin-top: 0.35rem;
+		font-size: var(--mdui-typescale-headline-small-size);
+	}
+
+	.kbd-log {
+		margin-top: 0.5rem;
+		min-height: 1.5rem;
+		word-break: break-all;
+		color: rgb(var(--mdui-color-on-surface-variant));
+	}
+</style>
+
+<script>
+	import {
+		encodeText,
+		decodeText,
+		format,
+		telegraphOf,
+		type StyleValue,
+		type TelegraphResolver,
+	} from '../../data/morse-table';
+	import { playMorse, type PlayHandle } from '../../lib/morse-audio';
+	import {
+		loadTelegraph,
+		tableSize,
+		keyChar,
+		type TelegraphTable,
+		type TelegraphVariant,
+	} from '../../lib/telegraph';
+	import { EMPTY, press, clear, renderBuf, type KeyboardState } from '../../lib/telegraph-keyboard';
+
+	const $ = <T extends HTMLElement = HTMLElement>(id: string) =>
+		document.getElementById(id) as T;
+
+	const a = $<HTMLTextAreaElement>('a');
+	const b = $<HTMLTextAreaElement>('b');
+	const asCn = $<HTMLInputElement>('asCn');
+	const tcNote = $('tcNote');
+	const styleSel = $<HTMLSelectElement>('style');
+	const wpm = $<HTMLInputElement>('wpm');
+	const wpmVal = $('wpmVal');
+	const playBtn = $<HTMLButtonElement>('play');
+	const stopBtn = $<HTMLButtonElement>('stop');
+	const playLine = $('playLine');
+	const playText = $('playText');
+	const playBar = $('playBar');
+
+	const currentStyle = (): StyleValue => styleSel.value as StyleValue;
+
+	/* ---------------- 中文电码表 ---------------- */
+	const variantSel = $<HTMLSelectElement>('variant');
+	const tcStat = $('tcStat');
+	const kbdBuf = $('kbdBuf');
+	const kbdResult = $('kbdResult');
+	const kbdLog = $('kbdLog');
+
+	let table: TelegraphTable | null = null;
+
+	async function ensureTable(): Promise<TelegraphTable> {
+		const v = (variantSel.value === 'tw' ? 'tw' : 'cn') as TelegraphVariant;
+		if (table && table.variant === v) return table;
+		tcStat.textContent = '正在加载码表…';
+		table = await loadTelegraph(v);
+		tcStat.textContent =
+			`${table.label}：${tableSize(table).toLocaleString('zh-CN')} 个汉字有码，` +
+			`最大码 ${table.max}。源 ${table.source}`;
+		document.querySelectorAll<HTMLElement>('[data-char-for]').forEach((el) => {
+			el.textContent = keyChar(table!, el.dataset.charFor!) ?? '—';
+		});
+		return table;
+	}
+
+	/** 把码表适配成 morse-table 需要的最小接口 */
+	const resolver = (t: TelegraphTable): TelegraphResolver => ({
+		charToCode: (ch) => {
+			const n = t.chars.indexOf(ch);
+			return n < 0 ? null : String(n).padStart(4, '0');
+		},
+		codeToChar: (code) => {
+			if (!/^\d{1,4}$/.test(code)) return null;
+			const n = Number(code);
+			return n >= 1 && n <= t.max ? t.chars[n] ?? null : null;
+		},
+	});
+
+	/** 表还没加载时给个「按需」代理，已加载就直接查 */
+	let resolverProxy: TelegraphResolver | null = null;
+	const lazyResolver: TelegraphResolver = {
+		charToCode: (ch) => resolverProxy?.charToCode(ch) ?? null,
+		codeToChar: (code) => resolverProxy?.codeToChar(code) ?? null,
+	};
+
+	/* ---------------- 转换 ---------------- */
+	async function doEncode() {
+		const t = await ensureTable();
+		resolverProxy = resolver(t);
+		b.value = encodeText(a.value, currentStyle(), lazyResolver);
+
+		// 说明中文被转成了哪几个四码，方便对照
+		const codes = telegraphOf(a.value, resolverProxy).filter(Boolean) as string[];
+		tcNote.textContent = codes.length
+			? `其中 ${codes.length} 个汉字取四码：${codes.join(' ')}`
+			: '';
+	}
+
+	async function doDecode() {
+		const t = await ensureTable();
+		resolverProxy = resolver(t);
+		a.value = decodeText(b.value, asCn.checked ? lazyResolver : null);
+	}
+
+	$('enc').addEventListener('click', () => void doEncode());
+	$('dec').addEventListener('click', () => void doDecode());
+
+	// 换风格时把右框已有的电码重排，方便对照
+	styleSel.addEventListener('change', () => {
+		if (!b.value.trim()) return;
+		b.value = format(b.value.replace(/\s*\/\s*/g, ' / '), currentStyle());
+	});
+
+	/* ---------------- 音频发报 ---------------- */
+	wpm.addEventListener('input', () => {
+		wpmVal.textContent = wpm.value;
+	});
+
+	let handle: PlayHandle | null = null;
+
+	playBtn.addEventListener('click', async () => {
+		const text = a.value;
+		if (!text.trim() || handle) return;
+		playBtn.disabled = true;
+		stopBtn.disabled = false;
+		playLine.hidden = false;
+		playText.textContent = text;
+		playBar.style.width = '0%';
+		try {
+			handle = playMorse(text, Number(wpm.value), (p) => {
+				playBar.style.width = `${Math.round(p * 100)}%`;
+			});
+			await handle.done;
+		} catch (err) {
+			playText.textContent = `无法播放：${(err as Error).message}`;
+		} finally {
+			handle = null;
+			playBtn.disabled = false;
+			stopBtn.disabled = true;
+		}
+	});
+
+	stopBtn.addEventListener('click', () => {
+		handle?.abort();
+		handle = null;
+		playBtn.disabled = false;
+		stopBtn.disabled = true;
+		playLine.hidden = true;
+	});
+
+	/* ---------------- 电码键盘 ---------------- */
+	let kb: KeyboardState = { ...EMPTY };
+
+	function draw() {
+		kbdBuf.innerHTML = renderBuf(kb);
+		if (!kb.complete) return;
+		kbdResult.textContent = kb.char ?? '（该码未分配）';
+		if (kb.char) kbdLog.textContent = (kbdLog.textContent + kb.char).slice(-40);
+		kb = { ...EMPTY };
+		kbdBuf.innerHTML = renderBuf(kb);
+	}
+
+	async function pressDigit(d: string) {
+		const t = await ensureTable();
+		kbdResult.textContent = '';
+		kb = press(kb, d, t);
+		draw();
+	}
+
+	document.querySelectorAll<HTMLElement>('[data-digit]').forEach((btn) => {
+		btn.addEventListener('click', () => void pressDigit(btn.dataset.digit!));
+	});
+
+	/*
+		点划键：把 ·/− 追加到右侧「电码 → 文字」框。
+		用与 convert 相同的分隔约定（符内双空格、词间 / ），
+		所以拼完可以直接点「转换」解出字母。
+	*/
+	document.querySelectorAll<HTMLElement>('[data-mark]').forEach((btn) => {
+		btn.addEventListener('click', () => {
+			const mark = btn.dataset.mark!;
+			const cur = b.value.replace(/\s+$/, '');
+			const prev = cur.slice(-1);
+			// 同一字母内直接续写；否则先补一个空格作为字母分隔符。
+			const sep = !cur || prev === ' ' || prev === '/' || prev === '.' || prev === '-' ? '' : ' ';
+			b.value = cur + sep + mark;
+			b.dispatchEvent(new Event('input'));
+			void doDecode();
+		});
+	});
+
+	$('kbdClear').addEventListener('click', () => {
+		kb = clear();
+		kbdLog.textContent = '';
+		kbdResult.textContent = '';
+		kbdBuf.innerHTML = renderBuf(kb);
+	});
+
+	variantSel.addEventListener('change', () => {
+		table = null;
+		resolverProxy = null;
+		void ensureTable().then(() => {
+			kb = clear();
+			kbdLog.textContent = '';
+			kbdBuf.innerHTML = renderBuf(kb);
+			kbdResult.textContent = '';
+			if (b.value.trim()) void doEncode();
+		});
+	});
+
+	// 直接敲数字查码
+	document.addEventListener('keydown', (e) => {
+		const tag = (e.target as HTMLElement)?.tagName;
+		if (tag === 'TEXTAREA' || tag === 'INPUT') return;
+		if (e.metaKey || e.ctrlKey || e.altKey || !/^\d$/.test(e.key)) return;
+		void pressDigit(e.key);
+	});
+
+	// 首次进入就备好码表，让转换框能直接处理中文
+	void ensureTable().then(() => {
+		resolverProxy = resolver(table!);
+		kbdBuf.innerHTML = renderBuf(kb);
+	});
+</script>

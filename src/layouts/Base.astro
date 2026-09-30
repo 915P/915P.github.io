@@ -1,0 +1,168 @@
+---
+import '../styles/global.css';
+import { DEFAULT_COLOR } from '../data/theme';
+import '../lib/icons';
+import 'mdui';
+
+interface Props {
+	title: string;
+	description?: string;
+	image?: string;
+	type?: 'website' | 'article';
+}
+
+const {
+	title,
+	description = '915P的小站 — 博客、小工具与折腾记录',
+	image = '/images/og.png',
+	type = 'website',
+} = Astro.props;
+
+const SITE = 'https://915p.github.io';
+const canonical = new URL(Astro.url.pathname, SITE);
+const abs = (p: string) => new URL(p, SITE).href;
+const SITE_NAME = '915P的小站';
+const fullTitle = title === '915P' || title === SITE_NAME ? SITE_NAME : `${title} | ${SITE_NAME}`;
+const siteName = SITE_NAME;
+---
+
+<!doctype html>
+{/*
+	mdui-theme-auto 必须加在 <html> 上 —— mdui 的暗色令牌在
+	@media (prefers-color-scheme: dark) 下只对该类名（及 .mdui-theme-dark）
+	生效。加在 <body> 上不生效。
+*/}
+<html lang="zh-CN" class="mdui-theme-auto">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<title>{fullTitle}</title>
+		<meta name="description" content={description} />
+		<link rel="canonical" href={canonical} />
+		<meta name="generator" content={Astro.generator} />
+
+		<meta property="og:type" content={type} />
+		<meta property="og:title" content={fullTitle} />
+		<meta property="og:description" content={description} />
+		<meta property="og:url" content={canonical} />
+		<meta property="og:image" content={abs(image)} />
+		<meta property="og:site_name" content={siteName} />
+		<meta name="twitter:card" content="summary_large_image" />
+		<meta name="twitter:title" content={fullTitle} />
+		<meta name="twitter:description" content={description} />
+		<meta name="twitter:image" content={abs(image)} />
+
+		{/*
+			theme-color 同时留一份 data-sys-* 备份：用户显式选择浅色/深色时，
+			ThemeControl 会去掉 media 属性改成固定色；切回「跟随系统」时用备份值还原。
+		*/}
+		<meta
+			name="theme-color"
+			media="(prefers-color-scheme: light)"
+			content="#fef7ff"
+			data-sys-media="(prefers-color-scheme: light)"
+			data-sys-content="#fef7ff"
+		/>
+		<meta
+			name="theme-color"
+			media="(prefers-color-scheme: dark)"
+			content="#141218"
+			data-sys-media="(prefers-color-scheme: dark)"
+			data-sys-content="#141218"
+		/>
+		<meta name="author" content="915P" />
+
+		<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+		<link rel="icon" href="/favicon.ico" sizes="32x32" />
+		<link
+			rel="alternate"
+			type="application/rss+xml"
+			title="915P的小站"
+			href={abs('/rss.xml')}
+		/>
+
+		{/*
+			mdui 的组件样式由组件 JS 经 lit 注入 shadow DOM，
+			仅引入 mdui.css 拿不到任何组件样式，必须同时加载全局 JS 构建。
+			用 is:inline 避免被 Astro 打包器处理。
+		*/}
+		<script is:inline src="/vendor/mdui/mdui.global.js" defer></script>
+
+		{/*
+			在首帧绘制前应用用户保存的外观设置，否则深色模式用户会先闪一下亮色。
+
+			这段必须同步执行（内联脚本的 defer 属性无效），所以不能依赖 mdui
+			全局对象：
+			  - 模式：直接换 <html> 上的类，mdui.setTheme() 做的也是同一件事。
+			  - 主题色：setColorScheme() 只有 mdui 就绪后才可用，改为挂在
+			    mdui.global.js 的 load 事件上；defer 脚本的 load 在执行后触发，
+			    此时 window.mdui 已就绪。
+			  - 已经就绪时（比如 bfcache 恢复）直接补一次。
+
+			与 <html class="mdui-theme-auto"> 的关系：这里读不到已保存值时
+			删掉全部主题类再补 auto，等价于原本的静态类。
+		*/}
+		<script define:vars={{ modeKey: '915p-theme-mode', colorKey: '915p-theme-color', defaultColor: DEFAULT_COLOR }}>
+			(function () {
+				var root = document.documentElement;
+
+				// 1) 模式：同步生效
+				try {
+					var mode = localStorage.getItem(modeKey) || 'auto';
+					if (['auto', 'light', 'dark'].indexOf(mode) === -1) mode = 'auto';
+					root.classList.remove('mdui-theme-auto', 'mdui-theme-light', 'mdui-theme-dark');
+					root.classList.add('mdui-theme-' + mode);
+				} catch (e) {
+					root.classList.remove('mdui-theme-auto', 'mdui-theme-light', 'mdui-theme-dark');
+					root.classList.add('mdui-theme-auto');
+				}
+
+				// 2) 主题色：等 mdui.global.js 加载完成
+				var color;
+				try {
+					color = localStorage.getItem(colorKey);
+				} catch (e) {
+					color = null;
+				}
+				// 默认色就是 global.css 的基色，此时不需要动态配色
+				if (!color || color === defaultColor) return;
+
+				var apply = function () {
+					if (window.mdui && window.mdui.setColorScheme) {
+						window.mdui.setColorScheme(color);
+					}
+				};
+
+				var s = document.querySelector('script[src*="mdui.global.js"]');
+				if (s) {
+					s.addEventListener('load', apply);
+					// 脚本可能已经加载完（缓存命中），load 不会再触发
+					apply();
+				} else {
+					apply();
+				}
+			})();
+		</script>
+
+		{/*
+			Web Components 在 JS 注册完成前处于未定义状态。默认隐藏 body 并在
+			组件就绪后淡入，避免 FOUC。<noscript> 提供兜底样式。
+		*/}
+		<noscript>
+			<style>
+				body {
+					opacity: 1 !important;
+				}
+				:not(:defined) {
+					visibility: visible;
+				}
+			</style>
+		</noscript>
+
+		<slot name="head" />
+	</head>
+	<body>
+		<slot />
+		<slot name="scripts" />
+	</body>
+</html>

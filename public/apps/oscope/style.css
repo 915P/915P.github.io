@@ -1,0 +1,285 @@
+/* 915P 示波器 — mdui 2 / MD3 外观。保留原 app.js 所需的选择器与 DOM 结构。 */
+:root {
+--oscope-radius: 1rem;
+}
+
+* {
+box-sizing: border-box;
+}
+
+html,
+body {
+min-height: 100%;
+margin: 0;
+}
+
+body {
+font-family: var(--mdui-font-family-plain, system-ui, -apple-system, "Segoe UI", sans-serif);
+color: rgb(var(--mdui-color-on-surface));
+background-color: rgb(var(--mdui-color-background));
+line-height: 1.6;
+}
+
+a {
+color: rgb(var(--mdui-color-primary));
+}
+
+.app-bar {
+display: flex;
+align-items: center;
+justify-content: space-between;
+gap: 1rem;
+padding: 0.75rem 1.25rem;
+border-bottom: 1px solid rgb(var(--mdui-color-outline-variant));
+background-color: rgb(var(--mdui-color-surface-container));
+position: sticky;
+top: 0;
+z-index: 10;
+}
+
+.app-bar-brand {
+display: inline-flex;
+align-items: center;
+gap: 0.6rem;
+color: inherit;
+text-decoration: none;
+font-weight: 600;
+}
+
+.app-bar-brand img {
+width: 28px;
+height: 28px;
+border-radius: 50%;
+}
+
+.app-bar-link {
+font-size: 0.875rem;
+text-decoration: none;
+}
+
+.app-bar-link:hover {
+text-decoration: underline;
+}
+
+.oscope-shell {
+display: grid;
+gap: 1.25rem;
+width: min(100% - 2rem, 90rem);
+margin-inline: auto;
+padding-block: 1.25rem 2rem;
+}
+
+@media (min-width: 960px) {
+.oscope-shell {
+grid-template-columns: minmax(0, 1.55fr) minmax(21rem, 1fr);
+align-items: start;
+}
+}
+
+.scope-panel {
+min-width: 0;
+}
+
+#scope-stage {
+position: relative;
+width: 100%;
+height: clamp(20rem, 58vh, 36rem);
+overflow: hidden;
+border-radius: var(--oscope-radius);
+background-color: #032b5c;
+box-shadow: var(--mdui-elevation-level2);
+}
+
+#scope-stage canvas {
+display: block;
+width: 100%;
+height: 100%;
+}
+
+#fps {
+position: absolute;
+top: 0.6rem;
+right: 0.7rem;
+padding: 0.1rem 0.45rem;
+border-radius: 999px;
+font-size: 0.72rem;
+color: #d8e6ff;
+background-color: rgb(0 0 0 / 38%);
+font-variant-numeric: tabular-nums;
+}
+
+#fps::after {
+content: " fps";
+}
+
+.control-panel {
+display: block;
+padding: 1rem 1.05rem 1.15rem;
+}
+
+fieldset {
+min-width: 0;
+margin: 0;
+padding: 0;
+border: 0;
+}
+
+fieldset + fieldset {
+margin-top: 1.15rem;
+padding-top: 1.15rem;
+border-top: 1px solid rgb(var(--mdui-color-outline-variant));
+}
+
+legend {
+padding: 0;
+margin-bottom: 0.7rem;
+font-size: 0.9rem;
+font-weight: 600;
+color: rgb(var(--mdui-color-primary));
+}
+
+.settings {
+display: grid;
+gap: 0.7rem;
+}
+
+.settings label,
+.mode-section label {
+display: flex;
+flex-direction: column;
+gap: 0.3rem;
+font-size: 0.875rem;
+color: rgb(var(--mdui-color-on-surface-variant));
+}
+
+.settings label span:first-child {
+color: rgb(var(--mdui-color-on-surface));
+}
+
+.volume-label {
+display: grid !important;
+grid-template-columns: 4.5rem minmax(0, 1fr);
+align-items: center;
+}
+
+.select,
+input[type="text"],
+input[type="file"] {
+width: 100%;
+min-height: 2.4rem;
+padding: 0.45rem 0.65rem;
+border: 1px solid rgb(var(--mdui-color-outline));
+border-radius: 0.5rem;
+font: inherit;
+color: rgb(var(--mdui-color-on-surface));
+background-color: rgb(var(--mdui-color-surface-container-lowest));
+}
+
+input[type="range"] {
+width: 100%;
+accent-color: rgb(var(--mdui-color-primary));
+}
+
+#mode > input[type="radio"] {
+position: absolute;
+opacity: 0;
+pointer-events: none;
+}
+
+#mode .mode-item {
+display: inline-block;
+margin: 0 0.4rem 0.4rem 0;
+padding: 0.42rem 0.85rem;
+border: 1px solid rgb(var(--mdui-color-outline-variant));
+border-radius: 999px;
+cursor: pointer;
+font-size: 0.875rem;
+color: rgb(var(--mdui-color-on-surface-variant));
+background-color: rgb(var(--mdui-color-surface-container-lowest));
+transition: background-color var(--mdui-motion-duration-short2),
+color var(--mdui-motion-duration-short2);
+}
+
+#mode .mode-item:hover {
+background-color: rgb(var(--mdui-color-surface-container-high));
+}
+
+#mode > input[type="radio"]:checked + .mode-item {
+color: rgb(var(--mdui-color-on-secondary-container));
+background-color: rgb(var(--mdui-color-secondary-container));
+border-color: transparent;
+}
+
+#mode > input[type="radio"]:not(:checked) + .mode-item + .mode-section {
+display: none;
+}
+
+.mode-section {
+margin: 0.2rem 0 0.85rem;
+padding: 0.85rem 0.9rem;
+border-radius: 0.75rem;
+background-color: rgb(var(--mdui-color-surface-container-low));
+}
+
+.mode-section label + label {
+margin-top: 0.55rem;
+}
+
+.check-line {
+flex-direction: row !important;
+align-items: center;
+gap: 0.45rem !important;
+}
+
+.range-line {
+display: block;
+width: 100%;
+}
+
+#math code {
+font-family: ui-monospace, Consolas, monospace;
+font-size: 0.75rem;
+color: rgb(var(--mdui-color-on-surface-variant));
+}
+
+#math input {
+font-family: ui-monospace, Consolas, monospace;
+}
+
+#signal span {
+font-size: 0.75rem;
+color: rgb(var(--mdui-color-primary));
+font-variant-numeric: tabular-nums;
+}
+
+#remote form label,
+#local label {
+align-items: stretch;
+}
+
+#remote input[type="submit"] {
+margin-top: 0.5rem;
+}
+
+#remote audio,
+#local audio {
+width: 100%;
+margin-top: 0.65rem;
+}
+
+.app-footer {
+padding: 1rem 1.25rem 2rem;
+text-align: center;
+font-size: 0.78rem;
+color: rgb(var(--mdui-color-on-surface-variant));
+}
+
+@media (max-width: 599px) {
+.oscope-shell {
+width: min(100% - 1rem, 90rem);
+}
+
+#scope-stage {
+height: 46vh;
+}
+}

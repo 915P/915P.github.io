@@ -1,0 +1,79 @@
+---
+import Base from './Base.astro';
+import Nav from '../components/Nav.astro';
+import Footer from '../components/Footer.astro';
+
+interface Props {
+	title: string;
+	description?: string;
+	image?: string;
+	type?: 'website' | 'article';
+	active?: 'home' | 'blog' | 'tools';
+}
+
+const { title, description, image, type, active } = Astro.props;
+---
+
+{/*
+	Nav.astro 持有 <mdui-layout> 骨架（top-app-bar / navigation-rail /
+	layout-main / navigation-bar）。页面内容与页脚都通过具名插槽送进
+	layout-main 内部 —— 写在 Nav 之外会脱离布局定位（曾导致页脚置顶）。
+*/}
+<Base title={title} description={description} image={image} type={type}>
+	<Nav active={active}>
+		<div class="page" slot="content">
+			<slot />
+		</div>
+		<Footer slot="footer" />
+	</Nav>
+
+	<style is:global>
+		.page {
+			width: 100%;
+			max-width: 72rem;
+			margin-inline: auto;
+			padding: 2rem 1.25rem 2.5rem;
+		}
+
+		@media (min-width: 840px) {
+			.page {
+				padding: 2.5rem 2rem 3rem;
+			}
+		}
+	</style>
+
+	{/*
+		Web Components 需先完成注册，否则页面会因 :not(:defined) 而不可见。
+		等待用到的组件就绪后再淡入；allSettled 保证个别组件加载失败时
+		页面仍会显示（只是样式可能不完整）。
+	*/}
+	<script>
+		/*
+			图标模块必须在客户端引入：放在 front matter 会被判定为仅服务端依赖
+			并被 tree-shake 掉（同 mdui 组件 JS 的问题）。
+		*/
+		import '../lib/icons';
+
+		const TAGS = [
+			'mdui-layout',
+			'mdui-layout-main',
+			'mdui-top-app-bar',
+			'mdui-top-app-bar-title',
+			'mdui-navigation-rail',
+			'mdui-navigation-rail-item',
+			'mdui-navigation-bar',
+			'mdui-navigation-bar-item',
+			'mdui-button',
+			'mdui-button-icon',
+			'mdui-card',
+			'mdui-chip',
+			'mdui-divider',
+			'mdui-linear-progress',
+			'mdui-icon-home',
+		];
+
+		Promise.allSettled(TAGS.map((t) => customElements.whenDefined(t))).then(() => {
+			document.body.classList.add('mdui-ready');
+		});
+	</script>
+</Base>

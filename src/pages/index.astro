@@ -1,0 +1,176 @@
+---
+import Page from '../layouts/Page.astro';
+import ToolCard from '../components/ToolCard.astro';
+import { allTools } from '../data/tools';
+import { getCollection } from 'astro:content';
+
+const posts = (await getCollection('blog', ({ data }) => !data.draft))
+	.sort((a, b) => b.data.pubDate.valueOf() - a.data.pubDate.valueOf())
+	.slice(0, 2);
+
+const featured = allTools.slice(0, 3);
+
+const fmt = (d: Date) =>
+	d.toLocaleDateString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric' });
+---
+
+<Page title="915P的小站" active="home">
+	<section class="hero">
+		<img
+			src="/images/logo.svg"
+			alt="915P的小站标志"
+			width="72"
+			height="72"
+			class="hero-avatar"
+		/>
+		<div class="hero-text">
+			<h1 class="page-title text-balance">欢迎来到这里</h1>
+			<p class="page-lead">折腾笔记、小工具与一些没用的实验。</p>
+			<div class="row" style="margin-top: 1.25rem">
+				<mdui-button variant="filled" href="/tools/">看看有什么</mdui-button>
+				<mdui-button variant="outlined" href="/blog/">读博客</mdui-button>
+			</div>
+		</div>
+	</section>
+
+	<section style="margin-top: 3.5rem">
+		<div class="row-between" style="margin-bottom: 1rem">
+			<h2 class="section-title">常用</h2>
+			<a href="/tools/" class="more-link">全部
+				<mdui-icon-arrow-back class="flip"></mdui-icon-arrow-back>
+			</a>
+		</div>
+
+		<div class="tool-grid">
+			{featured.map((t) => <ToolCard tool={t} tone="primary" />)}
+		</div>
+	</section>
+
+	{
+		posts.length > 0 && (
+			<section style="margin-top: 3.5rem">
+				<h2 class="section-title" style="margin-bottom: 1rem">最新文章</h2>
+				<div class="stack-sm">
+					{posts.map((p) => (
+						<a href={`/blog/${p.id}/`} class="post-row">
+							<div class="stack-xs" style="min-width: 0; flex: 1">
+								<span class="post-title">{p.data.title}</span>
+								<span class="post-desc">{p.data.description}</span>
+							</div>
+							<time
+								datetime={p.data.pubDate.toISOString()}
+								class="text-xs faint"
+								style="white-space: nowrap"
+							>
+								{fmt(p.data.pubDate)}
+							</time>
+						</a>
+					))}
+				</div>
+			</section>
+		)
+	}
+
+	<section class="panel" style="margin-top: 3.5rem">
+		<h2 class="section-title">关于本站</h2>
+		<ul class="about-list">
+			<li>不出售友链、不出租二级目录、不接下载器和捆绑类广告。</li>
+			<li>所有工具均在浏览器本地运行，输入内容不会离开你的设备。</li>
+		</ul>
+		<div class="row" style="margin-top: 1rem">
+			<a
+				href="https://github.com/915P/915P.github.io"
+				class="more-link"
+				target="_blank"
+				rel="noopener noreferrer">源代码</a
+			>
+			<a href="/rss.xml" class="more-link">RSS 订阅</a>
+		</div>
+	</section>
+</Page>
+
+<style is:global>
+	.hero {
+		display: flex;
+		flex-direction: column;
+		align-items: flex-start;
+		gap: 1.25rem;
+	}
+
+	@media (min-width: 720px) {
+		.hero {
+			flex-direction: row;
+			align-items: center;
+			gap: 1.75rem;
+		}
+	}
+
+	/* logo.svg 是圆形金币，故用 50% 而非圆角矩形 */
+	.hero-avatar {
+		width: 72px;
+		height: 72px;
+		border-radius: 50%;
+		flex-shrink: 0;
+		box-shadow: var(--mdui-elevation-level2);
+	}
+
+	.hero-text {
+		min-width: 0;
+	}
+
+	.more-link {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.15rem;
+		font-size: var(--mdui-typescale-body-medium-size);
+		color: rgb(var(--mdui-color-primary));
+		text-decoration: none;
+	}
+
+	.more-link:hover {
+		text-decoration: underline;
+	}
+
+	/* 箭头图标默认朝左，这里旋回朝右表示「前往」 */
+	.flip {
+		transform: scaleX(-1);
+	}
+
+	.post-row {
+		display: flex;
+		align-items: center;
+		gap: 1rem;
+		padding: 0.9rem 1.1rem;
+		border-radius: var(--mdui-shape-corner-medium);
+		background-color: rgb(var(--mdui-color-surface-container-low));
+		text-decoration: none;
+		transition: background-color var(--mdui-motion-duration-short2);
+	}
+
+	.post-row:hover {
+		background-color: rgb(var(--mdui-color-surface-container));
+	}
+
+	.post-title {
+		font-size: var(--mdui-typescale-body-large-size);
+		font-weight: 600;
+		color: rgb(var(--mdui-color-on-surface));
+	}
+
+	.post-desc {
+		font-size: var(--mdui-typescale-body-medium-size);
+		color: rgb(var(--mdui-color-on-surface-variant));
+	}
+
+	.about-list {
+		margin: 0.6rem 0 0;
+		padding-left: 1.2em;
+		list-style: disc;
+		font-size: var(--mdui-typescale-body-medium-size);
+		color: rgb(var(--mdui-color-on-surface-variant));
+	}
+
+	.about-list li + li {
+		margin-top: 0.35rem;
+	}
+</style>

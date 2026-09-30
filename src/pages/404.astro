@@ -1,0 +1,27 @@
+---
+import Page from '../layouts/Page.astro';
+---
+
+<Page title="页面不存在" description="404">
+	<div class="canvas" style="min-height: 24rem; flex-direction: column; gap: 0.75rem">
+		<p
+			class="mono"
+			style="
+				font-size: 4rem;
+				font-weight: 700;
+				line-height: 1;
+				color: rgb(var(--mdui-color-primary));
+			"
+		>
+			404
+		</p>
+		<p class="text-xl">这里什么都没有</p>
+		<p class="muted" style="max-width: 24rem; text-align: center">
+			你要找的页面可能已被移动、重命名，或从未存在过。
+		</p>
+		<div class="btn-row" style="margin-top: 0.75rem">
+			<mdui-button variant="filled" href="/">回到首页</mdui-button>
+			<mdui-button variant="outlined" href="/tools/">看看工具</mdui-button>
+		</div>
+	</div>
+</Page>

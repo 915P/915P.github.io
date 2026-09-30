@@ -1,0 +1,60 @@
+---
+import Page from '../../layouts/Page.astro';
+---
+
+<Page title="HTML 在线编辑器" description="边写边预览的简易编辑器" active="tools">
+	<div class="tool-head">
+		<h1>HTML 在线编辑器</h1>
+		<p>左侧写代码，右侧实时预览</p>
+	</div>
+
+	<div class="duo">
+		<div>
+			<div class="row-between" style="margin-bottom: 0.5rem">
+				<span class="block-title">HTML</span>
+				<button type="button" id="clear" class="link-btn">清空</button>
+			</div>
+			<textarea id="src" spellcheck="false" class="mono code-area"></textarea>
+		</div>
+		<div>
+			<span class="block-title" style="display: block; margin-bottom: 0.5rem">预览</span>
+			<iframe id="out" title="预览" sandbox="allow-scripts" class="preview"></iframe>
+		</div>
+	</div>
+
+	<p class="footnote">
+		预览运行在沙箱 iframe 中，不会影响本页面。内容不会被上传到任何服务器。
+	</p>
+</Page>
+
+<script>
+	const src = document.getElementById('src') as HTMLTextAreaElement;
+	const out = document.getElementById('out') as HTMLIFrameElement;
+
+	const DEF = `<h1>你好</h1>
+<p>在这里输入 HTML，右侧会实时预览。</p>
+<ul>
+  <li>试试加粗：<strong>粗体</strong></li>
+  <li>试试颜色：<span style="color:#5468ff">蓝色文字</span></li>
+</ul>`;
+
+	let t: number | undefined;
+
+	function render() {
+		out.srcdoc = `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8">
+<style>body{font-family:system-ui,sans-serif;padding:16px;line-height:1.7;color:#1c1b1f;margin:0}</style>
+</head><body>${src.value}</body></html>`;
+	}
+
+	src.value = DEF;
+	src.addEventListener('input', () => {
+		clearTimeout(t);
+		t = window.setTimeout(render, 250);
+	});
+	document.getElementById('clear')!.addEventListener('click', () => {
+		src.value = '';
+		src.focus();
+		render();
+	});
+	render();
+</script>

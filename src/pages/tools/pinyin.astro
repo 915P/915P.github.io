@@ -1,0 +1,101 @@
+---
+import Page from '../../layouts/Page.astro';
+---
+
+<Page title="汉字转拼音" description="中文转拼音，支持多音字与声调" active="tools">
+	<div class="tool-head">
+		<h1>汉字转拼音</h1>
+		<p>支持带声调、不带声调与首字母三种输出</p>
+	</div>
+
+	<div class="tool-mid stack">
+		<div class="options" role="radiogroup" aria-label="输出类型">
+			<label><input type="radio" name="ptype" value="0" checked /> 带声调</label>
+			<label><input type="radio" name="ptype" value="1" /> 不带声调</label>
+			<label><input type="radio" name="ptype" value="2" /> 拼音首字母</label>
+		</div>
+
+		<div class="field">
+			<label for="src">输入中文</label>
+			<textarea id="src" rows="4" placeholder="请输入中文"
+				>小明说长大后要去看中国的长城！</textarea
+			>
+		</div>
+
+		<div class="field">
+			<div class="row-between" style="margin-bottom: 0.35rem">
+				<label for="dst" style="margin: 0">转换结果</label>
+				<button type="button" id="copy" class="link-btn">复制</button>
+			</div>
+			<textarea id="dst" rows="4" class="mono" readonly></textarea>
+		</div>
+
+		<div>
+			<mdui-linear-progress id="bar" indeterminate></mdui-linear-progress>
+			<p id="tip" class="text-xs faint" style="margin-top: 0.4rem">
+				首次使用需加载约 1 MB 拼音词库，请稍候。
+			</p>
+		</div>
+	</div>
+
+	<noscript>
+		<p class="footnote" style="color: rgb(var(--mdui-color-error))">
+			本工具需要 JavaScript 才能在本地完成转换。
+		</p>
+	</noscript>
+</Page>
+
+<script>
+	import { loadPinyin, type PinyinUtil } from '$lib/pinyin-loader';
+
+	const src = document.getElementById('src') as HTMLTextAreaElement;
+	const dst = document.getElementById('dst') as HTMLTextAreaElement;
+	const bar = document.getElementById('bar') as HTMLElement & { value: number };
+	const tip = document.getElementById('tip')!;
+	const copy = document.getElementById('copy') as HTMLButtonElement;
+
+	let py: PinyinUtil | null = null;
+
+	function run() {
+		if (!py) return;
+		const v = src.value;
+		if (!v) {
+			dst.value = '';
+			return;
+		}
+		const t = (document.querySelector('[name="ptype"]:checked') as HTMLInputElement).value;
+		if (t === '0') dst.value = py.getPinyin(v, ' ', true, true);
+		else if (t === '1') dst.value = py.getPinyin(v, ' ', false, true);
+		else dst.value = py.getFirstLetter(v, true);
+	}
+
+	(async () => {
+		try {
+			py = await loadPinyin();
+			bar.value = 1;
+			bar.hidden = true;
+			tip.textContent = '词库就绪，全部处理均在本地完成。';
+			run();
+		} catch (e) {
+			bar.value = 1;
+			bar.hidden = true;
+			tip.textContent = (e as Error).message + '，请检查网络后刷新重试。';
+		}
+	})();
+
+	src.addEventListener('input', run);
+	document.querySelectorAll('[name="ptype"]').forEach((r) =>
+		r.addEventListener('change', run),
+	);
+	copy.addEventListener('click', async () => {
+		if (!dst.value) return;
+		try {
+			await navigator.clipboard.writeText(dst.value);
+			copy.textContent = '已复制';
+		} catch {
+			dst.select();
+			copy.textContent = '请手动复制';
+		}
+		setTimeout(() => (copy.textContent = '复制'), 1500);
+	});
+</script>

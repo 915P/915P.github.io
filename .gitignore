@@ -1,0 +1,39 @@
+# 依赖与构建产物
+node_modules/
+dist/
+.astro/
+
+# 部署环境
+.env
+.env.production
+.env.local
+
+# 日志
+npm-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# 编辑器 / 操作系统
+.DS_Store
+Thumbs.db
+desktop.ini
+.idea/
+.vscode/
+*.swp
+
+# 浏览器「网页另存为」产物
+*.下载
+saved_resource*.html
+
+# AI 助手的项目记忆文件
+# 本文件记录项目的历史沿革、已完成与未完成的工作，供后续 agent 接手。
+# 不纳入版本控制，避免把对话上下文与内部笔记推送到公开仓库。
+AGENT.md
+AGENTS.md
+CLAUDE.md
+
+# mdui 官方文档本地副本，仅供查阅，不入库
+/docs/
+
+# 站长维护指南（仅本地，不进入仓库）
+STATION-GUIDE.md

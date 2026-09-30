@@ -1,0 +1,851 @@
+@import 'mdui/mdui.css';
+
+/* ==========================================================================
+   915P 站点样式
+   基于 Material Design 3 设计令牌，不使用工具类框架。
+   优先直接使用 mdui 组件；下方只定义组件覆盖与语义化类。
+   ========================================================================== */
+
+/* --------------------------------------------------------------------------
+   1. 品牌配色
+   覆写 MD3 色调板：改这里整站（含所有 mdui 组件）同步变化。
+   取自 Material Theme Builder 的基色 40/80。
+   -------------------------------------------------------------------------- */
+/*
+	默认主题色是 #66ccff（天蓝），下面这组 token 全部由它经 mdui 的
+	MD3 色调映射算法生成，不是手挑的。
+
+	⚠️ 这段必须与 src/data/theme.ts 的 DEFAULT_COLOR 保持一致。
+	换默认色时要用 mdui.setColorScheme() 重新生成，别手改色值 ——
+	MD3 的 on-* 对比度和 container 关系是算法保证的。
+	（法：headless 里调 setColorScheme，再把注入的 CSS 变量读出来）
+*/
+:root {
+	--mdui-color-primary-light: 0, 102, 137;
+	--mdui-color-primary-dark: 121, 209, 255;
+	--mdui-color-on-primary-light: 255, 255, 255;
+	--mdui-color-on-primary-dark: 0, 53, 73;
+	--mdui-color-primary-container-light: 195, 232, 255;
+	--mdui-color-primary-container-dark: 0, 76, 104;
+	--mdui-color-on-primary-container-light: 0, 30, 44;
+	--mdui-color-on-primary-container-dark: 195, 232, 255;
+
+	--mdui-color-secondary-light: 78, 97, 109;
+	--mdui-color-secondary-dark: 183, 213, 232;
+	--mdui-color-on-secondary-light: 255, 255, 255;
+	--mdui-color-on-secondary-dark: 27, 44, 54;
+	--mdui-color-secondary-container-light: 209, 229, 244;
+	--mdui-color-secondary-container-dark: 54, 74, 88;
+	--mdui-color-on-secondary-container-light: 9, 30, 40;
+	--mdui-color-on-secondary-container-dark: 209, 229, 244;
+
+	--mdui-color-tertiary-light: 96, 90, 125;
+	--mdui-color-tertiary-dark: 199, 190, 232;
+	--mdui-color-on-tertiary-light: 255, 255, 255;
+	--mdui-color-on-tertiary-dark: 44, 39, 66;
+	--mdui-color-tertiary-container-light: 228, 222, 255;
+	--mdui-color-tertiary-container-dark: 70, 64, 96;
+	--mdui-color-on-tertiary-container-light: 36, 30, 56;
+	--mdui-color-on-tertiary-container-dark: 228, 222, 255;
+
+	/* surface-tint-color 由主色派生，不覆写会残留默认紫色的色调偏移 */
+	--mdui-color-surface-tint-color-light: 0, 102, 137;
+	--mdui-color-surface-tint-color-dark: 121, 209, 255;
+}
+
+/* --------------------------------------------------------------------------
+   2. 形状与排版微调
+   MD3 默认的大圆角在密集布局中偏圆润，收窄一档更贴合内容型站点。
+   -------------------------------------------------------------------------- */
+:root {
+	--mdui-shape-corner-extra-small: 0.25rem;
+	--mdui-shape-corner-small: 0.4rem;
+	--mdui-shape-corner-medium: 0.65rem;
+	--mdui-shape-corner-large: 0.9rem;
+	--mdui-shape-corner-extra-large: 1.4rem;
+
+	--mdui-typescale-body-large-line-height: 1.75rem;
+	--mdui-typescale-body-medium-line-height: 1.5rem;
+	--mdui-typescale-title-large-weight: 600;
+	--mdui-typescale-title-medium-weight: 600;
+	--mdui-typescale-headline-small-weight: 600;
+	--mdui-typescale-headline-medium-weight: 700;
+	--mdui-typescale-label-large-weight: 500;
+}
+
+/* --------------------------------------------------------------------------
+   3. 基础
+   -------------------------------------------------------------------------- */
+* {
+	box-sizing: border-box;
+}
+
+body {
+	margin: 0;
+	font-family:
+		system-ui, -apple-system, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB',
+		'Microsoft YaHei', 'Noto Sans CJK SC', sans-serif;
+	-webkit-text-size-adjust: 100%;
+	overflow-wrap: break-word;
+}
+
+::selection {
+	background-color: rgb(var(--mdui-color-primary-container));
+	color: rgb(var(--mdui-color-on-primary-container));
+}
+
+:focus-visible {
+	outline: 2px solid rgb(var(--mdui-color-primary));
+	outline-offset: 2px;
+}
+
+/* --------------------------------------------------------------------------
+   4. Web Components 加载前防闪烁
+   mdui 组件在 JS 注册完成前处于未定义状态；<noscript> 提供兜底样式。
+   -------------------------------------------------------------------------- */
+:not(:defined) {
+	visibility: hidden;
+}
+
+body {
+	opacity: 0;
+	transition: opacity 220ms var(--mdui-motion-easing-standard);
+}
+
+body.mdui-ready {
+	opacity: 1;
+}
+
+/* --------------------------------------------------------------------------
+   5. 品牌标识与导航
+   -------------------------------------------------------------------------- */
+.brand {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.5rem;
+	text-decoration: none;
+	color: rgb(var(--mdui-color-on-surface));
+}
+
+.brand-mark {
+	display: block;
+	width: 1.75rem;
+	height: 1.75rem;
+	border-radius: 50%;
+	object-fit: contain;
+}
+
+.brand-name {
+	font-size: var(--mdui-typescale-title-medium-size);
+	font-weight: var(--mdui-typescale-title-medium-weight);
+}
+
+/* 侧边导航仅桌面显示，底部导航仅窄屏显示 */
+@media (min-width: 840px) {
+	.site-bar {
+		display: none;
+	}
+}
+
+@media (max-width: 839px) {
+	.site-rail {
+		display: none;
+	}
+}
+
+/* --------------------------------------------------------------------------
+   6. 语义化排版类
+   仅保留内容中反复出现的少数几个，避免工具类框架。
+   -------------------------------------------------------------------------- */
+.stack {
+	display: flex;
+	flex-direction: column;
+	gap: 1.5rem;
+}
+
+.stack-sm {
+	display: flex;
+	flex-direction: column;
+	gap: 0.75rem;
+}
+
+.stack-xs {
+	display: flex;
+	flex-direction: column;
+	gap: 0.4rem;
+}
+
+.row {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 0.75rem;
+}
+
+.row-between {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	justify-content: space-between;
+	gap: 1rem;
+}
+
+.muted {
+	color: rgb(var(--mdui-color-on-surface-variant));
+}
+
+.faint {
+	color: rgb(var(--mdui-color-outline));
+}
+
+.mono {
+	font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.text-balance {
+	text-wrap: balance;
+}
+
+/* 页面主标题与副标题 */
+.page-title {
+	font-size: var(--mdui-typescale-headline-medium-size);
+	line-height: var(--mdui-typescale-headline-medium-line-height);
+	font-weight: var(--mdui-typescale-headline-medium-weight);
+	letter-spacing: -0.015em;
+}
+
+.section-title {
+	font-size: var(--mdui-typescale-title-large-size);
+	line-height: var(--mdui-typescale-title-large-line-height);
+	font-weight: var(--mdui-typescale-title-large-weight);
+}
+
+.page-lead {
+	margin-top: 0.4rem;
+	color: rgb(var(--mdui-color-on-surface-variant));
+}
+
+/* 内容网格 */
+.tool-grid {
+	display: grid;
+	gap: 0.85rem;
+	grid-template-columns: 1fr;
+}
+
+@media (min-width: 600px) {
+	.tool-grid {
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+	}
+}
+
+@media (min-width: 1080px) {
+	.tool-grid {
+		grid-template-columns: repeat(3, minmax(0, 1fr));
+	}
+}
+
+/* --------------------------------------------------------------------------
+   7. 卡片配色（按分类）
+   -------------------------------------------------------------------------- */
+.tool-card {
+	--card-tone-container: var(--mdui-color-primary-container);
+	--card-tone-on: var(--mdui-color-on-primary-container);
+	height: 100%;
+}
+
+/*
+	mdui-card 是 padding:0 的 shadow 组件，::slotted 也不加内边距
+	（MD3 把这一步交给使用者）。所以内边距必须由插槽内容自己带，
+	否则内容会紧贴圆角边框，见 AGENT.md §4.10。
+*/
+.tool-card > * {
+	padding: 1rem;
+	box-sizing: border-box;
+}
+
+.tool-card--secondary {
+	--card-tone-container: var(--mdui-color-secondary-container);
+	--card-tone-on: var(--mdui-color-on-secondary-container);
+}
+
+.tool-card--tertiary {
+	--card-tone-container: var(--mdui-color-tertiary-container);
+	--card-tone-on: var(--mdui-color-on-tertiary-container);
+}
+
+/* --------------------------------------------------------------------------
+   8. 表单
+   -------------------------------------------------------------------------- */
+.field {
+	display: flex;
+	flex-direction: column;
+	gap: 0.35rem;
+}
+
+.field > label {
+	font-size: var(--mdui-typescale-label-large-size);
+	font-weight: var(--mdui-typescale-label-large-weight);
+	color: rgb(var(--mdui-color-on-surface-variant));
+}
+
+input[type='text'],
+input[type='number'],
+input[type='url'],
+textarea,
+select {
+	width: 100%;
+	padding: 0.7rem 0.85rem;
+	font: inherit;
+	font-size: var(--mdui-typescale-body-medium-size);
+	color: rgb(var(--mdui-color-on-surface));
+	background-color: rgb(var(--mdui-color-surface-container-highest));
+	border: 1px solid rgb(var(--mdui-color-outline));
+	border-radius: var(--mdui-shape-corner-small);
+	transition:
+		border-color var(--mdui-motion-duration-short2) var(--mdui-motion-easing-standard),
+		box-shadow var(--mdui-motion-duration-short2) var(--mdui-motion-easing-standard);
+}
+
+input:hover,
+textarea:hover,
+select:hover {
+	border-color: rgb(var(--mdui-color-on-surface));
+}
+
+input:focus,
+textarea:focus,
+select:focus {
+	outline: none;
+	border-color: rgb(var(--mdui-color-primary));
+	box-shadow: inset 0 0 0 1px rgb(var(--mdui-color-primary));
+}
+
+textarea {
+	resize: vertical;
+	line-height: 1.6;
+}
+
+input[type='range'] {
+	width: 100%;
+	accent-color: rgb(var(--mdui-color-primary));
+}
+
+input[type='radio'],
+input[type='checkbox'] {
+	accent-color: rgb(var(--mdui-color-primary));
+	width: 1.05rem;
+	height: 1.05rem;
+}
+
+.options {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.5rem 1.1rem;
+	font-size: var(--mdui-typescale-body-medium-size);
+}
+
+.options label {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.4rem;
+	cursor: pointer;
+}
+
+.panel {
+	background-color: rgb(var(--mdui-color-surface-container-low));
+	border-radius: var(--mdui-shape-corner-medium);
+	padding: 1.15rem;
+}
+
+/*
+	容器已有内边距，块级标题的 UA 默认 margin（h2 约 0.83em ≈ 13px）
+	会在此叠加成双倍上间距。面板内一律清零，由 gap 统一控制。
+*/
+.panel > :first-child,
+.panel-lg > :first-child {
+	margin-top: 0;
+}
+
+.panel > :last-child,
+.panel-lg > :last-child {
+	margin-bottom: 0;
+}
+
+.panel-lg {
+	background-color: rgb(var(--mdui-color-surface-container));
+	border-radius: var(--mdui-shape-corner-large);
+	padding: 1.5rem;
+}
+
+/* --------------------------------------------------------------------------
+   9. 博客正文
+   -------------------------------------------------------------------------- */
+.prose {
+	line-height: var(--mdui-typescale-body-large-line-height);
+	font-size: var(--mdui-typescale-body-large-size);
+	color: rgb(var(--mdui-color-on-surface));
+}
+
+.prose > * + * {
+	margin-top: 1.15em;
+}
+
+.prose h2 {
+	font-size: var(--mdui-typescale-headline-small-size);
+	font-weight: var(--mdui-typescale-headline-small-weight);
+	line-height: var(--mdui-typescale-headline-small-line-height);
+	margin-top: 2.4em;
+	scroll-margin-top: 5rem;
+}
+
+.prose h3 {
+	font-size: var(--mdui-typescale-title-large-size);
+	font-weight: var(--mdui-typescale-title-large-weight);
+	margin-top: 1.8em;
+	scroll-margin-top: 5rem;
+}
+
+.prose a {
+	color: rgb(var(--mdui-color-primary));
+	text-decoration: underline;
+	text-underline-offset: 3px;
+}
+
+.prose a:hover {
+	background-color: rgba(var(--mdui-color-on-surface), 0.08);
+}
+
+.prose strong {
+	font-weight: 600;
+}
+
+.prose ul,
+.prose ol {
+	padding-left: 1.5em;
+}
+
+.prose ul {
+	list-style: disc;
+}
+
+.prose ol {
+	list-style: decimal;
+}
+
+.prose li + li {
+	margin-top: 0.4em;
+}
+
+.prose blockquote {
+	border-left: 3px solid rgb(var(--mdui-color-primary));
+	padding: 0.6em 0 0.6em 1.1em;
+	color: rgb(var(--mdui-color-on-surface-variant));
+}
+
+.prose code {
+	font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+	font-size: 0.9em;
+	background-color: rgb(var(--mdui-color-surface-container-high));
+	color: rgb(var(--mdui-color-on-surface-variant));
+	padding: 0.15em 0.4em;
+	border-radius: var(--mdui-shape-corner-extra-small);
+}
+
+.prose pre {
+	background-color: rgb(var(--mdui-color-surface-container-highest));
+	padding: 1rem 1.15rem;
+	border-radius: var(--mdui-shape-corner-medium);
+	overflow-x: auto;
+	line-height: 1.6;
+}
+
+.prose pre code {
+	background: none;
+	padding: 0;
+	color: inherit;
+	font-size: 0.875rem;
+}
+
+.prose img,
+.prose video {
+	border-radius: var(--mdui-shape-corner-medium);
+	max-width: 100%;
+}
+
+.prose hr {
+	border: none;
+	border-top: 1px solid rgb(var(--mdui-color-outline-variant));
+}
+
+.prose table {
+	width: 100%;
+	border-collapse: collapse;
+	font-size: var(--mdui-typescale-body-medium-size);
+}
+
+.prose th,
+.prose td {
+	border: 1px solid rgb(var(--mdui-color-outline-variant));
+	padding: 0.5em 0.7em;
+	text-align: left;
+}
+
+.prose th {
+	background-color: rgb(var(--mdui-color-surface-container));
+	font-weight: 600;
+}
+
+/* --------------------------------------------------------------------------
+   10. 减少动效
+   -------------------------------------------------------------------------- */
+@media (prefers-reduced-motion: reduce) {
+	*,
+	*::before,
+	*::after {
+		animation-duration: 0.01ms !important;
+		transition-duration: 0.01ms !important;
+		scroll-behavior: auto !important;
+	}
+
+	body {
+		opacity: 1;
+		transition: none;
+	}
+}
+
+
+/* --------------------------------------------------------------------------
+   12. 工具页常用布局
+   工具页的排版需求高度相似，集中定义避免每页重复。
+   -------------------------------------------------------------------------- */
+
+/* 页面头部：标题 + 副标题 */
+.tool-head {
+	margin-bottom: 1.75rem;
+}
+
+.tool-head h1 {
+	font-size: var(--mdui-typescale-headline-small-size);
+	line-height: var(--mdui-typescale-headline-small-line-height);
+	font-weight: var(--mdui-typescale-headline-small-weight);
+}
+
+.tool-head p {
+	margin-top: 0.35rem;
+	color: rgb(var(--mdui-color-on-surface-variant));
+}
+
+/* 窄版内容容器 */
+.tool-narrow {
+	max-width: 26rem;
+}
+
+.tool-mid {
+	max-width: 40rem;
+}
+
+/* 主内容 + 侧栏 */
+.tool-split {
+	display: grid;
+	gap: 1.5rem;
+}
+
+@media (min-width: 840px) {
+	.tool-split {
+		grid-template-columns: minmax(0, 1fr) 20rem;
+	}
+	.tool-split-wide {
+		grid-template-columns: minmax(0, 1fr) 22rem;
+	}
+}
+
+/* 预览画布 */
+.canvas {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	min-height: 18rem;
+	padding: 1rem;
+	border-radius: var(--mdui-shape-corner-medium);
+	background-color: rgb(var(--mdui-color-surface-container-highest));
+}
+
+/* 按钮行 */
+.btn-row {
+	display: flex;
+	flex-wrap: wrap;
+	justify-content: center;
+	gap: 0.6rem;
+}
+
+/* 两栏文本区 */
+.duo {
+	display: grid;
+	gap: 1.25rem;
+}
+
+@media (min-width: 840px) {
+	.duo {
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+	}
+}
+
+/* 区块标题 */
+.block-title {
+	font-size: var(--mdui-typescale-body-large-size);
+	font-weight: 600;
+	color: rgb(var(--mdui-color-on-surface));
+}
+
+/* 文本按钮 */
+.link-btn {
+	cursor: pointer;
+	border: 0;
+	background: none;
+	padding: 0;
+	font: inherit;
+	font-size: var(--mdui-typescale-body-medium-size);
+	color: rgb(var(--mdui-color-primary));
+}
+
+.link-btn:hover {
+	text-decoration: underline;
+}
+
+/* 结果数值 */
+.result-value {
+	font-size: var(--mdui-typescale-headline-large-size);
+	font-weight: 700;
+	font-variant-numeric: tabular-nums;
+	line-height: 1.2;
+}
+
+.result-panel {
+	margin-top: 1.25rem;
+	padding: 1rem;
+	border-radius: var(--mdui-shape-corner-medium);
+	text-align: center;
+}
+
+.result-panel.ok {
+	background-color: rgb(var(--mdui-color-tertiary-container));
+	color: rgb(var(--mdui-color-on-tertiary-container));
+}
+
+.result-panel.warn {
+	background-color: rgb(var(--mdui-color-secondary-container));
+	color: rgb(var(--mdui-color-on-secondary-container));
+}
+
+.result-panel.bad {
+	background-color: rgb(var(--mdui-color-error-container));
+	color: rgb(var(--mdui-color-on-error-container));
+}
+
+/* 计算器按键 */
+.keypad {
+	display: grid;
+	grid-template-columns: repeat(4, minmax(0, 1fr));
+	gap: 0.5rem;
+	margin-top: 0.75rem;
+}
+
+.key {
+	cursor: pointer;
+	padding: 0.7rem 0;
+	border-radius: var(--mdui-shape-corner-medium);
+	font-size: var(--mdui-typescale-body-large-size);
+	font-weight: 500;
+	border: 1px solid transparent;
+	transition:
+		background-color var(--mdui-motion-duration-short2),
+		transform var(--mdui-motion-duration-short2);
+}
+
+.key:active {
+	transform: scale(0.95);
+}
+
+.key[data-k='='] {
+	grid-column: span 4;
+	background-color: rgb(var(--mdui-color-primary));
+	color: rgb(var(--mdui-color-on-primary));
+}
+
+.key[data-lv='accent'] {
+	background-color: rgb(var(--mdui-color-surface-container-highest));
+}
+
+.key[data-lv='primary'] {
+	background-color: rgb(var(--mdui-color-surface-container-high));
+}
+
+.key[data-lv='plain'] {
+	background-color: rgb(var(--mdui-color-surface-container-lowest));
+	border-color: rgb(var(--mdui-color-outline-variant));
+}
+
+/* 字号 */
+.text-2xl {
+	font-size: var(--mdui-typescale-headline-small-size);
+	line-height: var(--mdui-typescale-headline-small-line-height);
+}
+
+.text-xl {
+	font-size: var(--mdui-typescale-title-large-size);
+}
+
+.text-sm {
+	font-size: var(--mdui-typescale-body-medium-size);
+}
+
+.text-xs {
+	font-size: var(--mdui-typescale-label-medium-size);
+}
+
+/* 分隔线 */
+.hr {
+	border: none;
+	border-top: 1px solid rgb(var(--mdui-color-outline-variant));
+	margin-block: 2.5rem;
+}
+
+/* 说明脚注 */
+.footnote {
+	margin-top: 1.5rem;
+	font-size: var(--mdui-typescale-body-small-size, 0.75rem);
+	line-height: 1.6;
+	color: rgb(var(--mdui-color-outline));
+	max-width: 40rem;
+}
+
+/* --------------------------------------------------------------------------
+   13. 布局顺序修正
+   Astro 的组件 slot 投影按「组件定义顺序」而非「使用处书写顺序」渲染，
+   传入的页面内容会先于 Nav.astro 内的 <Footer /> 落位。这里用 order
+   强制把页脚推到底部，不依赖渲染时序。
+   -------------------------------------------------------------------------- */
+mdui-layout-main.site-main {
+	display: flex;
+	flex-direction: column;
+	min-height: calc(100dvh - 4rem);
+}
+
+.site-main > .site-content {
+	flex: 1 0 auto;
+}
+
+/* 网格内卡片等高：mdui-card 自身 h-full */
+.tool-grid > .tool-card {
+	height: 100%;
+}
+
+/* 计算器显示区 */
+.readout {
+	display: block;
+	overflow-x: auto;
+	padding: 0.9rem 1rem;
+	border-radius: var(--mdui-shape-corner-medium);
+	background-color: rgb(var(--mdui-color-surface-container-highest));
+	font-size: var(--mdui-typescale-headline-small-size);
+	text-align: right;
+	font-variant-numeric: tabular-nums;
+}
+
+/* 显隐 */
+.hidden {
+	display: none !important;
+}
+
+/* 代码编辑区与预览框 */
+.code-area {
+	height: 20rem;
+	line-height: 1.7;
+	font-size: var(--mdui-typescale-body-medium-size);
+}
+
+.preview {
+	width: 100%;
+	height: 20rem;
+	border: 1px solid rgb(var(--mdui-color-outline));
+	border-radius: var(--mdui-shape-corner-small);
+	background-color: rgb(var(--mdui-color-surface-container-lowest));
+}
+
+/* 字体测试页 */
+.tab {
+	cursor: pointer;
+	padding: 0.4rem 0.9rem;
+	border-radius: var(--mdui-shape-corner-small);
+	border: 1px solid rgb(var(--mdui-color-outline-variant));
+	background-color: transparent;
+	color: rgb(var(--mdui-color-on-surface-variant));
+	font-size: var(--mdui-typescale-body-medium-size);
+	transition:
+		background-color var(--mdui-motion-duration-short2),
+		color var(--mdui-motion-duration-short2);
+}
+
+.sample-row {
+	display: flex;
+	align-items: baseline;
+	gap: 1rem;
+}
+
+.sample-w {
+	width: 2.25rem;
+	flex-shrink: 0;
+	font-size: var(--mdui-typescale-label-medium-size);
+	font-variant-numeric: tabular-nums;
+	color: rgb(var(--mdui-color-outline));
+}
+
+.weight-map {
+	display: grid;
+	column-gap: 2rem;
+	margin-top: 0.75rem;
+}
+
+@media (min-width: 600px) {
+	.weight-map {
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+	}
+}
+
+.weight-row {
+	display: flex;
+	gap: 0.75rem;
+	padding-block: 0.25rem;
+	font-size: var(--mdui-typescale-body-medium-size);
+	border-bottom: 1px solid rgb(var(--mdui-color-outline-variant));
+}
+
+.weight-row > span:first-child {
+	width: 2.25rem;
+	flex-shrink: 0;
+	font-variant-numeric: tabular-nums;
+}
+
+.symbol-line {
+	margin-top: 0.5rem;
+	font-size: var(--mdui-typescale-title-large-size);
+	line-height: 1.8;
+	letter-spacing: 0.03em;
+	word-break: break-all;
+}
+
+.tab[aria-selected='true'] {
+	background-color: rgb(var(--mdui-color-secondary-container));
+	color: rgb(var(--mdui-color-on-secondary-container));
+	border-color: transparent;
+}
+
+/* 顶栏内元素 */
+.min-w-0 {
+	min-width: 0;
+	overflow: hidden;
+}
+
+.flex-grow {
+	flex: 1;
+}

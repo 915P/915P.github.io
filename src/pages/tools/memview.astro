@@ -1,0 +1,425 @@
+---
+import Page from '../../layouts/Page.astro';
+
+---
+
+<Page
+	title="数据在内存"
+	description="整型与浮点数在内存中的位模式、补码、阶码与字节十六进制"
+	active="tools"
+>
+	<div class="tool-head">
+		<h1>数据在内存</h1>
+		<p>看一个数在内存里长什么样：补码、符号位、阶码、尾数与字节十六进制</p>
+	</div>
+
+	<div class="panel-lg">
+		<mdui-segmented-button-group id="kind" selects="single" full-width value="float">
+			<mdui-segmented-button value="float">浮点数</mdui-segmented-button>
+			<mdui-segmented-button value="int">整型</mdui-segmented-button>
+		</mdui-segmented-button-group>
+
+		<div class="ctrl-row" style="margin-top: 1.25rem">
+			<div class="field" style="flex: 1 1 12rem">
+				<label for="type" id="typeLabel">类型</label>
+				<select id="type">
+					<option value="float">float（单精度，4 字节）</option>
+					<option value="double">double（双精度，8 字节）</option>
+				</select>
+			</div>
+			<div class="field" style="flex: 1 1 12rem">
+				<label for="num">数值</label>
+				<input type="text" id="num" value="3.14159" spellcheck="false" class="mono" />
+			</div>
+			<div class="field" id="signedField" style="flex: 0 0 auto; justify-content: flex-end" hidden>
+				<span style="display: block; margin-bottom: 0.35rem">符号</span>
+				<div class="options" style="margin: 0">
+					<label><input type="radio" name="sg" value="signed" checked /> 有符号</label>
+					<label><input type="radio" name="sg" value="unsigned" /> 无符号</label>
+				</div>
+			</div>
+			<div class="field" id="summarySpaceField" style="flex: 0 0 auto; justify-content: flex-end">
+				<span style="display: block; margin-bottom: 0.35rem">总结果</span>
+				<div class="options" style="margin: 0">
+					<label><input type="checkbox" id="summarySpace" /> 每 4 位空格</label>
+				</div>
+			</div>
+		</div>
+
+		<div class="row" style="margin-top: 0.9rem; gap: 0.5rem; flex-wrap: wrap" id="presets"></div>
+	</div>
+
+	<p id="err" class="footnote" style="color: rgb(var(--mdui-color-error))" role="alert"></p>
+
+	{/* 溢出/下溢提示 */}
+	<div id="ovf" class="ovf" hidden></div>
+
+	<div id="summary" class="summary" aria-label="位模式总览"></div>
+
+	<div id="out" class="stack" style="margin-top: 1.25rem; gap: 0.7rem"></div>
+
+	<p class="footnote">
+		浮点数按 <strong>IEEE 754</strong> 编码。整型给出的是<strong>补码</strong>；
+		「有符号」时负数按补码显示，「无符号」时按该宽度的非负范围解释。
+		<code class="mono">long</code> 的宽度随平台而变，故单列 4 / 8 字节两项。
+	</p>
+</Page>
+
+<style is:global>
+	.ctrl-row {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 1rem;
+		align-items: flex-end;
+	}
+
+	.step {
+		display: grid;
+		grid-template-columns: 9.5rem minmax(0, 1fr);
+		gap: 0.25rem 1rem;
+		padding: 0.65rem 0.9rem;
+		border-radius: var(--mdui-shape-corner-medium);
+		background-color: rgb(var(--mdui-color-surface-container-low));
+	}
+
+	.step-key {
+		font-size: var(--mdui-typescale-label-large-size);
+		color: rgb(var(--mdui-color-on-surface-variant));
+	}
+
+	.step-val {
+		font-family: var(--mdui-font-family-mono, ui-monospace, monospace);
+		word-break: break-all;
+		white-space: pre-wrap;
+	}
+
+	.step-val sup {
+		font-size: 0.72em;
+		line-height: 0;
+	}
+
+	.step-desc {
+		grid-column: 2;
+		font-size: var(--mdui-typescale-body-small-size);
+		color: rgb(var(--mdui-color-outline));
+	}
+
+	@media (max-width: 599px) {
+		.step {
+			grid-template-columns: minmax(0, 1fr);
+		}
+
+		.step-desc {
+			grid-column: 1;
+		}
+	}
+
+	.chip {
+		cursor: pointer;
+		font-size: var(--mdui-typescale-body-medium-size);
+	}
+
+	/* 溢出提示 */
+	.ovf {
+		margin-top: 1rem;
+		padding: 0.7rem 0.95rem;
+		border-radius: var(--mdui-shape-corner-medium);
+		background-color: rgb(var(--mdui-color-error-container));
+		color: rgb(var(--mdui-color-on-error-container));
+		font-size: var(--mdui-typescale-body-medium-size);
+	}
+
+	/* 大总结果：分段设色 */
+	.summary {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.4rem;
+		margin-top: 1rem;
+		font-family: var(--mdui-font-family-mono, ui-monospace, monospace);
+	}
+
+	.summary:empty {
+		display: none;
+	}
+
+	.seg {
+		display: inline-flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 0.15rem;
+		padding: 0.4rem 0.55rem;
+		border-radius: var(--mdui-shape-corner-small);
+		min-width: calc(var(--n) * 0.62em + 1.1rem);
+	}
+
+	.seg-bits {
+		font-size: var(--mdui-typescale-body-large-size);
+		font-weight: 600;
+		word-break: break-all;
+		letter-spacing: 0.06em;
+	}
+
+	.seg-label {
+		font-family: system-ui, sans-serif;
+		font-size: var(--mdui-typescale-label-small-size);
+		opacity: 0.8;
+		text-align: center;
+	}
+
+	.seg-note {
+		display: block;
+		font-size: 0.62rem;
+		opacity: 0.75;
+	}
+
+	.seg-sign {
+		background-color: rgb(var(--mdui-color-tertiary-container));
+		color: rgb(var(--mdui-color-on-tertiary-container));
+	}
+
+	.seg-exp {
+		background-color: rgb(var(--mdui-color-primary-container));
+		color: rgb(var(--mdui-color-on-primary-container));
+	}
+
+	.seg-mant {
+		background-color: rgb(var(--mdui-color-secondary-container));
+		color: rgb(var(--mdui-color-on-secondary-container));
+	}
+</style>
+
+<script>
+	import { floatFields, bytesHexPrefixed, group4, detectOverflow } from '../../lib/memview';
+
+	const $ = <T extends HTMLElement = HTMLElement>(id: string) =>
+		document.getElementById(id) as T;
+
+	const kind = $<HTMLElement & { value: string }>('kind');
+	const typeSel = $<HTMLSelectElement>('type');
+	const typeLabel = $('typeLabel');
+	const num = $<HTMLInputElement>('num');
+	const signedField = $('signedField');
+	const out = $('out');
+	const err = $('err');
+	const presets = $('presets');
+
+	const INT_TYPES: Record<string, { label: string; bytes: number }> = {
+		short: { label: 'short（2 字节）', bytes: 2 },
+		int: { label: 'int（4 字节）', bytes: 4 },
+		long4: { label: 'long（4 字节）（Windows）', bytes: 4 },
+		long8: { label: 'long（8 字节）（Linux）', bytes: 8 },
+		longlong: { label: 'long long（8 字节）', bytes: 8 },
+	};
+
+	const FLOAT_PRESETS = ['0', '-0', '0.5', '1', '1.5', '-1.5', '0.1', '255', '1024', '3.14159', '1e-10', '1e40', '1e-46'];
+	const INT_PRESETS = ['0', '1', '255', '65535', '-1', '-128', '2147483647', '-2147483648'];
+
+	function esc(s: string): string {
+		return s.replace(
+			/[&<>"']/g,
+			(c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!,
+		);
+	}
+
+	function renderSteps(rows: { title: string; value: string; desc: string; html?: string }[]) {
+		out.innerHTML = rows
+			.map(
+				(r) => `<div class="step">
+			<span class="step-key">${esc(r.title)}</span>
+			<span class="step-val">${r.html ?? esc(r.value)}</span>
+			<span class="step-desc">${esc(r.desc).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>')}</span>
+		</div>`,
+			)
+			.join('');
+	}
+
+	/** 顶部「大总结果」：按 符号位 / 指数位 / 尾数位 分段上色 */
+	function renderSummary(segments: { label: string; bits: string; width: number; note?: string }[]) {
+		const sum = $('summary');
+		if (!sum) return;
+		const addSpace = $<HTMLInputElement>('summarySpace').checked;
+		sum.innerHTML = segments
+			.map((s) => {
+				const bits = addSpace ? group4(s.bits, s.width) : s.bits;
+				return (
+					`<span class="seg seg-${s.label === '符号位' ? 'sign' : s.label === '指数位' ? 'exp' : 'mant'}" style="--n:${s.width}">` +
+					`<span class="seg-bits">${esc(bits)}</span>` +
+					`<span class="seg-label">${esc(s.label)}${
+						s.note ? `<span class="seg-note">${esc(s.note)}</span>` : ''
+					}</span></span>`
+				);
+			})
+			.join('');
+	}
+
+	function renderOverflow(o?: { to: string; note: string }) {
+		const el = $('ovf');
+		if (!el) return;
+		el.hidden = !o;
+		if (o) el.innerHTML = `⚠️ <b>${esc(o.to)}</b>　${esc(o.note)}`;
+	}
+
+	function syncKind() {
+		const isFloat = kind.value === 'float';
+		signedField.hidden = isFloat;
+		$('summarySpaceField').hidden = !isFloat;
+		if (isFloat) {
+			typeSel.innerHTML =
+				'<option value="float">float（单精度，4 字节）</option>' +
+				'<option value="double">double（双精度，8 字节）</option>';
+			num.value = num.value.includes('e') || num.value === '3.14159' ? num.value : '3.14159';
+		} else {
+			typeSel.innerHTML = Object.entries(INT_TYPES)
+				.map(([v, t]) => `<option value="${v}">${t.label}</option>`)
+				.join('');
+		}
+		run();
+	}
+
+	function signedMode(): boolean {
+		return (
+			(document.querySelector<HTMLInputElement>('input[name="sg"]:checked') ?? {}).value !==
+			'unsigned'
+		);
+	}
+
+	function renderPresets() {
+		const list = kind.value === 'float' ? FLOAT_PRESETS : INT_PRESETS;
+		presets.innerHTML =
+			'<span class="text-xs faint" style="align-self:center;margin-right:.25rem">试试：</span>' +
+			list.map((v) => `<mdui-chip class="chip" variant="outlined">${esc(v)}</mdui-chip>`).join('');
+		presets.querySelectorAll('.chip').forEach((c) =>
+			c.addEventListener('click', () => {
+				num.value = c.textContent ?? '';
+				run();
+			}),
+		);
+	}
+
+	function run() {
+		err.textContent = '';
+		out.innerHTML = '';
+
+		if (kind.value === 'float') {
+			const raw = num.value.trim();
+			const v = Number(raw);
+			if (raw === '' || Number.isNaN(v)) {
+				err.textContent = '请输入一个数值。';
+				return;
+			}
+			const fk = typeSel.value === 'double' ? 'double' : 'float';
+			const overflow = detectOverflow(raw, fk);
+			// float 用 Math.fround 模拟真实截断，保证溢出/下溢后展示实际存储值
+			const stored = fk === 'float' ? Math.fround(v) : v;
+			const res = floatFields(stored, fk);
+			renderSteps(res.fields);
+			renderSummary(res.segments);
+			renderOverflow(overflow);
+			return;
+		}
+
+		const spec = INT_TYPES[typeSel.value] ?? INT_TYPES.int!;
+		const raw = num.value.trim();
+		if (raw === '') {
+			err.textContent = '请输入一个整数。';
+			return;
+		}
+		if (!/^[+-]?\d+$/.test(raw)) {
+			err.textContent = '整型只接受整数（不含小数点）。';
+			return;
+		}
+		const inputValue = BigInt(raw);
+		const signed = signedMode();
+		const bits = spec.bytes * 8;
+		const mod = 1n << BigInt(bits);
+		const minSigned = -(1n << BigInt(bits - 1));
+		const maxSigned = (1n << BigInt(bits - 1)) - 1n;
+		const maxUnsigned = mod - 1n;
+		const inRange = signed
+			? inputValue >= minSigned && inputValue <= maxSigned
+			: inputValue >= 0n && inputValue <= maxUnsigned;
+
+		// 二进制截断过程：先写成补码位串，再从右往左保留低 bits 位。
+		const absInput = inputValue < 0n ? -inputValue : inputValue;
+		const rawAbsBits = absInput.toString(2);
+		const workBits = Math.min(Math.max(bits, rawAbsBits.length + 1), 512);
+		const workMod = 1n << BigInt(workBits);
+		const twoComplement = ((inputValue % workMod) + workMod) % workMod;
+		const twoComplementBits = twoComplement.toString(2).padStart(workBits, '0');
+		const lowBits = twoComplementBits.slice(-bits).padStart(bits, '0');
+		const truncated = BigInt('0b' + lowBits);
+		const interpreted =
+			signed && truncated >= 1n << BigInt(bits - 1) ? truncated - mod : truncated;
+
+		renderSummary([]);
+		renderOverflow(
+			inRange
+				? undefined
+				: {
+						to: '已截断',
+						note: `${inputValue} 超出 ${spec.label} ${signed ? '有符号' : '无符号'} ${bits} 位范围，按二进制只保留低 ${bits} 位。`,
+					},
+		);
+		renderSteps([
+			{
+				title: '原值',
+				value: inputValue.toString(),
+				desc: `输入的十进制整数；目标类型为 ${spec.label}（${bits} 位${signed ? '有符号' : '无符号'}）`,
+			},
+			{
+				title: `原值二进制（${workBits} 位补码）`,
+				value: group4(twoComplementBits, workBits),
+				desc:
+					rawAbsBits.length + 1 > 512
+						? '原值很长，这里只展示低 512 位补码；截断继续向右取更低的有效位。'
+						: '正数高位补 0；负数按补码写成等长位串。',
+			},
+			{
+				title: `保留低 ${bits} 位`,
+				value: group4(lowBits, bits),
+				desc: `从右往左保留低 ${bits} 位，其余高位丢弃。`,
+			},
+			{
+				title: '截断后无符号值',
+				value: truncated.toString(),
+				desc: `保留位模式按无符号数解释，即原值 mod 2^${bits}。`,
+			},
+			{
+				title: '符号位',
+				value: lowBits[0]!,
+				desc: signed
+					? lowBits[0] === '1'
+						? '1 表示负数（按补码解释）'
+						: '0 表示正数'
+					: '无符号类型无符号位',
+			},
+			{
+				title: `结果（${signed ? '有符号' : '无符号'}解释）`,
+				value: interpreted.toString(),
+				desc: signed ? '把截断后的低 bits 位按二进制补码解释。' : '把截断后的低 bits 位按无符号数解释。',
+			},
+			{
+				title: '字节十六进制',
+				value: bytesHexPrefixed(lowBits),
+				desc: `${spec.bytes} 个字节，每字节 0x 前缀，高字节在前`,
+			},
+		]);
+	}
+
+	kind.addEventListener('change', () => {
+		syncKind();
+		renderPresets();
+	});
+	$('summarySpace').addEventListener('change', run);
+	typeSel.addEventListener('change', run);
+	num.addEventListener('input', run);
+	document.querySelectorAll('input[name="sg"]').forEach((r) =>
+		r.addEventListener('change', run),
+	);
+	void typeLabel;
+
+	syncKind();
+	renderPresets();
+
+	(window as unknown as { __mem: unknown }).__mem = { run, floatFields };
+</script>

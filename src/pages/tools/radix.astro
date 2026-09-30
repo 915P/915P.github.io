@@ -1,0 +1,266 @@
+---
+import Page from '../../layouts/Page.astro';
+
+const PRESETS = [2, 8, 10, 16];
+const ROWS = [...PRESETS, 'custom'];
+---
+
+<Page
+	title="进制转换"
+	description="2、8、10、16 与自定义进制互转，支持小数，自动忽略空格"
+	active="tools"
+>
+	<div class="tool-head">
+		<h1>进制转换</h1>
+		<p>2、8、10、16 与自定义进制互转，支持小数。输入里的空格、下划线、逗号会自动忽略。</p>
+	</div>
+
+	<div class="panel-lg">
+		<div class="ctrl-row">
+			<div class="field" style="flex: 1 1 12rem">
+				<label for="from">源进制</label>
+				<select id="from">
+					{ROWS.map((r) =>
+						r === 'custom' ? (
+							<option value="custom">自定义…</option>
+						) : (
+							<option value={String(r)} selected={r === 10}>{r} 进制</option>
+						),
+					)}
+				</select>
+			</div>
+			<div class="field" style="flex: 0 0 7rem">
+				<label for="fromCustom" id="fromCustomLabel">自定义源进制</label>
+				<input type="number" id="fromCustom" min="2" max="36" value="7" disabled />
+			</div>
+			<div class="field" style="flex: 1 1 12rem">
+				<label for="to">目标进制</label>
+				<select id="to">
+					{ROWS.map((r) =>
+						r === 'custom' ? (
+							<option value="custom">自定义…</option>
+						) : (
+							<option value={String(r)}>{r} 进制</option>
+						),
+					)}
+				</select>
+			</div>
+			<div class="field" style="flex: 0 0 7rem">
+				<label for="toCustom">自定义目标进制</label>
+				<input type="number" id="toCustom" min="2" max="36" value="7" disabled />
+			</div>
+		</div>
+
+		<div class="field" style="margin-top: 1rem">
+			<label for="input">数值</label>
+			<textarea id="input" rows="3" class="mono" spellcheck="false"
+				>255 128 64 32</textarea
+			>
+			<p class="text-xs faint" style="margin-top: 0.35rem">
+				空格、下划线、逗号与全角字符都会被忽略；每一段单独转换，结果逐行对应。
+			</p>
+		</div>
+
+		<div class="ctrl-row" style="margin-top: 1rem; align-items: center">
+			<div class="field" style="flex: 1 1 10rem">
+				<label for="prec">
+					小数位保留：<span id="precVal" style="color: rgb(var(--mdui-color-primary))">16</span>
+				</label>
+				<input type="range" id="prec" min="2" max="32" value="16" step="1" />
+			</div>
+			<div class="field" style="flex: 1 1 10rem">
+				<span style="display: block; margin-bottom: 0.35rem">输出分组</span>
+				<div class="options" style="margin: 0">
+					<label><input type="radio" name="grp" value="off" checked /> 不分组</label>
+					<label><input type="radio" name="grp" value="space" /> 空格</label>
+					<label><input type="radio" name="grp" value="underscore" /> 下划线</label>
+				</div>
+			</div>
+		</div>
+	</div>
+
+	<p id="err" class="footnote" style="color: rgb(var(--mdui-color-error))" role="alert"></p>
+
+	<div id="out" class="panel-lg" style="margin-top: 1.5rem">
+		<p class="block-title" style="margin-bottom: 0.75rem">转换结果</p>
+		<table class="conv">
+			<thead>
+				<tr>
+					<th scope="col">源</th>
+					<th scope="col">目标</th>
+				</tr>
+			</thead>
+			<tbody id="rows"></tbody>
+		</table>
+	</div>
+
+	<p class="footnote">
+		整数用任意精度整数累乘，不会超过安全整数范围而丢精度。小数在二进制下
+		往往不终止（如 0.1），因此按上面的「小数位保留」截断，结果末尾会标
+		<code class="mono">…</code> 表示近似值。
+	</p>
+</Page>
+
+<style is:global>
+	.ctrl-row {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 1rem;
+		align-items: flex-end;
+	}
+
+	.conv {
+		width: 100%;
+		border-collapse: collapse;
+		font-family: var(--mdui-font-family-mono, ui-monospace, monospace);
+	}
+
+	.conv th {
+		text-align: left;
+		font-weight: 500;
+		font-size: var(--mdui-typescale-label-medium-size);
+		color: rgb(var(--mdui-color-on-surface-variant));
+		padding-bottom: 0.4rem;
+		border-bottom: 1px solid rgb(var(--mdui-color-outline-variant));
+	}
+
+	.conv td {
+		padding: 0.45rem 0.75rem 0.45rem 0;
+		vertical-align: top;
+		border-bottom: 1px solid rgb(var(--mdui-color-outline-variant));
+		word-break: break-all;
+	}
+
+	.conv td:first-child {
+		color: rgb(var(--mdui-color-on-surface-variant));
+		width: 40%;
+	}
+
+	.conv .tag {
+		display: inline-block;
+		margin-left: 0.5rem;
+		padding: 0 0.35rem;
+		border-radius: var(--mdui-shape-corner-extra-small);
+		font-family: system-ui, sans-serif;
+		font-size: var(--mdui-typescale-label-small-size);
+		background-color: rgb(var(--mdui-color-tertiary-container));
+		color: rgb(var(--mdui-color-on-tertiary-container));
+	}
+</style>
+
+<script>
+	import { cleanInput, validate, convert, format, parseRadix } from '../../lib/radix';
+
+	const $ = <T extends HTMLElement = HTMLElement>(id: string) =>
+		document.getElementById(id) as T;
+
+	const fromSel = $<HTMLSelectElement>('from');
+	const toSel = $<HTMLSelectElement>('to');
+	const fromCustom = $<HTMLInputElement>('fromCustom');
+	const toCustom = $<HTMLInputElement>('toCustom');
+	const fromCustomLabel = $('fromCustomLabel');
+	const input = $<HTMLTextAreaElement>('input');
+	const prec = $<HTMLInputElement>('prec');
+	const precVal = $('precVal');
+	const rows = $('rows');
+	const err = $('err');
+
+	const radius = (el: HTMLInputElement) =>
+		parseRadix(el.value || el.min || '2');
+
+	function currentFrom(): number {
+		return fromSel.value === 'custom' ? radius(fromCustom) : parseRadix(fromSel.value);
+	}
+	function currentTo(): number {
+		return toSel.value === 'custom' ? radius(toCustom) : parseRadix(toSel.value);
+	}
+
+	function syncCustom() {
+		const onFrom = fromSel.value === 'custom';
+		const onTo = toSel.value === 'custom';
+		fromCustom.disabled = !onFrom;
+		toCustom.disabled = !onTo;
+		// label 与 input 一起隐藏，否则会出现一个没有输入框的孤立标签
+		fromCustomLabel.hidden = !onFrom;
+	}
+
+	function group(): { group: boolean; groupSep: 'space' | 'underscore' } {
+		const v = (document.querySelector<HTMLInputElement>('input[name="grp"]:checked') ?? {}).value;
+		if (v === 'space') return { group: true, groupSep: 'space' };
+		if (v === 'underscore') return { group: true, groupSep: 'underscore' };
+		return { group: false, groupSep: 'space' };
+	}
+
+	function esc(s: string): string {
+		return s.replace(
+			/[&<>"']/g,
+			(c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!,
+		);
+	}
+
+	function run() {
+		const from = currentFrom();
+		const to = currentTo();
+		const precision = Number(prec.value);
+		const g = group();
+
+		// 按空白/逗号切段；每段独立转换，空段忽略
+		const chunks = input.value
+			.split(/[\s,]+/)
+			.map((s) => cleanInput(s))
+			.filter(Boolean);
+
+		err.textContent = '';
+		if (!chunks.length) {
+			rows.innerHTML = '';
+			err.textContent = '请输入数值。';
+			return;
+		}
+
+		const out: string[] = [];
+		const problems: string[] = [];
+		for (const c of chunks) {
+			const bad = validate(c, from);
+			if (bad) {
+				problems.push(`${c}：${bad}`);
+				continue;
+			}
+			const v = convert(c, from, to, precision);
+			const tag = v.truncated ? '<span class="tag">近似</span>' : '';
+			out.push(
+				`<tr><td>${esc(c)}</td><td>${esc(format(v, { ...g, precision }))}${tag}</td></tr>`,
+			);
+		}
+
+		rows.innerHTML = out.join('');
+		err.textContent = problems.join('；');
+	}
+
+	fromSel.addEventListener('change', () => {
+		syncCustom();
+		run();
+	});
+	toSel.addEventListener('change', () => {
+		syncCustom();
+		run();
+	});
+	fromCustom.addEventListener('input', run);
+	toCustom.addEventListener('input', run);
+	prec.addEventListener('input', () => {
+		precVal.textContent = prec.value;
+		run();
+	});
+	input.addEventListener('input', run);
+	document.querySelectorAll('input[name="grp"]').forEach((r) =>
+		r.addEventListener('change', run),
+	);
+
+	syncCustom();
+	run();
+
+	(window as unknown as { __radix: unknown }).__radix = {
+		convert: (v: string, a: number, b: number, p?: number) =>
+			format(convert(v, a, b, p ?? 16)),
+		run,
+	};
+</script>

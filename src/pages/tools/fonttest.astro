@@ -1,0 +1,229 @@
+---
+import Page from '../../layouts/Page.astro';
+import blocks from '../../data/symbol-blocks.json';
+import encBlocks from '../../data/encoding-blocks.json';
+
+const families = [
+	{ key: 'default', label: '默认', stack: '' },
+	{ key: 'sans-serif', label: '无衬线', stack: 'sans-serif' },
+	{ key: 'serif', label: '衬线', stack: 'serif' },
+	{ key: 'monospace', label: '等宽', stack: 'monospace' },
+	{ key: 'roboto', label: 'Roboto', stack: '"Roboto", sans-serif' },
+];
+
+const weights = [100, 200, 300, 350, 400, 500, 600, 700, 800, 900, 950];
+
+/*
+	用展开语法 [...str] 计数而不是 str.length：CJK 扩展 B 区及以后位于非 BMP
+	区间，在 JS 里是代理对，str.length 会把 1 个字算成 2（16 字显示成 32）。
+*/
+const countChars = (s: string) => [...s.replace(/\s/g, '')].length;
+
+const encTotal = encBlocks.reduce((n, b) => n + countChars(b.symbols), 0);
+
+const weightNames: Record<number, string> = {
+	100: 'Thin / Hairline',
+	200: 'Extra-Light / Ultra-Light',
+	300: 'Light',
+	350: 'Demi-Light',
+	400: 'Regular / Normal / Book / Plain',
+	500: 'Medium',
+	600: 'Demi-Bold / Semi-Bold',
+	700: 'Bold',
+	800: 'Extra-Bold / Extra',
+	900: 'Black / Heavy',
+	950: 'Extra-Black / Ultra-Black',
+};
+---
+
+<Page
+	title="字体字重与符号测试"
+	description="按字体族与字重测试系统字体渲染，并检查 Unicode 符号与中文编码的字形覆盖"
+	active="tools"
+>
+	<div class="tool-head">
+		<h1>字体测试</h1>
+		<p>按字体族与字重查看系统实际渲染效果，并检查 Unicode 符号与中文编码的字形覆盖</p>
+	</div>
+
+	<div class="row">
+		<mdui-button variant="filled" id="fs">全屏查看</mdui-button>
+		<mdui-button variant="outlined" id="exit" class="hidden">退出全屏</mdui-button>
+		<label class="options" style="margin: 0">
+			<input type="checkbox" id="showW" />
+			显示字重数值
+		</label>
+	</div>
+
+	<section style="margin-top: 2.5rem">
+		<h2 class="section-title">一、字体族 × 字重</h2>
+		<p class="muted" style="margin-top: 0.35rem; font-size: 0.875rem">
+			同一段文字在不同字体族、不同字重下的实际表现。若某两个字重看起来完全相同，说明该字体没有提供独立的字重文件。
+		</p>
+
+		<div id="tabs" class="row" style="margin-top: 1rem" role="tablist" aria-label="字体族">
+			{
+				families.map((f, i) => (
+					<button
+						type="button"
+						role="tab"
+						data-family={f.key}
+						aria-selected={i === 0 ? 'true' : 'false'}
+						class="tab"
+					>
+						{f.label}
+					</button>
+				))
+			}
+		</div>
+
+		<div class="stack" style="margin-top: 1.5rem; gap: 2rem">
+			{
+				families.map((f, fi) => (
+					<div data-panel={f.key} hidden={fi !== 0}>
+						<h3 class="block-title muted" style="margin-bottom: 0.6rem">
+							正常 · {f.label}
+						</h3>
+						<div class="stack-xs" style={f.stack ? `font-family:${f.stack}` : ''}>
+							{weights.map((w) => (
+								<div class="sample-row">
+									<span class="sample-w">{w}</span>
+									<span style={`font-weight:${w};font-size:1.3rem`}>
+										这是一个示例 ABCDEFG abcdefg 012345 常用字
+									</span>
+								</div>
+							))}
+						</div>
+
+						<h3
+							class="block-title muted"
+							style="margin-top: 1.75rem; margin-bottom: 0.6rem"
+						>
+							倾斜 · {f.label}
+						</h3>
+						<div class="stack-xs" style={f.stack ? `font-family:${f.stack}` : ''}>
+							{weights.map((w) => (
+								<div class="sample-row">
+									<span class="sample-w">{w}</span>
+									<span style={`font-weight:${w};font-style:italic;font-size:1.3rem`}>
+										这是一个示例 ABCDEFG abcdefg 012345 常用字
+									</span>
+								</div>
+							))}
+						</div>
+					</div>
+				))
+			}
+		</div>
+
+		<details class="panel" style="margin-top: 2rem">
+			<summary class="block-title" style="cursor: pointer">常用字重映射</summary>
+			<div class="weight-map">
+				{
+					weights.map((w) => (
+						<div class="weight-row">
+							<span class="mono">{w}</span>
+							<span class="muted">{weightNames[w]}</span>
+						</div>
+					))
+				}
+			</div>
+			<p class="text-xs faint" style="margin-top: 0.75rem">
+				字重名称参考
+				<a
+					href="https://developer.mozilla.org/en-US/docs/Web/CSS/font-weight"
+					style="color: rgb(var(--mdui-color-primary))"
+					rel="noopener noreferrer">MDN font-weight</a
+				>。若两个字重渲染结果相同，说明该字体未提供独立字重文件。
+			</p>
+		</details>
+	</section>
+
+	<section style="margin-top: 3rem">
+		<h2 class="section-title">二、Unicode 符号覆盖</h2>
+		<p class="muted" style="margin-top: 0.35rem; font-size: 0.875rem">
+			共 {blocks.length} 组符号。显示为方框（豆腐块）说明当前字体缺少该字形。
+		</p>
+
+		<div class="stack" style="margin-top: 1.25rem; gap: 0.85rem">
+			{
+				blocks.map((b) => (
+					<div class="panel">
+						<h3 class="block-title">{b.name}</h3>
+						<p class="symbol-line">{b.symbols}</p>
+						<p class="text-xs faint" style="margin-top: 0.5rem">
+							{countChars(b.symbols)} 个字符
+						</p>
+					</div>
+				))
+			}
+		</div>
+	</section>
+
+	<section style="margin-top: 3rem">
+		<h2 class="section-title">三、中文编码与扩展区覆盖</h2>
+		<p class="muted" style="margin-top: 0.35rem; font-size: 0.875rem">
+			共 {encBlocks.length} 组、{encTotal} 个字符。GB2312 / GBK /
+			GB18030-2000 是中文编码实际会遇到的字符集，CJK 各扩展区则是 Unicode
+			补充汉字的分布范围 —— 两者都是「装了字体却不一定有字形」的高发区。
+		</p>
+
+		<div class="stack" style="margin-top: 1.25rem; gap: 0.85rem">
+			{
+				encBlocks.map((b) => (
+					<div class="panel">
+						<h3 class="block-title">{b.name}</h3>
+						<p class="symbol-line">{b.symbols}</p>
+						<p class="text-xs faint" style="margin-top: 0.5rem">
+							{countChars(b.symbols)} 个字符
+						</p>
+					</div>
+				))
+			}
+		</div>
+
+		<p class="footnote">
+			字符清单为 Unicode 码点的枚举，不含可版权的表达性内容。
+			扩展 B 区及以后位于非 BMP 区间（需要 UTF-16 代理对），
+			部分老旧字体与编辑器会显示为空白或方框，这属于预期结果。
+		</p>
+	</section>
+</Page>
+
+<script>
+	const tabs = document.getElementById('tabs')!;
+	const panels = document.querySelectorAll<HTMLElement>('[data-panel]');
+
+	tabs.addEventListener('click', (e) => {
+		const btn = (e.target as HTMLElement).closest<HTMLElement>('[data-family]');
+		if (!btn) return;
+		const key = btn.dataset.family!;
+		tabs.querySelectorAll('[data-family]').forEach((b) => {
+			b.setAttribute('aria-selected', String(b === btn));
+		});
+		panels.forEach((p) => (p.hidden = p.dataset.panel !== key));
+	});
+
+	const showW = document.getElementById('showW') as HTMLInputElement;
+	const fs = document.getElementById('fs')!;
+	const exit = document.getElementById('exit')!;
+
+	function apply() {
+		document
+			.querySelectorAll<HTMLElement>('.sample-w')
+			.forEach((el) => {
+				el.style.display = showW.checked ? '' : 'none';
+			});
+	}
+	showW.addEventListener('change', apply);
+	apply();
+
+	fs.addEventListener('click', () => document.documentElement.requestFullscreen?.());
+	exit.addEventListener('click', () => document.exitFullscreen?.());
+	document.addEventListener('fullscreenchange', () => {
+		const on = !!document.fullscreenElement;
+		fs.classList.toggle('hidden', on);
+		exit.classList.toggle('hidden', !on);
+	});
+</script>
+

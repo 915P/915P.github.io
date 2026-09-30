@@ -1,0 +1,371 @@
+---
+import Page from '../../layouts/Page.astro';
+import { ENCODINGS } from '../../lib/hanzi-encoding';
+---
+
+<Page
+	title="汉字编码"
+	description="汉字在 GB2312、GBK、GB18030、UTF-8、Big5 下的十六进制与二进制字节，以及 Unicode 码点；也可由字节反查汉字。"
+>
+	<div class="tool-head">
+		<div>
+			<h1>汉字编码</h1>
+			<p class="lede">
+				输入汉字，查看它在各种中文编码下的字节；同时给出 Unicode 码点。也可以反过来，用十六进制或二进制查回汉字。
+			</p>
+		</div>
+	</div>
+
+	<div class="panel">
+		<label class="field">
+			<span class="field-label">输入汉字</span>
+			<input
+				type="text"
+				id="text"
+				class="input"
+				placeholder="如：高程 中 鿕"
+				autocomplete="off"
+				spellcheck="false"
+			/>
+		</label>
+		<p class="footnote">
+			逐字编码，UTF-8 为变长（1–4 字节），GB18030 的 BMP 外汉字强制四字节。
+		</p>
+	</div>
+
+	<div class="panel" id="resultPanel" hidden>
+		<div class="row-between" style="align-items: baseline; margin-bottom: 0.8rem">
+			<h2 class="block-title">编码结果</h2>
+			<span class="text-xs faint" id="charCount"></span>
+		</div>
+		<div class="table-wrap">
+			<table class="data-table" id="encTable">
+				<thead>
+					<tr>
+						<th scope="col">汉字 / 编码</th>
+						<th scope="col">十六进制</th>
+						<th scope="col">二进制（括号内为字节数）</th>
+					</tr>
+				</thead>
+				<tbody></tbody>
+			</table>
+		</div>
+	</div>
+
+	<div class="panel" id="cpPanel" hidden>
+		<h2 class="block-title">Unicode 码点</h2>
+		<div class="table-wrap">
+			<table class="data-table" id="cpTable">
+				<thead>
+					<tr>
+						<th scope="col">汉字</th>
+						<th scope="col">Unicode</th>
+						<th scope="col">十进制</th>
+						<th scope="col">UTF-16 代理对</th>
+						<th scope="col">其他编码是否含此字</th>
+					</tr>
+				</thead>
+				<tbody></tbody>
+			</table>
+		</div>
+	</div>
+
+	<div class="panel">
+		<h2 class="block-title">由字节反查汉字</h2>
+		<div class="row" style="gap: 0.6rem; flex-wrap: wrap; margin-bottom: 0.6rem">
+			<button type="button" class="chip" data-src="hex" aria-pressed="true">十六进制</button>
+			<button type="button" class="chip" data-src="binary" aria-pressed="false">二进制</button>
+		</div>
+		<label class="field">
+			<span class="field-label" id="revLabel">十六进制字节</span>
+			<input
+				type="text"
+				id="rev"
+				class="input"
+				placeholder="如：D6 D0　或　11010110 11010000"
+				autocomplete="off"
+				spellcheck="false"
+			/>
+		</label>
+		<div class="row" style="gap: 0.6rem; flex-wrap: wrap; align-items: center; margin-top: 0.8rem">
+			<label class="field" style="flex: 1 1 12rem; min-width: 10rem">
+				<span class="field-label">按此编码解码</span>
+				<div class="select-wrap">
+					<select id="revEnc" class="select">
+						{ENCODINGS.filter((e) => e.bytes).map((e) => (
+							<option value={e.key}>{e.label}</option>
+						))}
+					</select>
+				</div>
+			</label>
+			<button type="button" id="revGo" class="btn-filled">反查</button>
+		</div>
+		<div id="revOut" class="rev-out" hidden aria-live="polite"></div>
+	</div>
+</Page>
+
+<style>
+	.table-wrap {
+		overflow-x: auto;
+	}
+
+	.data-table {
+		width: 100%;
+		border-collapse: collapse;
+		font-size: var(--mdui-typescale-body-medium-size);
+	}
+
+	.data-table th,
+	.data-table td {
+		padding: 0.6rem 0.7rem;
+		text-align: left;
+		white-space: nowrap;
+		border-bottom: 1px solid rgb(var(--mdui-color-outline-variant));
+	}
+
+	.data-table th {
+		font-weight: 500;
+		color: rgb(var(--mdui-color-on-surface-variant));
+		font-size: var(--mdui-typescale-label-large-size);
+	}
+
+	.data-table tbody tr:hover {
+		background-color: rgb(var(--mdui-color-surface-container-low));
+	}
+
+	/* 汉字列放大，便于肉眼比对 */
+	.cell-char {
+		font-size: var(--mdui-typescale-headline-small-size);
+		line-height: 1.2;
+	}
+
+	.mono {
+		font-family: var(--mdui-font-family-mono, ui-monospace, monospace);
+		letter-spacing: 0.02em;
+	}
+
+	.enc-line + .enc-line {
+		margin-top: 0.15rem;
+	}
+
+	.enc-tag {
+		display: inline-block;
+		min-width: 4.4rem;
+		color: rgb(var(--mdui-color-on-surface-variant));
+		font-size: var(--mdui-typescale-body-small-size);
+	}
+
+	/* 二进制按字节分组显示 */
+	.byte {
+		display: inline-block;
+		margin-right: 0.5rem;
+	}
+
+	.unsupported {
+		color: rgb(var(--mdui-color-on-surface-variant));
+	}
+
+	.rev-out {
+		margin-top: 1rem;
+		padding: 0.9rem 1rem;
+		border-radius: var(--mdui-shape-corner-medium);
+		background-color: rgb(var(--mdui-color-surface-container-high));
+	}
+
+	.rev-char {
+		font-size: var(--mdui-typescale-display-small-size);
+		line-height: 1.3;
+	}
+
+	.rev-meta {
+		margin-top: 0.3rem;
+		font-family: var(--mdui-font-family-mono, ui-monospace, monospace);
+		font-size: var(--mdui-typescale-body-medium-size);
+	}
+
+	.rev-err {
+		color: rgb(var(--mdui-color-error));
+	}
+
+	.encoding-note {
+		margin-top: 0.5rem;
+		font-size: var(--mdui-typescale-body-small-size);
+		color: rgb(var(--mdui-color-on-surface-variant));
+	}
+</style>
+
+<script>
+	import {
+		ENCODINGS,
+		encodeChars,
+		decodeBytes,
+		crossLookup,
+		type EncodingKey,
+	} from '../../lib/hanzi-encoding';
+
+	const $ = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
+
+	const esc = (s: string): string =>
+		s.replace(
+			/[&<>"']/g,
+			(c) =>
+				'&' +
+				({ '&': 'amp', '<': 'lt', '>': 'gt', '"': 'quot', "'": '#39' })[c]!,
+		);
+
+	const textInput = $<HTMLInputElement>('text');
+	const resultPanel = $('resultPanel');
+	const cpPanel = $('cpPanel');
+	const encTable = $<HTMLTableElement>('encTable').tBodies[0]!;
+	const cpTable = $<HTMLTableElement>('cpTable').tBodies[0]!;
+	const charCount = $('charCount');
+
+	function render() {
+		const raw = textInput.value;
+		const chars = [...raw];
+		if (chars.length === 0) {
+			resultPanel.hidden = true;
+			cpPanel.hidden = true;
+			return;
+		}
+		resultPanel.hidden = false;
+		cpPanel.hidden = false;
+		charCount.textContent = `${chars.length} 个字符`;
+
+		// 改成：每个汉字一张小表，按编码纵向排列
+		encTable.innerHTML = chars
+			.map((ch) => {
+				const gbKeys = ['gb2312', 'gbk', 'gb18030'] as const;
+				const gb = gbKeys.map((key) => ({
+					key,
+					label: ENCODINGS.find((e) => e.key === key)!.label,
+					r: encodeChars(ch, key)[0]!,
+				}));
+				const hexOf = (r: (typeof gb)[number]['r']) =>
+					r.ok
+						? (r.bytes ?? [])
+								.map((x) => x.toString(16).toUpperCase().padStart(2, '0'))
+								.join(' ')
+						: '<span class="unsupported">—</span>';
+				const binOf = (r: (typeof gb)[number]['r']) =>
+					r.ok
+						? (r.bytes ?? [])
+								.map((x) => x.toString(2).padStart(8, '0'))
+								.join(' ')
+						: '<span class="unsupported">—</span>';
+				const allSame =
+					gb.every((x) => x.r.ok) &&
+					gb.every((x) => x.r.hex === gb[0]!.r.hex);
+				const hexCell = allSame
+					? `<span class="mono">${esc(hexOf(gb[0]!.r))}</span> <span class="faint">三码相同</span>`
+					: gb
+							.map(
+								(x) =>
+									`<div class="enc-line"><span class="enc-tag">${esc(x.label)}</span><span class="mono">${hexOf(x.r)}</span></div>`,
+							)
+							.join('');
+				const binCell = allSame
+					? `<span class="mono">${esc(binOf(gb[0]!.r))}</span> <span class="faint">(${gb[0]!.r.bytes?.length})</span>`
+					: gb
+							.map(
+								(x) =>
+									`<div class="enc-line"><span class="enc-tag">${esc(x.label)}</span><span class="mono">${binOf(x.r)}</span></div>`,
+							)
+							.join('');
+				const rows = [
+					`<tr><td>GB2312 / GBK / GB18030</td><td>${hexCell}</td><td>${binCell}</td></tr>`,
+					...ENCODINGS.filter((e) => e.key === 'utf8' || e.key === 'big5' || e.key === 'unicode').map(
+						(e) => {
+							const r = encodeChars(ch, e.key)[0]!;
+							if (!e.bytes) {
+								return `<tr><td>${esc(e.label)}</td><td class="mono">${esc(r.cpLabel)}</td><td class="unsupported">码点，非字节</td></tr>`;
+							}
+							if (!r.ok) {
+								return `<tr><td>${esc(e.label)}</td><td class="unsupported" colspan="2">该编码不含此字</td></tr>`;
+							}
+							return `<tr><td>${esc(e.label)}</td><td class="mono">${esc(hexOf(r))}</td><td class="mono">${esc(binOf(r))} <span class="faint">(${r.bytes?.length})</span></td></tr>`;
+						},
+					),
+				].join('');
+				// 每个字一个 tbody 组，用第一列显示汉字
+				return `<tr class="char-head"><td colspan="3"><span class="cell-char">${esc(ch)}</span></td></tr>${rows}`;
+			})
+			.join('');
+		// Unicode 码点表
+		cpTable.innerHTML = chars
+			.map((ch) => {
+				const r = encodeChars(ch, 'unicode')[0]!;
+				const surrogates =
+					r.cp > 0xffff
+						? 'U+' +
+							(r.cp - 0x10000 + 0xd800).toString(16).toUpperCase().padStart(4, '0') +
+							' + U+' +
+							(r.cp - 0x10000 + 0xdc00).toString(16).toUpperCase().padStart(4, '0')
+						: '—';
+				const others = crossLookup(r.cp)
+					.map((x) => ENCODINGS.find((e) => e.key === x.key)?.label ?? x.key)
+					.join('、');
+				return `<tr>
+					<td class="cell-char">${esc(ch)}</td>
+					<td class="mono">${esc(r.cpLabel)}</td>
+					<td class="mono">${r.cp}</td>
+					<td class="mono">${esc(surrogates)}</td>
+					<td>${others ? esc(others) : '<span class="unsupported">—</span>'}</td>
+				</tr>`;
+			})
+			.join('');
+	}
+
+	textInput.addEventListener('input', render);
+
+	// 反查
+	const revInput = $<HTMLInputElement>('rev');
+	const revEnc = $<HTMLSelectElement>('revEnc');
+	const revOut = $('revOut');
+	const revLabel = $('revLabel');
+	let src: 'hex' | 'binary' = 'hex';
+
+	document.querySelectorAll<HTMLElement>('[data-src]').forEach((b) => {
+		b.addEventListener('click', () => {
+			src = b.dataset.src as 'hex' | 'binary';
+			document.querySelectorAll<HTMLElement>('[data-src]').forEach((x) => {
+				x.setAttribute('aria-pressed', String(x === b));
+			});
+			revLabel.textContent = src === 'hex' ? '十六进制字节' : '二进制（每字节 8 位）';
+			revInput.placeholder = src === 'hex' ? '如：D6 D0' : '如：11010110 11010000';
+			doReverse();
+		});
+	});
+
+	function doReverse() {
+		const v = revInput.value.trim();
+		if (v === '') {
+			revOut.hidden = true;
+			return;
+		}
+		revOut.hidden = false;
+		const key = revEnc.value as EncodingKey;
+		const r = decodeBytes(v, src, key);
+		if (!r.ok) {
+			revOut.innerHTML = `<span class="rev-err">✗ ${esc(r.reason ?? '无法解析')}</span>`;
+			return;
+		}
+		const meta = ENCODINGS.find((e) => e.key === key)!;
+		const enc = encodeChars(r.char, key)[0]!;
+		const back = enc.ok
+			? (enc.bytes ?? []).map((x) => esc(x.toString(16).toUpperCase().padStart(2, '0'))).join(' ')
+			: '';
+		revOut.innerHTML = `
+			<div class="rev-char">${esc(r.char)}</div>
+			<div class="rev-meta">${esc(r.cpLabel)}　十进制 ${r.cp}</div>
+			${back ? `<div class="rev-meta">${esc(meta.label)} 字节：${back}</div>` : ''}
+			${r.reason ? `<p class="footnote">${esc(r.reason)}</p>` : ''}
+		`;
+	}
+
+	$('revGo').addEventListener('click', doReverse);
+	revInput.addEventListener('input', doReverse);
+	revEnc.addEventListener('change', doReverse);
+
+	render();
+</script>

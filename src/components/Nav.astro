@@ -1,0 +1,97 @@
+---
+import ThemeControl from './ThemeControl.astro';
+import IconGithub from './IconGithub.astro';
+
+interface Props {
+	active?: 'home' | 'blog' | 'tools';
+}
+
+const { active } = Astro.props;
+
+const links = [
+	{ href: '/', label: '首页', key: 'home' },
+	{ href: '/blog/', label: '博客', key: 'blog' },
+	{ href: '/tools/', label: '工具', key: 'tools' },
+] as const;
+
+const current = links.find((l) => l.key === active);
+---
+
+{/*
+	MD3 标准布局：
+	  桌面 (≥840px) → <mdui-layout> 内左侧 <mdui-navigation-rail> 常驻
+	  移动 (<840px) → 底部 <mdui-navigation-bar>
+	放在 <mdui-layout> 内时二者均为 absolute 定位，不给 body 加 padding。
+	图标通过 slot 传入本地注册的 <mdui-icon-xxx>，不依赖 Google Fonts。
+*/}
+<mdui-layout>
+	<mdui-top-app-bar variant="small">
+		<mdui-top-app-bar-title class="min-w-0">
+			<a href="/" class="brand">
+				<img class="brand-mark" src="/images/logo.svg" alt="" width="28" height="28" />
+				<span class="brand-name">915P的小站</span>
+			</a>
+		</mdui-top-app-bar-title>
+
+		<div class="flex-grow"></div>
+
+		<ThemeControl />
+
+		<mdui-button-icon href="/rss.xml" aria-label="RSS 订阅" title="RSS 订阅">
+			<mdui-icon-rss-feed></mdui-icon-rss-feed>
+		</mdui-button-icon>
+
+		<mdui-button-icon
+			href="https://github.com/915P/915P.github.io"
+			target="_blank"
+			rel="noopener noreferrer"
+			aria-label="GitHub 源码"
+			title="GitHub 源码"
+		>
+			<IconGithub size={20} />
+		</mdui-button-icon>
+	</mdui-top-app-bar>
+
+	<mdui-navigation-rail value={current?.key} class="site-rail">
+		<mdui-navigation-rail-item href="/" value="home" title="首页">
+			<mdui-icon-home slot="icon"></mdui-icon-home>
+			<mdui-icon-home slot="active-icon"></mdui-icon-home>
+			首页
+		</mdui-navigation-rail-item>
+		<mdui-navigation-rail-item href="/blog/" value="blog" title="博客">
+			<mdui-icon-article slot="icon"></mdui-icon-article>
+			<mdui-icon-article slot="active-icon"></mdui-icon-article>
+			博客
+		</mdui-navigation-rail-item>
+		<mdui-navigation-rail-item href="/tools/" value="tools" title="工具与应用">
+			<mdui-icon-apps slot="icon"></mdui-icon-apps>
+			<mdui-icon-apps slot="active-icon"></mdui-icon-apps>
+			工具
+		</mdui-navigation-rail-item>
+	</mdui-navigation-rail>
+
+	<mdui-layout-main class="site-main">
+		<div class="site-content">
+			<slot name="content" />
+		</div>
+		<slot name="footer" />
+	</mdui-layout-main>
+
+	<mdui-navigation-bar value={current?.key} class="site-bar">
+		<mdui-navigation-bar-item href="/" value="home">
+			<mdui-icon-home slot="icon"></mdui-icon-home>
+			<mdui-icon-home slot="active-icon"></mdui-icon-home>
+			首页
+		</mdui-navigation-bar-item>
+		<mdui-navigation-bar-item href="/blog/" value="blog">
+			<mdui-icon-article slot="icon"></mdui-icon-article>
+			<mdui-icon-article slot="active-icon"></mdui-icon-article>
+			博客
+		</mdui-navigation-bar-item>
+		<mdui-navigation-bar-item href="/tools/" value="tools">
+			<mdui-icon-apps slot="icon"></mdui-icon-apps>
+			<mdui-icon-apps slot="active-icon"></mdui-icon-apps>
+			工具
+		</mdui-navigation-bar-item>
+	</mdui-navigation-bar>
+</mdui-layout>

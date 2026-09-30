@@ -1,0 +1,196 @@
+---
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import Page from '../../layouts/Page.astro';
+
+const sourcePath = resolve(process.cwd(), 'public/apps/cejs-original/CeJS/testsuite/era.htm');
+const source = readFileSync(sourcePath, 'utf8');
+
+const bodyMatch = source.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
+let body = bodyMatch?.[1] ?? '';
+// 原页面末尾的脚本改为 Astro 的 is:inline script，避免 set:html 插入的 script 不执行。
+body = body.replace(/<script[\s\S]*?<\/script>/gi, '');
+// 移除 XHTML 时代遗留的无效标签。
+body = body.replace(/<content[^>]*\/>/gi, '');
+// 清理原版底部的「📓 ： 」提示，只留下隐藏日志容器。
+body = body.replace(/<hr style="display: none;"[^>]*>[\s\S]*?<div[^>]*id="panel_for_log">/u, '<div id="panel_for_log">');
+
+const cssMatch = source.match(/<style id="mdui-modern-style">([\s\S]*?)<\/style>/i);
+const originalCss = cssMatch?.[1] ?? '';
+
+const integrationCss = `
+.cejs-app .mdui-appbar { display: none !important; }
+.cejs-app .mdui-container { width: 100%; max-width: none; margin: 0; }
+.cejs-app #panel_for_log,
+.cejs-app .debug_controller_panel { display: none !important; }
+.cejs-app > .mdui-container > .doc-container { padding: 0; }
+.cejs-app #analysis:empty,
+.cejs-app #input_history:empty,
+.cejs-app #example:empty { display: none; }
+.cejs-app #input_panel,
+.cejs-app #FAQ,
+.cejs-app #era_graph,
+.cejs-app #calendar,
+.cejs-app #configuration,
+.cejs-app #batch_processing,
+.cejs-app #tag_text,
+.cejs-app #pack_data,
+.cejs-app #comments { margin-top: 1rem; }
+`;
+
+const fullCss = `${originalCss}\n${integrationCss}`;
+---
+
+<Page
+title="纪年转换"
+description="原版 CeJS 纪年转换：农历、天文历法、批量转换、线图下钻与数据图层"
+active="tools"
+>
+<div class="tool-head">
+<div>
+<h1>纪年转换</h1>
+<p class="lede">
+原版 CeJS 完整功能：年号、农历、天文历法、批量转换与纪年线图。
+</p>
+</div>
+<mdui-chip variant="tonal">
+<mdui-icon-calendar-month></mdui-icon-calendar-month>
+原版功能
+</mdui-chip>
+</div>
+
+<style is:inline set:html={fullCss}></style>
+<div class="cejs-app" set:html={body}></div>
+
+<script is:inline>
+(function () {
+var cejs = document.createElement('script');
+cejs.src = '/apps/cejs-original/CeJS/ce.js';
+cejs.onload = function () {
+if (window.CeL) window.CeL.env.same_origin_policy = true;
+var era = document.createElement('script');
+era.src = '/apps/cejs-original/CeJS/testsuite/era.js';
+document.body.appendChild(era);
+};
+document.body.appendChild(cejs);
+})();
+</script>
+
+<script is:inline>
+(function () {
+function bind() {
+var btn = document.getElementById('translate');
+if (typeof window.translate_era !== 'function' || !btn) {
+setTimeout(bind, 200);
+return;
+}
+btn.onclick = function (e) {
+if (e) e.preventDefault();
+window.translate_era();
+return false;
+};
+var input = document.getElementById('era_input');
+if (input) {
+input.onkeydown = function (e) {
+if (e.key === 'Enter') {
+e.preventDefault();
+window.translate_era();
+}
+};
+}
+}
+bind();
+})();
+</script>
+<script is:inline>
+(function upgradePanelTabs() {
+var layer = document.getElementById('note_botton_layer');
+if (!layer || layer.dataset.upgraded === '1') {
+setTimeout(upgradePanelTabs, 200);
+return;
+}
+var anchors = layer.querySelectorAll(':scope > .note_botton');
+if (!anchors.length) {
+setTimeout(upgradePanelTabs, 200);
+return;
+}
+var current = '';
+anchors.forEach(function (a) {
+if (a.classList.contains('selected')) current = a.id.replace(/_panel$/, '');
+});
+if (!current) current = 'era_graph';
+var tabs = document.createElement('mdui-tabs');
+tabs.id = 'cejs-panel-tabs';
+tabs.setAttribute('variant', 'primary');
+tabs.setAttribute('value', current);
+anchors.forEach(function (a) {
+var value = a.id.replace(/_panel$/, '');
+var tab = document.createElement('mdui-tab');
+tab.setAttribute('value', value);
+tab.textContent = a.textContent.trim();
+tabs.appendChild(tab);
+});
+layer.dataset.upgraded = '1';
+layer.replaceChildren(tabs);
+tabs.addEventListener('change', function () {
+var value = tabs.value;
+if (typeof window.select_panel === 'function') {
+window.select_panel(value, true);
+} else {
+['example', 'input_history', 'FAQ', 'era_graph', 'calendar', 'configuration', 'batch_processing', 'tag_text', 'pack_data', 'comments'].forEach(function (id) {
+var el = document.getElementById(id);
+if (el) el.style.display = 'none';
+});
+var target = document.getElementById(value);
+if (target) target.style.display = 'block';
+}
+});
+})();
+</script>
+<script is:inline>
+(function () {
+var countryMap = {
+Egypt: '埃及',
+Greece: '古希腊',
+Mesopotamian: '美索不达米亚',
+Hittite: '赫梯',
+France: '法兰西',
+British: '不列颠',
+España: '西班牙',
+Maya: '玛雅',
+India: '印度',
+Japan: '日本',
+China: '中国',
+'Việt Nam': '越南',
+'ไทย': '泰国',
+'한국': '韩国',
+};
+function translateText(text) {
+var result = text.replace(/\(([^()]+)\)/g, function (m, name) {
+return countryMap[name] ? '(' + countryMap[name] + ')' : m;
+});
+Object.keys(countryMap).forEach(function (key) {
+result = result.split(', ' + key + ')').join(', ' + countryMap[key] + ')');
+});
+return result;
+}
+function translateItem(item) {
+item.textContent = translateText(item.textContent || '');
+var title = item.getAttribute('title');
+if (title) item.setAttribute('title', translateText(title));
+}
+var root = document.querySelector('.cejs-app');
+if (!root) return;
+new MutationObserver(function (mutations) {
+mutations.forEach(function (mutation) {
+Array.prototype.forEach.call(mutation.addedNodes, function (node) {
+if (node.nodeType !== 1) return;
+if (node.matches && node.matches('.si_item')) translateItem(node);
+if (node.querySelectorAll) node.querySelectorAll('.si_item').forEach(translateItem);
+});
+});
+}).observe(root, { childList: true, subtree: true });
+root.querySelectorAll('.si_item').forEach(translateItem);
+})();
+</script>
+</Page>

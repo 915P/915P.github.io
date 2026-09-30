@@ -1,0 +1,302 @@
+---
+import { THEME_MODES, THEME_COLORS } from '../data/theme';
+---
+
+{/*
+	外观设置：明/暗模式 + 主题色。
+
+	主题色只存一个种子色，交给 mdui 的 setColorScheme() 生成整套 MD3 色调板，
+	这样容器色与 on-* 对比度都由官方算法保证（见 src/data/theme.ts 注释）。
+
+	模式与色值都写进 localStorage；Base.astro 的 head 内联脚本会在首帧前
+	把它们应用回来，避免刷新后闪一下默认主题。
+*/}
+<mdui-dropdown id="theme-dd" placement="bottom-end" trigger="click" stay-open-on-click>
+	<mdui-button-icon slot="trigger" id="theme-btn" aria-label="外观设置" title="外观设置">
+		<mdui-icon-light-mode class="theme-icon-light"></mdui-icon-light-mode>
+		<mdui-icon-dark-mode class="theme-icon-dark"></mdui-icon-dark-mode>
+	</mdui-button-icon>
+
+	<mdui-menu class="theme-menu">
+		<mdui-menu-item>
+			<div slot="custom" class="theme-sec">
+				<p class="theme-sec-title" id="theme-mode-label">外观</p>
+				<mdui-segmented-button-group
+					selects="single"
+					full-width
+					id="theme-mode"
+					aria-labelledby="theme-mode-label"
+				>
+					{THEME_MODES.map((m) => <mdui-segmented-button value={m.value}>{m.label}</mdui-segmented-button>)}
+				</mdui-segmented-button-group>
+			</div>
+		</mdui-menu-item>
+
+		<mdui-divider></mdui-divider>
+
+		<mdui-menu-item>
+			<div slot="custom" class="theme-sec">
+				<p class="theme-sec-title" id="theme-color-label">主题色</p>
+				<div class="swatches" role="group" aria-labelledby="theme-color-label">
+					{
+						THEME_COLORS.map((c) => (
+							<button
+								type="button"
+								class="swatch"
+								data-color={c.value}
+								title={c.label}
+								aria-label={c.label}
+								aria-pressed="false"
+								style={`--sw: ${c.value}`}
+							/>
+						))
+					}
+				</div>
+				<label class="swatch-custom" title="自定义颜色">
+					<mdui-icon-color-lens></mdui-icon-color-lens>
+					<span>自定义颜色</span>
+					<input type="color" id="theme-color-custom" aria-label="自定义主题色" />
+				</label>
+			</div>
+		</mdui-menu-item>
+	</mdui-menu>
+</mdui-dropdown>
+
+<script>
+	import { THEME_COLORS, DEFAULT_COLOR, STORAGE_KEYS } from '../data/theme';
+	import '../lib/icons';
+
+	type MduiApi = {
+		setTheme: (m: 'auto' | 'light' | 'dark', t?: Element) => void;
+		setColorScheme: (
+			color: string,
+			opts?: { target?: Element; customColors?: { name: string; value: string }[] },
+		) => void;
+		removeColorScheme: (t?: Element) => void;
+	};
+
+	const mdui = () => (window as unknown as { mdui: MduiApi }).mdui;
+
+	const modeGroup = document.getElementById('theme-mode') as HTMLElement & { value: string };
+	const swatches = Array.from(
+		document.querySelectorAll<HTMLButtonElement>('.swatch[data-color]'),
+	);
+	const customInput = document.getElementById('theme-color-custom') as HTMLInputElement;
+	const dd = document.getElementById('theme-dd') as HTMLElement & { open: boolean };
+
+	/** 读取当前生效的色值：优先 localStorage，回退到默认种子色 */
+	function readColor(): string {
+		return localStorage.getItem(STORAGE_KEYS.color) ?? DEFAULT_COLOR;
+	}
+
+	function markColor(color: string) {
+		for (const b of swatches) {
+			b.setAttribute('aria-pressed', String(b.dataset.color === color));
+		}
+	}
+
+	/**
+	 * 应用主题色。
+	 * 默认色就是 global.css 的基色，此时应移除动态配色让 CSS 说了算 ——
+	 * 否则 mdui 生成的色板会盖掉站点精心调过的 :root 覆写（§4.12）。
+	 */
+	function applyColor(color: string, persist = true) {
+		if (!mdui) return;
+		if (color === DEFAULT_COLOR) {
+			mdui().removeColorScheme();
+		} else {
+			mdui().setColorScheme(color);
+		}
+		markColor(color);
+		if (persist) localStorage.setItem(STORAGE_KEYS.color, color);
+		if (customInput) customInput.value = color;
+		syncThemeColor(modeGroup.value);
+	}
+
+	/**
+	 * 同步 <meta name="theme-color">，让移动端浏览器地址栏跟随实际主题。
+	 *
+	 * Base.astro 里那两条 meta 带 prefers-color-scheme media，只在「跟随系统」
+	 * 时正确。用户一旦显式选择浅色/深色，就必须换成不带 media 的单条，
+	 * 否则地址栏会和页面配色不一致。
+	 */
+	function syncThemeColor(mode: string) {
+		const surface = getComputedStyle(document.documentElement)
+			.getPropertyValue('--mdui-color-surface')
+			.trim();
+		if (!surface) return;
+		const rgb = surface.split(',').map((n) => Number(n.trim()));
+		if (rgb.length !== 3 || rgb.some(Number.isNaN)) return;
+		const hex =
+			'#' + rgb.map((n) => n.toString(16).padStart(2, '0')).join('');
+
+		for (const m of Array.from(
+			document.querySelectorAll<HTMLMetaElement>('meta[name="theme-color"]'),
+		)) {
+			if (mode === 'auto') {
+				// 交给 media 查询决定，恢复静态写法
+				m.media = m.dataset.sysMedia ?? '';
+				m.content = m.dataset.sysContent ?? m.content;
+			} else {
+				m.removeAttribute('media');
+				m.content = hex;
+			}
+		}
+	}
+
+	modeGroup?.addEventListener('change', () => {
+		const mode = modeGroup.value as 'auto' | 'light' | 'dark';
+		mdui()?.setTheme(mode);
+		localStorage.setItem(STORAGE_KEYS.mode, mode);
+		syncThemeColor(mode);
+	});
+
+	for (const b of swatches) {
+		b.addEventListener('click', () => applyColor(b.dataset.color!));
+	}
+
+	customInput?.addEventListener('input', () => applyColor(customInput.value));
+
+	// 点「+」唤起系统取色器时别让菜单收起
+	customInput?.addEventListener('click', (e) => e.stopPropagation());
+
+	/*
+		同步控件的初始显示。主题类与动态色板已由 Base.astro 的 head 内联脚本
+		先行应用，这里**只回填 UI 状态**——不能再次调用 setColorScheme()，
+		因为它每次都会注入一个新的 class 和样式元素，重复调用会让 <head> 堆积。
+	*/
+	function sync() {
+		const mode = localStorage.getItem(STORAGE_KEYS.mode) ?? 'auto';
+		modeGroup.value = mode;
+		const color = readColor();
+		markColor(color);
+		if (customInput) customInput.value = color;
+		syncThemeColor(mode);
+	}
+
+	if (customElements.get('mdui-segmented-button-group')) {
+		sync();
+	} else {
+		customElements.whenDefined('mdui-segmented-button-group').then(sync);
+	}
+
+	// 供调试与验证使用
+	(window as unknown as { __theme: unknown }).__theme = {
+		applyColor,
+		readColor,
+		get mode() {
+			return modeGroup?.value;
+		},
+		close: () => {
+			if (dd) dd.open = false;
+		},
+		DEFAULT_COLOR,
+		THEME_COLORS: THEME_COLORS.map((c) => c.value),
+	};
+</script>
+
+<style is:global>
+	/*
+		触发按钮图标随「当前实际生效的主题」变化：亮色显太阳，暗色显月亮。
+		模式为 auto 时由媒体查询决定 —— 做法沿用 mdui 文档深色模式一节的
+		.dark-mode-*-visible 模式。
+
+		必须先全部隐藏再逐个点亮。只写「显示」不写「隐藏」的话，
+		三枚图标会同时出现（这个坑踩过）。
+	*/
+	#theme-btn > * {
+		display: none;
+	}
+
+	.mdui-theme-light #theme-btn .theme-icon-light,
+	.mdui-theme-dark #theme-btn .theme-icon-dark {
+		display: inline-flex;
+	}
+
+	@media (prefers-color-scheme: light) {
+		.mdui-theme-auto #theme-btn .theme-icon-light {
+			display: inline-flex;
+		}
+	}
+
+	@media (prefers-color-scheme: dark) {
+		.mdui-theme-auto #theme-btn .theme-icon-dark {
+			display: inline-flex;
+		}
+	}
+
+	/* 菜单内的分区 */
+	.theme-sec {
+		display: block;
+		padding: 0.6rem 0.25rem;
+		min-width: 15rem;
+	}
+
+	.theme-sec-title {
+		font-size: var(--mdui-typescale-label-medium-size);
+		color: rgb(var(--mdui-color-on-surface-variant));
+		margin-bottom: 0.5rem;
+	}
+
+	/* 色板 */
+	.swatches {
+		display: grid;
+		/* 12 个预设色，6 列刚好排满两行，不留零散末行 */
+		grid-template-columns: repeat(6, minmax(0, 1fr));
+		gap: 0.5rem;
+	}
+
+	.swatch {
+		position: relative;
+		display: grid;
+		place-items: center;
+		aspect-ratio: 1;
+		border-radius: 50%;
+		cursor: pointer;
+		background-color: var(--sw);
+		box-shadow: inset 0 0 0 1px rgb(var(--mdui-color-outline) / 0.25);
+		transition: transform var(--mdui-motion-duration-short2);
+	}
+
+	.swatch:hover {
+		transform: scale(1.08);
+	}
+
+	.swatch[aria-pressed='true']::after {
+		content: '';
+		width: 0.55rem;
+		height: 0.55rem;
+		border-radius: 50%;
+		background-color: #fff;
+		box-shadow: 0 0 0 2px rgb(0 0 0 / 0.35);
+	}
+
+	.swatch-custom {
+		position: relative;
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		margin-top: 0.6rem;
+		padding: 0.35rem 0.6rem;
+		border-radius: var(--mdui-shape-corner-medium);
+		cursor: pointer;
+		font-size: var(--mdui-typescale-body-medium-size);
+		color: rgb(var(--mdui-color-on-surface-variant));
+		background-color: rgb(var(--mdui-color-surface-container-lowest));
+		box-shadow: inset 0 0 0 1px rgb(var(--mdui-color-outline));
+		overflow: hidden;
+	}
+
+	.swatch-custom:hover {
+		background-color: rgb(var(--mdui-color-surface-container));
+	}
+
+	.swatch-custom input[type='color'] {
+		position: absolute;
+		inset: 0;
+		opacity: 0;
+		cursor: pointer;
+		border: 0;
+		padding: 0;
+	}
+</style>

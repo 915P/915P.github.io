@@ -1,0 +1,313 @@
+---
+import Page from '../../layouts/Page.astro';
+---
+
+<Page title="条码 / 二维码" description="生成 QR 码与 20 种一维条码" active="tools">
+	<div class="tool-head">
+		<h1>条码 / 二维码</h1>
+		<p>QR 码与 20 种一维条码，纯浏览器生成，不上传任何数据</p>
+	</div>
+
+	<div class="tool-split">
+		<div class="panel-lg">
+			<div class="canvas">
+				<svg id="svg" role="img" aria-label="生成的条码" style="max-width: 100%"></svg>
+			</div>
+			<p id="hint" class="text-sm muted" style="margin-top: 0.85rem; text-align: center"></p>
+			<div class="btn-row" style="margin-top: 0.85rem">
+				<mdui-button variant="filled" id="dl">下载 SVG</mdui-button>
+				<mdui-button variant="outlined" id="png">下载 PNG</mdui-button>
+			</div>
+		</div>
+
+		<div class="stack">
+			<div class="field">
+				<label for="text">内容</label>
+				<textarea id="text" rows="2" class="mono">Hello, 915P!</textarea>
+			</div>
+
+			<div class="field">
+				<label for="format">格式</label>
+				<select id="format">
+					<optgroup label="二维码">
+						<option value="QRCode" selected>QR 码</option>
+					</optgroup>
+					<optgroup label="商品条码">
+						<option value="EAN13">EAN-13（13 位）</option>
+						<option value="EAN8">EAN-8（8 位）</option>
+						<option value="UPC">UPC（12 位）</option>
+						<option value="UPCE">UPC-E（8 位）</option>
+						<option value="EAN5">EAN-5</option>
+						<option value="EAN2">EAN-2</option>
+					</optgroup>
+					<optgroup label="通用">
+						<option value="CODE128">CODE 128</option>
+						<option value="CODE39">CODE 39</option>
+						<option value="CODE93">CODE 93</option>
+						<option value="CODE93FullASCII">CODE 93 Full ASCII</option>
+						<option value="ITF">ITF</option>
+						<option value="ITF14">ITF-14</option>
+						<option value="MSI">MSI</option>
+						<option value="MSI10">MSI-10</option>
+						<option value="MSI11">MSI-11</option>
+						<option value="MSI1010">MSI-1010</option>
+						<option value="MSI1110">MSI-1110</option>
+						<option value="codabar">Codabar</option>
+						<option value="pharmacode">Pharmacode</option>
+						<option value="GenericBarcode">Generic（按内容自动选型）</option>
+					</optgroup>
+				</select>
+			</div>
+
+			<div id="qrOpts" class="panel stack">
+				<div class="field">
+					<label for="ec">
+						纠错等级：<span id="ecVal" style="color: rgb(var(--mdui-color-primary))">M</span>
+					</label>
+					<input type="range" id="ec" min="0" max="3" value="1" step="1" />
+					<div class="row-between text-xs faint" style="gap: 0">
+						<span>L</span><span>M</span><span>Q</span><span>H</span>
+					</div>
+				</div>
+				<div class="field">
+					<label for="size">
+						尺寸：<span id="szVal" style="color: rgb(var(--mdui-color-primary))">240</span> px
+					</label>
+					<input type="range" id="size" min="100" max="600" value="240" step="10" />
+				</div>
+				<div class="field">
+					<label for="mode">输入模式</label>
+					<select id="mode">
+						<option value="">自动</option>
+						<option value="NUMBER">仅数字</option>
+						<option value="ALPHA_NUM">数字 + 字母</option>
+					</select>
+				</div>
+			</div>
+
+			<div id="barOpts" class="panel stack hidden">
+				<div class="field">
+					<label for="h">
+						行高：<span id="hVal" style="color: rgb(var(--mdui-color-primary))">100</span> px
+					</label>
+					<input type="range" id="h" min="30" max="300" value="100" />
+				</div>
+				<div class="field">
+					<span style="display: block; margin-bottom: 0.35rem">显示数值</span>
+					<div class="options">
+						<label><input type="radio" name="dv" checked /> 是</label>
+						<label><input type="radio" name="dv" /> 否</label>
+					</div>
+				</div>
+				<div class="field">
+					<label for="color">前景色</label>
+					<input type="color" id="color" value="#000000" style="height: 2.5rem" />
+				</div>
+			</div>
+		</div>
+	</div>
+
+	<p class="footnote">
+		本工具完全在浏览器本地运行，生成的内容不会离开你的设备。所用的
+		<strong>JsBarcode 3.9.0</strong>（MIT）与 <strong>qrcode-generator 2.0.4</strong>（MIT）
+		已随本站一同分发，详见仓库内的 <code class="mono">THIRD_PARTY_NOTICES.md</code>。
+	</p>
+</Page>
+
+<script>
+	// 两个库为 UMD 包，位于 public/ 下，用 script 标签在运行时加载
+	// @ts-ignore qrcode-generator 暴露全局 qrcode
+	declare const qrcode: any;
+	async function loadScript(src: string): Promise<void> {
+		await new Promise<void>((resolve, reject) => {
+			const s = document.createElement('script');
+			s.src = src;
+			s.onload = () => resolve();
+			s.onerror = () => reject(new Error('加载失败: ' + src));
+			document.head.appendChild(s);
+		});
+	}
+
+	const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
+
+	const text = $<HTMLTextAreaElement>('text');
+	const format = $<HTMLSelectElement>('format');
+	const svg = $<HTMLElement>('svg');
+	const hint = $('hint');
+	const qrOpts = $('qrOpts');
+	const barOpts = $('barOpts');
+	const ec = $<HTMLInputElement>('ec');
+	const size = $<HTMLInputElement>('size');
+	const mode = $<HTMLSelectElement>('mode');
+	const h = $<HTMLInputElement>('h');
+	const color = $<HTMLInputElement>('color');
+
+	const EC = ['L', 'M', 'Q', 'H'];
+	const MODE = ['Byte', 'Numeric', 'Alphanumeric'];
+
+	function buildQR(text: string) {
+		const s = +size.value;
+		try {
+			const qr = qrcode(0, EC[+ec.value]!);
+			qr.addData(text || ' ', MODE[+mode.value] ?? 'Byte');
+			qr.make();
+
+			// 直接由模块矩阵生成 SVG path，避免 canvas 中转
+			const count = qr.getModuleCount();
+			const quiet = 4;
+			let d = '';
+			for (let y = 0; y < count; y++) {
+				let x = 0;
+				while (x < count) {
+					if (!qr.isDark(y, x)) {
+						x++;
+						continue;
+					}
+					// 合并同一行连续的暗模块，减少 path 指令
+					let w = 1;
+					while (x + w < count && qr.isDark(y, x + w)) w++;
+					d += `M${x + quiet} ${y + quiet}h${w}v1h-${w}z`;
+					x += w;
+				}
+			}
+
+			svg.innerHTML =
+				`<g shape-rendering="crispEdges">` +
+				`<rect width="${count + quiet * 2}" height="${count + quiet * 2}" fill="#fff"/>` +
+				`<path d="${d}" fill="#000"/></g>`;
+			svg.setAttribute('viewBox', `0 0 ${count + quiet * 2} ${count + quiet * 2}`);
+			svg.setAttribute('width', String(s));
+			svg.setAttribute('height', String(s));
+			return true;
+		} catch (e) {
+			svg.replaceChildren();
+			hint.textContent = `生成失败：${(e as Error).message}`;
+			return false;
+		}
+	}
+
+	function buildBar(text: string) {
+		const opts: Record<string, unknown> = {
+			format: format.value,
+			height: +h.value,
+			displayValue:
+				(document.querySelector<HTMLInputElement>('[name="dv"]:checked')?.checked ??
+					true),
+			lineColor: color.value,
+			width: 2,
+		};
+		if (format.value === 'ITF' || format.value === 'ITF14') opts.margin = 0;
+		try {
+			// @ts-ignore JsBarcode 暴露全局，无类型声明
+			JsBarcode(svg, text, opts);
+			// 移除库生成的辅助文本节点，只留图形
+			return true;
+		} catch (e) {
+			hint.textContent = `内容不符合 ${format.value} 格式要求：${(e as Error).message}`;
+			svg.replaceChildren();
+			return false;
+		}
+	}
+
+	function render() {
+		const t = text.value;
+		const isQR = format.value === 'QRCode';
+		qrOpts.classList.toggle('hidden', !isQR);
+		barOpts.classList.toggle('hidden', isQR);
+		if (!t) {
+			hint.textContent = '请输入内容';
+			svg.replaceChildren();
+			return;
+		}
+		hint.textContent = '';
+		const ok = isQR ? buildQR(t) : buildBar(t);
+		if (ok) {
+			const fmt = isQR ? 'QR 码' : format.value;
+			hint.textContent = `已生成 ${fmt}`;
+		}
+	}
+
+	$('ecVal')!.textContent = EC[+ec.value]!;
+	ec.addEventListener('input', () => {
+		$('ecVal')!.textContent = EC[+ec.value]!;
+		render();
+	});
+	$('szVal')!.textContent = size.value;
+	size.addEventListener('input', () => {
+		$('szVal')!.textContent = size.value;
+		render();
+	});
+	$('hVal')!.textContent = h.value;
+	h.addEventListener('input', () => {
+		$('hVal')!.textContent = h.value;
+		render();
+	});
+
+	text.addEventListener('input', render);
+	format.addEventListener('change', render);
+	mode.addEventListener('change', render);
+	color.addEventListener('input', render);
+	document.querySelectorAll<HTMLInputElement>('[name="dv"]').forEach((r) =>
+		r.addEventListener('change', render),
+	);
+
+	function serialize(): string {
+		const inner = svg.querySelector('svg');
+		if (!inner) return '';
+		return new XMLSerializer().serializeToString(inner);
+	}
+
+	$('dl')!.addEventListener('click', () => {
+		const s = serialize();
+		if (!s) return;
+		const url = URL.createObjectURL(
+			new Blob([s], { type: 'image/svg+xml;charset=utf-8' }),
+		);
+		const a = document.createElement('a');
+		a.href = url;
+		a.download = `${format.value}-${Date.now()}.svg`;
+		a.click();
+		URL.revokeObjectURL(url);
+	});
+
+	$('png')!.addEventListener('click', () => {
+		const s = serialize();
+		if (!s) return;
+		const size2 = svg.querySelector('svg')!.getBoundingClientRect();
+		const img = new Image();
+		img.onload = () => {
+			const c = document.createElement('canvas');
+			c.width = Math.max(1, Math.round(size2.width * 2));
+			c.height = Math.max(1, Math.round(size2.height * 2));
+			const ctx = c.getContext('2d')!;
+			ctx.fillStyle = '#fff';
+			ctx.fillRect(0, 0, c.width, c.height);
+			ctx.drawImage(img, 0, 0, c.width, c.height);
+			c.toBlob((b) => {
+				if (!b) return;
+				const url = URL.createObjectURL(b);
+				const a = document.createElement('a');
+				a.href = url;
+				a.download = `${format.value}-${Date.now()}.png`;
+				a.click();
+				URL.revokeObjectURL(url);
+			}, 'image/png');
+		};
+		// 用 TextEncoder 做 UTF-8 编码，避免过时的 escape/unescape
+		const bytes = new TextEncoder().encode(s);
+		let bin = '';
+		for (const b of bytes) bin += String.fromCharCode(b);
+		img.src = 'data:image/svg+xml;base64,' + btoa(bin);
+	});
+
+	(async () => {
+		try {
+			hint.textContent = '正在加载生成器…';
+			await loadScript('/vendor/barcode/jsbarcode.js');
+			await loadScript('/vendor/barcode/qrcode.js');
+			render();
+		} catch (e) {
+			hint.textContent = (e as Error).message + '，请检查网络后刷新重试。';
+		}
+	})();
+</script>

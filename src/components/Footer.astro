@@ -1,0 +1,89 @@
+---
+const year = new Date().getFullYear();
+const days = Math.floor((Date.now() - new Date('2019-08-22').getTime()) / 86_400_000);
+---
+
+<footer class="site-footer">
+	<div class="footer-bottom">
+		<p class="text-sm muted">
+			© {year} 915P的小站 ·
+			<a
+				href="https://github.com/915P/915P.github.io"
+				class="footer-link"
+				target="_blank"
+				rel="noopener noreferrer">源代码</a
+			>
+		</p>
+
+		{/*
+			首页/工具/博客不在此重复列出：顶栏与桌面侧边导航已经常驻，
+			页脚再放一遍是冗余。只留列表型入口与运行信息。
+		*/}
+		<div class="footer-meta">
+			<a
+				href="https://forms.cloud.microsoft/r/BLSwj4xUVW"
+				class="footer-link"
+				target="_blank"
+				rel="noopener noreferrer">反馈与建议</a
+			>
+			<a href="/sitemap-index.xml" class="footer-link">网站地图</a>
+			<a href="/rss.xml" class="footer-link">RSS</a>
+			<span class="faint">建站 {days.toLocaleString('zh-CN')} 天</span>
+		</div>
+	</div>
+
+	<p class="disclaimer">
+		免责声明：本站内容与工具结果仅供学习、研究和参考，可能存在遗漏或误差；
+		历史纪年、历法换算、字符编码等请以权威资料为准。
+	</p>
+</footer>
+
+<style is:global>
+	.site-footer {
+		margin-top: 3rem;
+		padding: 2rem 1.25rem 3rem;
+		border-top: 1px solid rgb(var(--mdui-color-outline-variant));
+		width: 100%;
+		max-width: 72rem;
+		margin-inline: auto;
+	}
+
+	@media (min-width: 840px) {
+		.site-footer {
+			padding: 2.5rem 2rem 3.5rem;
+		}
+	}
+
+	.footer-bottom {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		justify-content: space-between;
+		gap: 0.5rem 1.25rem;
+	}
+
+	.footer-meta {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 0.35rem 1rem;
+		font-size: var(--mdui-typescale-body-small-size);
+	}
+
+	.footer-link {
+		color: rgb(var(--mdui-color-primary));
+		text-decoration: none;
+	}
+
+	.footer-link:hover {
+		text-decoration: underline;
+	}
+
+
+	.disclaimer {
+		margin: 1rem 0 0;
+		font-size: var(--mdui-typescale-body-small-size);
+		line-height: 1.6;
+		color: rgb(var(--mdui-color-outline));
+	}
+</style>

@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="zh-CN" class="mdui-theme-auto">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>示波器 | 915P</title>
+<meta name="description" content="Web Audio 实时示波器：数学函数、振荡器、远程音频、本地文件与麦克风输入。" />
+<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+<link rel="stylesheet" href="/vendor/mdui/mdui.css" />
+<script src="/vendor/mdui/mdui.global.js" defer></script>
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+<header class="app-bar">
+<a class="app-bar-brand" href="/tools/">
+<img src="/images/logo.svg" alt="" width="28" height="28" />
+<span>915P 示波器</span>
+</a>
+<a class="app-bar-link" href="/tools/">返回工具</a>
+</header>
+
+<main class="oscope-shell">
+<section class="scope-panel" aria-label="示波器显示区">
+<div id="scope-stage"></div>
+</section>
+
+<mdui-card class="control-panel">
+<fieldset id="settings" class="settings">
+<legend>显示设置</legend>
+<label class="volume-label">
+<span>音量</span>
+<input type="range" min="0" max="100" value="60" />
+</label>
+<label>
+<span>多输入模式</span>
+<select class="select" id="multiMode">
+<option value="overlay" selected>叠加</option>
+<option value="scale">缩放</option>
+<option value="xy">XY</option>
+</select>
+</label>
+<label>
+<span>每采样像素</span>
+<select class="select" id="pps">
+<option value="0.5">0.5</option>
+<option selected value="1">1</option>
+<option value="3">3</option>
+</select>
+</label>
+</fieldset>
+
+<fieldset id="mode" class="modes">
+<legend>输入模式</legend>
+
+<input type="radio" name="mode" id="mode-math" value="math" />
+<label class="mode-item" for="mode-math">数学函数</label>
+<section id="math" class="mode-section">
+<label>
+#1 <code>function(x, t) {</code>
+<input type="text" value="return Math.sin((x + t/1000) * 2 * Math.PI)" />
+<code>}</code>
+</label>
+<label>
+#2 <code>function(x, t) {</code>
+<input type="text" value="return Math.cos(x * 2 * Math.PI)" />
+<code>}</code>
+</label>
+</section>
+
+<input type="radio" name="mode" id="mode-signal" value="signal" />
+<label class="mode-item" for="mode-signal">Web Audio 信号</label>
+<section id="signal" class="mode-section">
+<label class="check-line"><input type="checkbox" checked /> 稳定显示</label>
+<label>频率 #1：<label class="range-line"><input type="range" min="20" max="1000" value="440" /></label><span></span></label>
+<label>波形 #1：<select class="select">
+<option value="sine">正弦</option>
+<option value="square">方波</option>
+<option value="triangle">三角</option>
+<option value="sawtooth">锯齿</option>
+</select></label>
+<label>频率 #2：</label>
+<label>波形 #2：</label>
+</section>
+
+<input type="radio" name="mode" id="mode-remote" value="remote" />
+<label class="mode-item" for="mode-remote">远程音频文件</label>
+<section id="remote" class="mode-section">
+<form>
+<label>URL：<input type="text" placeholder="https://example.com/audio.ogg" /><input type="submit" value="加载" /></label>
+</form>
+</section>
+
+<input type="radio" name="mode" id="mode-local" value="local" />
+<label class="mode-item" for="mode-local">本地音频文件</label>
+<section id="local" class="mode-section">
+<label><input type="file" accept="audio/*" /></label>
+</section>
+
+<input type="radio" name="mode" id="mode-mic" value="mic" />
+<label class="mode-item" for="mode-mic">麦克风输入</label>
+</fieldset>
+</mdui-card>
+</main>
+
+<footer class="app-footer">
+<p>Web Audio 实时可视化。输入不会离开你的设备。</p>
+</footer>
+
+<script src="js/object.assign.js"></script>
+<script src="js/performance.now.js"></script>
+<script src="js/oscope.js"></script>
+<script src="js/app.js"></script>
+<script>App.init();</script>
+</body>
+</html>

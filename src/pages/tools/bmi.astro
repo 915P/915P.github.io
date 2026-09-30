@@ -1,0 +1,164 @@
+---
+import Page from '../../layouts/Page.astro';
+
+const RANGES = [
+{ key: 'under', label: '偏瘦', range: 'BMI < 18.5', note: '体重低于正常范围' },
+{ key: 'normal', label: '正常范围', range: '18.5 ≤ BMI < 24.0', note: '保持当前生活方式' },
+{ key: 'over', label: '超重', range: '24.0 ≤ BMI < 28.0', note: '建议关注饮食与运动' },
+{ key: 'obese', label: '肥胖', range: 'BMI ≥ 28.0', note: '建议咨询专业医师' },
+];
+---
+
+<Page title="BMI 计算器" description="输入身高体重，算出 BMI 与健康区间，并列出现行成人 BMI 范围标准" active="tools">
+<div class="tool-head">
+<h1>BMI 计算器</h1>
+<p>根据身高与体重计算身体质量指数</p>
+</div>
+
+<div class="tool-narrow">
+<div class="panel-lg">
+<div class="stack">
+<div class="field">
+<label for="h">身高（厘米）</label>
+<input type="number" id="h" inputmode="decimal" value="170" min="80" max="250" />
+</div>
+<div class="field">
+<label for="w">体重（公斤）</label>
+<input
+type="number"
+id="w"
+inputmode="decimal"
+value="60"
+min="20"
+max="300"
+step="0.1"
+/>
+</div>
+</div>
+
+<div id="out" class="result-panel hidden" aria-live="polite">
+<p class="text-sm">BMI</p>
+<p id="val" class="result-value"></p>
+<p id="cat" class="block-title" style="margin-top: 0.25rem"></p>
+<p id="ideal" class="text-sm" style="margin-top: 0.5rem; opacity: 0.85"></p>
+<p id="advice" class="text-xs" style="margin-top: 0.35rem; opacity: 0.85"></p>
+</div>
+</div>
+
+<section class="panel" style="margin-top: 1.25rem">
+<div class="row-between" style="align-items: baseline; margin-bottom: 0.6rem">
+<h2 class="block-title">成人 BMI 范围标准</h2>
+<span class="text-xs faint">中国现行标准</span>
+</div>
+<div class="table-wrap">
+<table class="bmi-table">
+<thead>
+<tr>
+<th scope="col">分类</th>
+<th scope="col">BMI 范围</th>
+<th scope="col">说明</th>
+</tr>
+</thead>
+<tbody>
+{RANGES.map((r) => (
+<tr data-range={r.key}>
+<td><strong>{r.label}</strong></td>
+<td class="mono">{r.range}</td>
+<td class="muted">{r.note}</td>
+</tr>
+))}
+</tbody>
+</table>
+</div>
+<p class="text-xs faint" style="margin-top: 0.7rem">
+依据中国成人超重和肥胖症预防控制指南、WS/T 428-2013 与《成人肥胖食养指南（2024 年版）》：
+BMI &lt; 18.5 为偏瘦，18.5–23.9 为正常，24.0–27.9 为超重，≥ 28.0 为肥胖。
+</p>
+</section>
+
+<p class="footnote">
+本页结果仅供健康参考，不构成医疗建议。BMI 未考虑肌肉量、体脂分布、年龄与孕期等因素，
+如有健康疑虑请咨询专业医师。
+</p>
+</div>
+</Page>
+
+<style is:global>
+.bmi-table {
+width: 100%;
+border-collapse: collapse;
+font-size: var(--mdui-typescale-body-medium-size);
+}
+
+.bmi-table th,
+.bmi-table td {
+padding: 0.55rem 0.65rem;
+text-align: left;
+border-bottom: 1px solid rgb(var(--mdui-color-outline-variant));
+white-space: nowrap;
+}
+
+.bmi-table th {
+color: rgb(var(--mdui-color-on-surface-variant));
+font-size: var(--mdui-typescale-label-large-size);
+font-weight: 500;
+}
+
+.bmi-table tr.is-current {
+background-color: rgb(var(--mdui-color-secondary-container));
+color: rgb(var(--mdui-color-on-secondary-container));
+}
+
+.table-wrap {
+overflow-x: auto;
+}
+</style>
+
+<script>
+const ranges = {
+under: { label: '偏瘦', cls: 'warn', advice: '可适当增加营养摄入与力量训练。' },
+normal: { label: '正常范围', cls: 'ok', advice: '保持均衡饮食与规律运动。' },
+over: { label: '超重', cls: 'warn', advice: '建议控制总热量，增加有氧运动，并定期监测。' },
+obese: { label: '肥胖', cls: 'bad', advice: '建议在专业医师或营养师指导下制定减重方案。' },
+} as const;
+
+function calc() {
+const h = parseFloat((document.getElementById('h') as HTMLInputElement).value);
+const w = parseFloat((document.getElementById('w') as HTMLInputElement).value);
+const out = document.getElementById('out')!;
+if (!h || !w || h < 80 || h > 250 || w < 20 || w > 300) {
+out.classList.add('hidden');
+document.querySelectorAll<HTMLElement>('[data-range]').forEach((tr) => {
+tr.classList.remove('is-current');
+});
+return;
+}
+
+const m = h / 100;
+const bmi = w / (m * m);
+const lo = 18.5 * m * m;
+const hi = 23.9 * m * m;
+
+let key: keyof typeof ranges = 'normal';
+if (bmi < 18.5) key = 'under';
+else if (bmi < 24) key = 'normal';
+else if (bmi < 28) key = 'over';
+else key = 'obese';
+
+const info = ranges[key];
+out.className = `result-panel ${info.cls}`;
+document.getElementById('val')!.textContent = bmi.toFixed(1);
+document.getElementById('cat')!.textContent = info.label;
+document.getElementById('ideal')!.textContent =
+`该身高对应的正常体重约为 ${lo.toFixed(1)} – ${hi.toFixed(1)} kg`;
+document.getElementById('advice')!.textContent = info.advice;
+
+document.querySelectorAll<HTMLElement>('[data-range]').forEach((tr) => {
+tr.classList.toggle('is-current', tr.dataset.range === key);
+});
+}
+
+document.getElementById('h')!.addEventListener('input', calc);
+document.getElementById('w')!.addEventListener('input', calc);
+calc();
+</script>
