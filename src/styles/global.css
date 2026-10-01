@@ -147,7 +147,33 @@ body.mdui-ready {
 	}
 }
 
+/*
+	底部导航必须显式改回 position: fixed。
+
+	mdui 2 的 <mdui-navigation-bar> 自身 :host 是 position: fixed; bottom: 0，
+	但当它位于 <mdui-layout> 内时，mdui 会通过**内联样式**把它切成
+	position: absolute（见 docs/zh-cn/components/navigation-bar.md
+	「注意事项」第 2 条）。实测该元素的 style 属性为：
+		position: absolute; right: 0px; bottom: 0px; left: 0px;
+	定位基准因此变成 layout 容器，导航栏停在文档流末尾并随页面滚动。
+
+	内联样式优先于任何选择器，特异性再高也压不住，所以这里必须用 !important。
+	同时 absolute 模式下 mdui 不再给 body 补 padding-bottom，
+	内容底部不会自动让开导航栏的 5rem，需要手动补。
+*/
 @media (max-width: 839px) {
+	mdui-navigation-bar.site-bar {
+		position: fixed !important;
+		bottom: 0 !important;
+		left: 0 !important;
+		right: 0 !important;
+	}
+
+	/* 让出底部导航栏的 5rem，避免最后一段内容被遮挡 */
+	mdui-layout-main.site-main {
+		padding-bottom: 5rem;
+	}
+
 	.site-rail {
 		display: none;
 	}
@@ -725,6 +751,11 @@ input[type='checkbox'] {
    传入的页面内容会先于 Nav.astro 内的 <Footer /> 落位。这里用 order
    强制把页脚推到底部，不依赖渲染时序。
    -------------------------------------------------------------------------- */
+/*
+	min-height 用 100dvh - 4rem（顶栏高度）：短页面时把页脚压到底部，
+	长页面时视口之外才继续增长，底部导航栏 fixed 始终浮在视口下沿。
+	窄屏的 padding-bottom 让位见 §5 的 .site-bar 规则。
+*/
 mdui-layout-main.site-main {
 	display: flex;
 	flex-direction: column;
