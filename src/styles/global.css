@@ -107,15 +107,6 @@ body {
 	visibility: hidden;
 }
 
-body {
-	opacity: 0;
-	transition: opacity 220ms var(--mdui-motion-easing-standard);
-}
-
-body.mdui-ready {
-	opacity: 1;
-}
-
 /* --------------------------------------------------------------------------
    5. 品牌标识与导航
    -------------------------------------------------------------------------- */

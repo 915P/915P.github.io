@@ -42,38 +42,14 @@ const { title, description, image, type, active } = Astro.props;
 		}
 	</style>
 
-	{/*
-		Web Components 需先完成注册，否则页面会因 :not(:defined) 而不可见。
-		等待用到的组件就绪后再淡入；allSettled 保证个别组件加载失败时
-		页面仍会显示（只是样式可能不完整）。
-	*/}
 	<script>
 		/*
 			图标模块必须在客户端引入：放在 front matter 会被判定为仅服务端依赖
 			并被 tree-shake 掉（同 mdui 组件 JS 的问题）。
+
+			未注册的 mdui 元素由 global.css 的 `:not(:defined)` 隐藏，
+			其余内容（文字、标题、页脚）立即可见，无需等待组件就绪。
 		*/
 		import '../lib/icons';
-
-		const TAGS = [
-			'mdui-layout',
-			'mdui-layout-main',
-			'mdui-top-app-bar',
-			'mdui-top-app-bar-title',
-			'mdui-navigation-rail',
-			'mdui-navigation-rail-item',
-			'mdui-navigation-bar',
-			'mdui-navigation-bar-item',
-			'mdui-button',
-			'mdui-button-icon',
-			'mdui-card',
-			'mdui-chip',
-			'mdui-divider',
-			'mdui-linear-progress',
-			'mdui-icon-home',
-		];
-
-		Promise.allSettled(TAGS.map((t) => customElements.whenDefined(t))).then(() => {
-			document.body.classList.add('mdui-ready');
-		});
 	</script>
 </Base>
