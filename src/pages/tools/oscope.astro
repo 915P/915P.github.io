@@ -1,0 +1,672 @@
+---
+import Page from '../../layouts/Page.astro';
+
+/*
+	示波器核心逻辑全部放在 src/lib/oscope/：
+	  types.ts    类型、档位表与常量
+	  capture.ts  四种输入源（数学函数 / 振荡器 / 本地文件 / 麦克风）
+	  ring.ts     环形缓冲 + 触发搜索
+	  measure.ts  频率 / 峰峰值 / Vrms / 偏移 / 周期 / 占空比
+	  fft.ts      Hann 窗 + 基 2 FFT → 频谱
+	  render.ts   canvas 绘制（双通道 / XY / 频谱）
+	  export.ts   CSV 与 PNG 导出
+	  recorder.ts canvas.captureStream + MediaRecorder 视频录制
+	本页只做 DOM 接线。
+*/
+---
+
+<Page
+	title="示波器"
+	description="双通道触发稳定实时示波器：波形、XY 李萨如、FFT 频谱，自动测量频率与有效值，可导出 CSV/PNG 与录制视频。"
+	active="tools"
+>
+	<div class="tool-head">
+		<h1>示波器</h1>
+		<p>触发锁定让波形稳定不乱跑；所有音频只在浏览器本地处理，不上传</p>
+	</div>
+
+	<div class="panel">
+		<div class="scope-row">
+			<span class="scope-row-label">输入源</span>
+			<label class="field">
+				<span>CH1</span>
+				<select id="src1">
+					<option value="math">数学函数</option>
+					<option value="oscillator">振荡器</option>
+					<option value="local">本地音频文件</option>
+					<option value="mic">麦克风输入</option>
+				</select>
+			</label>
+			<label class="field">
+				<span>CH2</span>
+				<select id="src2">
+					<option value="off">关闭</option>
+					<option value="math">数学函数</option>
+					<option value="oscillator">振荡器</option>
+					<option value="local">本地音频文件</option>
+					<option value="mic">麦克风输入</option>
+				</select>
+			</label>
+		</div>
+
+		<div class="scope-row" id="ch1-params">
+			<label class="field" data-when1="math">
+				<span>CH1 函数（x 为 0–1 相位，t 为秒）</span>
+				<input type="text" id="fn1" value="return Math.sin((x + t) * 2 * Math.PI * 2)" />
+			</label>
+			<label class="field" data-when1="oscillator">
+				<span>CH1 频率 / Hz</span>
+				<input type="number" id="freq1" min="20" max="5000" step="1" value="440" />
+			</label>
+			<label class="field" data-when1="oscillator">
+				<span>CH1 波形</span>
+				<select id="shape1">
+					<option value="sine">正弦</option>
+					<option value="square">方波</option>
+					<option value="triangle">三角</option>
+					<option value="sawtooth">锯齿</option>
+				</select>
+			</label>
+			<label class="field" data-when1="local">
+				<span>CH1 音频文件</span>
+				<input type="file" id="file1" accept="audio/*" />
+			</label>
+		</div>
+
+		<div class="scope-row" id="ch2-params" hidden>
+			<label class="field" data-when2="math">
+				<span>CH2 函数（x 为 0–1 相位，t 为秒）</span>
+				<input type="text" id="fn2" value="return Math.cos(x * 2 * Math.PI * 3)" />
+			</label>
+			<label class="field" data-when2="oscillator">
+				<span>CH2 频率 / Hz</span>
+				<input type="number" id="freq2" min="20" max="5000" step="1" value="660" />
+			</label>
+			<label class="field" data-when2="oscillator">
+				<span>CH2 波形</span>
+				<select id="shape2">
+					<option value="sine">正弦</option>
+					<option value="square">方波</option>
+					<option value="triangle">三角</option>
+					<option value="sawtooth">锯齿</option>
+				</select>
+			</label>
+			<label class="field" data-when2="local">
+				<span>CH2 音频文件</span>
+				<input type="file" id="file2" accept="audio/*" />
+			</label>
+		</div>
+
+		<div class="scope-row">
+			<label class="field">
+				<span>时基 / 格</span>
+				<select id="timebase"></select>
+			</label>
+			<label class="field">
+				<span>CH1 垂直档位</span>
+				<select id="vdiv1"></select>
+			</label>
+			<label class="field" id="vdiv2-field" hidden>
+				<span>CH2 垂直档位</span>
+				<select id="vdiv2"></select>
+			</label>
+			<label class="field">
+				<span>视图</span>
+				<select id="view">
+					<option value="dual">双通道波形</option>
+					<option value="xy">XY 李萨如</option>
+					<option value="fft">FFT 频谱</option>
+				</select>
+			</label>
+		</div>
+
+		<div class="scope-row" id="trigger-row">
+			<label class="field">
+				<span>触发方式</span>
+				<select id="trigger">
+					<option value="auto">自动</option>
+					<option value="rising">上升沿</option>
+					<option value="falling">下降沿</option>
+				</select>
+			</label>
+			<label class="field">
+				<span>触发电平</span>
+				<input type="range" id="level" min="-0.9" max="0.9" step="0.01" value="0" />
+			</label>
+		</div>
+
+		<div class="scope-row">
+			<div class="scope-status">
+				<span id="srcLabel1" class="scope-src">CH1 —</span>
+				<span id="srcLabel2" class="scope-src2" hidden>CH2 —</span>
+			</div>
+		</div>
+		<p id="hint" class="scope-hint" role="status"></p>
+	</div>
+
+	<div class="scope-screen">
+		<canvas id="scope" aria-label="示波器波形"></canvas>
+	</div>
+
+	<div class="panel">
+		<div class="scope-actions">
+			<mdui-button variant="outlined" id="csv">导出采样 CSV</mdui-button>
+			<mdui-button variant="outlined" id="meas-csv">导出测量 CSV</mdui-button>
+			<mdui-button variant="outlined" id="png">截屏 PNG</mdui-button>
+			<mdui-button variant="outlined" id="pause">暂停</mdui-button>
+			<mdui-button variant="filled" id="rec">开始录制</mdui-button>
+			<mdui-button variant="outlined" id="stop" hidden>停止并下载</mdui-button>
+		</div>
+		<p id="rec-hint" class="scope-hint">
+			录制说明：视频按 30fps 抓取画布，因此时间轴会自动放慢（视频里不含声音）。
+			录制中时基被钳制在 ≥20ms/格，440Hz 约 2.6 个周期/帧，形状清晰。
+		</p>
+	</div>
+
+	<p class="footnote">
+		数学函数与振荡器源会实际发声；本地文件与麦克风源只做可视化，不回放。
+		浏览器需允许自动播放才能启动 Web Audio。各项读数为触发对齐后一屏窗口的统计值。
+	</p>
+</Page>
+
+<script>
+	import { createSource, ensureContext, type Source } from '../../lib/oscope/capture';
+	import { RingBuffer } from '../../lib/oscope/ring';
+	import { measure } from '../../lib/oscope/measure';
+	import { analyse, type Spectrum } from '../../lib/oscope/fft';
+	import { draw, readTheme, type Frame } from '../../lib/oscope/render';
+	import { buildCsv, buildMeasureCsv, canvasToPng, download, timestamp } from '../../lib/oscope/export';
+	import { isSupported as canRecord, MIN_TIMEBASE_MS, slowMotionFactor, start } from '../../lib/oscope/recorder';
+	import {
+		DIVS_X,
+		PRE_TRIGGER,
+		TIMEBASES,
+		VDIVS,
+		type ChannelId,
+		type Measurements,
+		type SourceKind,
+		type SourceParams,
+		type TriggerMode,
+		type ViewMode,
+		type WaveShape,
+	} from '../../lib/oscope/types';
+
+	const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
+
+	const canvas = $<HTMLCanvasElement>('scope');
+	const hint = $('hint');
+	const recHint = $('rec-hint');
+	const btnRec = $<HTMLButtonElement>('rec') as unknown as HTMLElement;
+	const btnStop = $<HTMLButtonElement>('stop') as unknown as HTMLElement;
+	const btnPause = $<HTMLButtonElement>('pause') as unknown as HTMLElement;
+
+	interface ChEls {
+		src: HTMLSelectElement;
+		fn: HTMLInputElement;
+		freq: HTMLInputElement;
+		shape: HTMLSelectElement;
+		file: HTMLInputElement;
+		vdiv: HTMLSelectElement;
+		row: HTMLElement;
+		label: HTMLElement;
+	}
+
+	function ch(prefix: string): ChEls {
+		return {
+			src: $<HTMLSelectElement>(`src${prefix}`),
+			fn: $<HTMLInputElement>(`fn${prefix}`),
+			freq: $<HTMLInputElement>(`freq${prefix}`),
+			shape: $<HTMLSelectElement>(`shape${prefix}`),
+			file: $<HTMLInputElement>(`file${prefix}`),
+			vdiv: $<HTMLSelectElement>(`vdiv${prefix}`),
+			row: $(`ch${prefix}-params`),
+			label: $(`srcLabel${prefix}`),
+		};
+	}
+
+	const c1 = ch('1');
+	const c2 = ch('2');
+	const elTimebase = $<HTMLSelectElement>('timebase');
+	const elTrigger = $<HTMLSelectElement>('trigger');
+	const elLevel = $<HTMLInputElement>('level');
+	const elView = $<HTMLSelectElement>('view');
+	const vdiv2Field = $('vdiv2-field');
+	const triggerRow = $('trigger-row');
+
+	// 档位表 → 下拉框
+	for (const t of TIMEBASES) {
+		const o = document.createElement('option');
+		o.value = String(t.ms);
+		o.textContent = `${t.label} / 格`;
+		elTimebase.append(o);
+	}
+	elTimebase.value = '0.5';
+	for (const sel of [c1.vdiv, c2.vdiv]) {
+		for (const v of VDIVS) {
+			const o = document.createElement('option');
+			o.value = String(v.full);
+			o.textContent = v.label;
+			sel.append(o);
+		}
+		sel.value = '1';
+	}
+	c2.src.value = 'off';
+
+	let ctx: AudioContext | null = null;
+	const analysers: Partial<Record<ChannelId, AnalyserNode>> = {};
+	const sources: Partial<Record<ChannelId, Source>> = {};
+	const rings: Partial<Record<ChannelId, RingBuffer>> = {};
+	/** getFloatTimeDomainData 要求底层是 ArrayBuffer，不能是 ArrayBufferLike */
+	const scratch: Partial<Record<ChannelId, Float32Array<ArrayBuffer>>> = {};
+	let theme = readTheme(canvas);
+	let recHandle: ReturnType<typeof start> | null = null;
+	let recStartedAt = 0;
+
+	const fftCache: Partial<Record<ChannelId, Spectrum>> = {};
+
+	function params(c: ChEls): SourceParams {
+		return {
+			fn1: c.fn.value,
+			fn2: 'return 0',
+			freq: Number(c.freq.value) || 440,
+			shape: c.shape.value as WaveShape,
+		};
+	}
+
+	function syncVisibility(): void {
+		// 注意：CH1 与 CH2 的「输入源」两行都在同一个 .scope-row 里，
+		// 不能按通道各自隐藏该行（否则 CH2=off 会把 CH1 的下拉框一起藏掉）。
+		for (const c of [c1, c2]) {
+			const on = c.src.value !== 'off';
+			c.row.hidden = !on;
+			c.label.hidden = !on;
+			for (const el of c.row.querySelectorAll<HTMLElement>('[data-when1],[data-when2]')) {
+				const attr = el.dataset.when1 ?? el.dataset.when2;
+				el.toggleAttribute('hidden', attr !== c.src.value);
+			}
+		}
+		// 垂直档位只在 CH2 开启时出现
+		vdiv2Field.hidden = c2.src.value === 'off';
+	}
+
+	async function ensureAnalyser(id: ChannelId): Promise<AnalyserNode> {
+		if (!ctx) ctx = ensureContext();
+		const existing = analysers[id];
+		if (existing) return existing;
+		const an = ctx.createAnalyser();
+		an.smoothingTimeConstant = 0;
+		an.fftSize = 2048;
+		analysers[id] = an;
+		return an;
+	}
+
+	async function startChannel(id: ChannelId, c: ChEls): Promise<void> {
+		const an = await ensureAnalyser(id);
+		sources[id]?.dispose();
+		delete sources[id];
+
+		if (c.src.value === 'off') {
+			c.label.textContent = 'CH2 —';
+			return;
+		}
+
+		try {
+			const s = await createSource(c.src.value as SourceKind, ctx!, params(c), c.file.files?.[0] ?? null);
+			s.node.connect(an);
+			sources[id] = s;
+			c.label.textContent = `${id.toUpperCase()} ${s.label}`;
+			hint.textContent = '';
+		} catch (e) {
+			hint.textContent = `CH${id === 'ch1' ? '1' : '2'} 无法启动：${(e as Error).message}`;
+		}
+		resetChannel(id);
+	}
+
+	function resetChannel(id: ChannelId): void {
+		if (ctx) {
+			rings[id] = new RingBuffer(Math.floor(ctx.sampleRate));
+			delete fftCache[id];
+		}
+	}
+
+	async function startAll(): Promise<void> {
+		await startChannel('ch1', c1);
+		await startChannel('ch2', c2);
+		resume();
+	}
+
+	let rafHandle = 0;
+
+	function resume(): void {
+		paused = false;
+		btnPause.textContent = '暂停';
+		btnPause.removeAttribute('disabled');
+		if (!rafHandle) rafHandle = requestAnimationFrame(tick);
+	}
+
+	function pause(): void {
+		paused = true;
+		btnPause.textContent = '继续';
+		// 录制中不能暂停：录出来会是一段静止画面
+		if (recHandle) btnPause.setAttribute('disabled', '');
+		// 停掉 rAF，画面就此冻结；ring 也不再推进
+		if (rafHandle) {
+			cancelAnimationFrame(rafHandle);
+			rafHandle = 0;
+		}
+	}
+
+	let paused = false;
+
+	function tick(): void {
+		if (paused) {
+			rafHandle = 0;
+			return;
+		}
+		rafHandle = requestAnimationFrame(tick);
+		if (!ctx) return;
+
+		const view = elView.value as ViewMode;
+		const dualOn = c2.src.value !== 'off';
+		const chIds: ChannelId[] = dualOn ? ['ch1', 'ch2'] : ['ch1'];
+
+		const tb = Math.max(Number(elTimebase.value), recHandle ? MIN_TIMEBASE_MS : 0);
+		const perDiv = Math.max(1, Math.floor(ctx.sampleRate * (tb / 1000)));
+		const need = perDiv * DIVS_X;
+
+		// 采样与测量
+			const ch: Record<ChannelId, Float32Array> = {
+			ch1: new Float32Array(0),
+			ch2: new Float32Array(0),
+		};
+		const meas: Record<ChannelId, Measurements> = {
+			ch1: { frequency: null, pp: 0, rms: 0, offset: 0, period: null, duty: null },
+			ch2: { frequency: null, pp: 0, rms: 0, offset: 0, period: null, duty: null },
+		};
+		const spectra: Record<ChannelId, Spectrum> = {
+			ch1: analyse(new Float32Array(2048), ctx.sampleRate),
+			ch2: analyse(new Float32Array(2048), ctx.sampleRate),
+		};
+
+		for (const id of chIds) {
+			const an = analysers[id];
+			if (!an) continue;
+
+			// fftSize 同时决定快照长度，必须不小于一屏窗口
+			if (an.fftSize < need) {
+				an.fftSize = Math.min(32768, 1 << Math.ceil(Math.log2(need)));
+				scratch[id] = new Float32Array(an.fftSize);
+				resetChannel(id);
+			}
+			if (!scratch[id] || scratch[id]!.length !== an.fftSize) {
+				scratch[id] = new Float32Array(an.fftSize);
+			}
+			an.getFloatTimeDomainData(scratch[id]!);
+			rings[id]!.push(scratch[id]!);
+		}
+
+		// 触发只作用在波形视图；频谱不需要
+		const total = Math.floor(ctx.sampleRate * (tb / 1000) * DIVS_X);
+		const pre = Math.round(total * PRE_TRIGGER);
+		const mode = elTrigger.value as TriggerMode;
+		const level = Number(elLevel.value);
+
+		const main = chIds[0];
+		const anchor =
+			view === 'fft'
+				? rings[main]!.written - 1 - total
+				: rings[main]!.findTrigger(mode, level, total * 2, total);
+
+		for (const id of chIds) {
+			const ring = rings[id]!;
+			// CH2 复用 CH1 的触发点，保证两路严格对齐（真示波器的双通道触发）
+			const a = id === main ? anchor : anchor;
+			if (view === 'fft') {
+				const raw = ring.window(ring.written - total, 0, total);
+				ch[id] = raw;
+				fftCache[id] = analyse(raw, ctx.sampleRate);
+				spectra[id] = fftCache[id]!;
+				meas[id] = measure(raw, ctx.sampleRate);
+			} else if (ring.usable(a, pre, total)) {
+				ch[id] = ring.window(a, pre, total);
+				meas[id] = measure(ch[id], ctx.sampleRate);
+			}
+		}
+
+		const f: Frame = {
+			ch,
+			active: chIds,
+			vdiv: [Number(c1.vdiv.value), Number(c2.vdiv.value)],
+			sampleRate: ctx.sampleRate,
+			measure: meas,
+			spectra,
+			view,
+			triggerLevel: mode === 'auto' ? null : level,
+			recording: recHandle
+				? {
+						elapsedMs: performance.now() - recStartedAt,
+						slowFactor: slowMotionFactor(tb, 30, DIVS_X),
+					}
+				: null,
+		};
+		draw(canvas, f, theme);
+
+		// 缓存本帧，供 CSV / 测量导出读取
+		frameCache = f;
+		preCache = pre;
+
+		// 提示：只说用户看得见的限制
+		const msgs: string[] = [];
+		if (view !== 'fft' && perDiv < 2) {
+			msgs.push(`每格 ${perDiv} 个采样点，波形为插值显示`);
+		} else if (view !== 'fft' && meas.ch1.frequency === null) {
+			msgs.push('时基太小，一屏装不下两个周期，无法测量频率');
+		}
+		if (view === 'fft' && spectra.ch1.resolution) {
+			msgs.push(`频率分辨率 ${spectra.ch1.resolution.toFixed(1)} Hz`);
+		}
+		hint.textContent = msgs.join(' · ');
+	}
+
+	function formatHz(hz: number): string {
+		if (hz >= 1e6) return `${(hz / 1e6).toFixed(3)} MHz`;
+		if (hz >= 1e3) return `${(hz / 1e3).toFixed(3)} kHz`;
+		return `${hz.toFixed(2)} Hz`;
+	}
+	void formatHz;
+
+	// ---- 主题切换 ----
+	new MutationObserver(() => {
+		theme = readTheme(canvas);
+	}).observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+
+	// ---- 交互 ----
+	elView.addEventListener('change', () => {
+		const v = elView.value as ViewMode;
+		triggerRow.hidden = v === 'fft';
+	});
+
+	c1.src.addEventListener('change', () => {
+		syncVisibility();
+		void startAll();
+	});
+	c2.src.addEventListener('change', () => {
+		syncVisibility();
+		void startAll();
+	});
+	for (const c of [c1, c2]) {
+		for (const el of [c.fn, c.freq, c.shape, c.file]) {
+			el.addEventListener('change', () => {
+				const id = c === c1 ? 'ch1' : 'ch2';
+				void startChannel(id, c);
+			});
+		}
+	}
+
+	// ---- 导出 ----
+	$('csv').addEventListener('click', () => {
+		const sr = ctx?.sampleRate ?? 48000;
+		const data1 = lastWindow('ch1');
+		if (!data1) return;
+		const data2 = c2.src.value !== 'off' ? lastWindow('ch2') : null;
+		const pre = preCache;
+		download(
+			new Blob([buildCsv(data1, data2, sr, pre)], { type: 'text/csv;charset=utf-8' }),
+			`oscope-${timestamp()}.csv`,
+		);
+	});
+
+	$('meas-csv').addEventListener('click', () => {
+		const m1 = lastMeasure('ch1');
+		if (!m1) return;
+		download(
+			new Blob(
+				[buildMeasureCsv(m1, c2.src.value !== 'off' ? lastMeasure('ch2') : null, {
+					ch1: c1.label.textContent || 'CH1',
+					ch2: c2.label.textContent || 'CH2',
+				})],
+				{ type: 'text/csv;charset=utf-8' },
+			),
+			`oscope-measure-${timestamp()}.csv`,
+		);
+	});
+
+	$('png').addEventListener('click', () => {
+		void canvasToPng(canvas).then((b) => download(b, `oscope-${timestamp()}.png`));
+	});
+
+	// 缓存最近一帧的数据供导出使用
+	let frameCache: Frame | null = null;
+	let preCache = 0;
+	const lastWindow = (id: ChannelId): Float32Array | null => frameCache?.ch[id] ?? null;
+	const lastMeasure = (id: ChannelId): Measurements | null => frameCache?.measure[id] ?? null;
+
+	// ---- 暂停 / 继续 ----
+	btnPause.addEventListener('click', () => {
+		if (paused) resume();
+		else pause();
+	});
+
+	// ---- 录制 ----
+	if (!canRecord()) {
+		btnRec.toggleAttribute('disabled', true);
+		btnRec.textContent = '当前浏览器不支持录制';
+		recHint.textContent = '此浏览器不支持 canvas.captureStream，无法录制视频。CSV / PNG 导出不受影响。';
+	} else {
+		// 支持时务必去掉 HTML 里的 disabled，否则按钮点了没反应
+		btnRec.removeAttribute('disabled');
+
+		btnRec.addEventListener('click', () => {
+			if (paused) {
+				recHint.textContent = '当前处于暂停状态，请先点「继续」再录制。';
+				return;
+			}
+			// 录制时钳制时基，否则波形在视频里是一团实心带
+			if (Number(elTimebase.value) < MIN_TIMEBASE_MS) {
+				elTimebase.value = String(MIN_TIMEBASE_MS);
+			}
+			try {
+				recHandle = start(canvas, { fps: 30, bitrate: 5_000_000 });
+				recStartedAt = performance.now();
+				btnRec.hidden = true;
+				btnStop.hidden = false;
+				recHint.textContent =
+					'录制中：视频不含声音，时间轴已放慢以便看清波形。';
+			} catch (e) {
+				recHint.textContent = `无法开始录制：${(e as Error).message}`;
+			}
+		});
+
+		btnStop.addEventListener('click', () => {
+			if (!recHandle) return;
+			const h = recHandle;
+			recHandle = null;
+			btnStop.hidden = true;
+			btnRec.hidden = false;
+			void h.stop().then(
+				(r) => {
+					recHint.textContent = `已保存 ${(r.blob.size / 1048576).toFixed(1)} MB，用时 ${(r.ms / 1000).toFixed(1)} 秒`;
+				},
+				(err) => {
+					recHint.textContent = `录制出错：${(err as Error).message}`;
+				},
+			);
+		});
+	}
+
+	// 初始
+	syncVisibility();
+	void startAll();
+</script>
+
+<style is:global>
+	.scope-row {
+		display: grid;
+		gap: 0.9rem 1rem;
+		grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+		align-items: end;
+	}
+
+	.scope-row + .scope-row {
+		margin-top: 0.9rem;
+	}
+
+	/* 覆盖 .field 的 display: flex，让 [hidden] 真正生效 */
+	.scope-row[hidden],
+	.scope-row > .field[hidden] {
+		display: none;
+	}
+
+	.scope-row-label {
+		display: none;
+	}
+
+	.scope-status {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.4rem 1rem;
+		font-size: var(--mdui-typescale-body-small-size);
+	}
+
+	.scope-src {
+		color: rgb(var(--mdui-color-primary));
+	}
+
+	.scope-src2 {
+		color: rgb(var(--mdui-color-tertiary));
+	}
+
+	.scope-hint {
+		margin: 0.6rem 0 0;
+		min-height: 1.2em;
+		font-size: var(--mdui-typescale-body-small-size);
+		color: rgb(var(--mdui-color-outline));
+	}
+
+	.scope-screen {
+		margin-block: 1rem;
+		border: 1px solid rgb(var(--mdui-color-outline-variant));
+		border-radius: var(--mdui-shape-corner-medium);
+		background-color: rgb(var(--mdui-color-surface-container-lowest));
+		overflow: hidden;
+	}
+
+	.scope-screen canvas {
+		display: block;
+		width: 100%;
+		aspect-ratio: 16 / 10;
+	}
+
+	.scope-actions {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.6rem;
+	}
+
+	@media (max-width: 559px) {
+		.scope-actions {
+			flex-direction: column;
+			align-items: stretch;
+		}
+	}
+</style>

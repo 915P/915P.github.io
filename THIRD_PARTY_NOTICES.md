@@ -242,9 +242,9 @@ The file cannot be attributed, but testing shows it is **functionally required**
 
 ---
 
-## 6. Oscilloscope ⚠️ license cannot be confirmed
+## 6. Legacy RT-Oscilloscope ⚠️ **offline; license cannot be confirmed**
 
-- **Location**: `public/apps/oscope/`
+- **Location**: `public/apps/oscope/` — **no longer listed in the tool index**
 - **License**: **Cannot be determined**
 - **Status**: the directory has **no LICENSE file**, and the code carries no
   copyright header, no author credit and no upstream link. The upstream
@@ -252,10 +252,14 @@ The file cannot be attributed, but testing shows it is **functionally required**
   404**, so the original license cannot be verified.
 - **Removed**: the demo audio (`jerobeam.mp3` / `jerobeam.ogg`, from Demis
   Hassabis's 1996 MIDI piece **jerobeam**) was **removed because its licensing
-  was undetermined**. The app now accepts a user-supplied remote URL, local file
-  or microphone input.
-- **Recommendation**: obtain written permission before redistributing, or
-  replace it with a clearly licensed alternative such as
+  was undetermined**.
+- **Status since 2026-10-01**: taken offline. Its tool index entry was replaced by
+  this site's own implementation at `/tools/oscope/`, which is original work under
+  the root MIT license (see "The site's own work" below). The legacy files remain
+  in the repository for reference but are not advertised anywhere; the path is
+  still reachable if guessed directly.
+- **Recommendation**: delete the directory, or obtain written permission before
+  redistributing. Otherwise point users at a clearly licensed equivalent such as
   [x-oscilloscope](https://github.com/stagas/x-oscilloscope) (MIT).
 
 ---
@@ -369,11 +373,20 @@ root [LICENSE](LICENSE):
   generic Octocat 16×16 path
 - Blog post bodies (`src/content/blog/*.md`)
 - The GitHub Actions deployment flow (`.github/workflows/deploy.yml`)
+- **The oscilloscope at `/tools/oscope/`** — written from scratch for this site:
+  `src/lib/oscope/` (`types.ts`, `capture.ts`, `ring.ts`, `measure.ts`, `fft.ts`,
+  `render.ts`, `export.ts`, `recorder.ts`) and `src/pages/tools/oscope.astro`.
+  It uses only the Web Audio API, the Canvas 2D API and built-in browser APIs
+  (`captureStream` / `MediaRecorder` / `Blob` download); it contains no code from
+  the legacy RT-Oscilloscope covered in §6. The FFT is a self-written radix-2
+  Cooley–Tukey implementation, so no FFT library is bundled.
 
-> The third-party projects hosted on this site (CeJS, the oscilloscope, the 3D
-> fluid simulation, the mind mapping app) are **not original to this site** and
-> are governed by the licenses in the sections above. In particular:
+> The third-party projects hosted on this site (CeJS, the 3D fluid simulation, the
+> mind mapping app) are **not original to this site** and are governed by the
+> licenses in the sections above. In particular:
 > - **CeJS is a third-party project** (BSD-3-Clause, © kanasimi), hosted verbatim;
 >   the tool page and posts label it as third-party and it must not be presented
 >   as original work.
-> - The licensing of `public/apps/oscope/` remains unconfirmed; see §6.
+> - The oscilloscope listed in the tool index is **this site's own work**
+>   (`src/lib/oscope/`), not the legacy app in `public/apps/oscope/`, whose
+>   licensing remains unconfirmed and which is offline; see §6.

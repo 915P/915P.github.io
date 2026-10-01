@@ -202,13 +202,14 @@ translatewiki，采用 **CC BY 3.0**，不在 BSD-3-Clause 覆盖范围内。
 
 ---
 
-## 6. 示波器 ⚠️ 授权无法确认
+## 6. 旧版 RT-Oscilloscope ⚠️ **已下线；授权无法确认**
 
-- **位置**：`public/apps/oscope/`
+- **位置**：`public/apps/oscope/` —— **已从工具列表移除**
 - **许可证**：**无法确认**
 - **状态**：目录内**无 LICENSE 文件**，代码中无版权头、无作者署名、无上游链接。已尝试定位上游仓库 `madnesspower/RT-Oscilloscope`，**该地址当前返回 404**，无法核实原始许可证。
-- **已移除**：演示音频（`jerobeam.mp3` / `jerobeam.ogg`，源自 Demis Hassabis 1996 年的 MIDI 曲 **jerobeam**）**因授权不明已移除**。应用现支持用户自行提供远程 URL、本地文件或麦克风输入。
-- **建议**：取得上游书面授权后再行分发，或替换为授权明确的同类实现（如 MIT 许可的 [x-oscilloscope](https://github.com/stagas/x-oscilloscope)）。
+- **已移除**：演示音频（`jerobeam.mp3` / `jerobeam.ogg`，源自 Demis Hassabis 1996 年的 MIDI 曲 **jerobeam**）**因授权不明已移除**。
+- **2026-10-01 起状态**：已下线。工具列表中的条目改为本站自研实现 `/tools/oscope/`，适用根目录 MIT 许可（见「站点自研部分」）。旧文件留在仓库中仅作参考，任何位置都不再提及；直接猜路径仍可访问。
+- **建议**：删除该目录，或取得上游书面授权后再行分发。否则应引导用户改用授权明确的同类实现（如 MIT 许可的 [x-oscilloscope](https://github.com/stagas/x-oscilloscope)）。
 
 ---
 
@@ -300,9 +301,17 @@ translatewiki，采用 **CC BY 3.0**，不在 BSD-3-Clause 覆盖范围内。
   取自通用的 Octocat 16×16 路径
 - 博客文章正文（`src/content/blog/*.md`）
 - GitHub Actions 部署流程（`.github/workflows/deploy.yml`）
+- **`/tools/oscope/` 示波器** —— 本站从零自研：`src/lib/oscope/`
+  （`types.ts`、`capture.ts`、`ring.ts`、`measure.ts`、`fft.ts`、`render.ts`、
+  `export.ts`、`recorder.ts`）与 `src/pages/tools/oscope.astro`。
+  仅用 Web Audio API、Canvas 2D API 与浏览器内置能力
+  （`captureStream` / `MediaRecorder` / `Blob` 下载），不含 §6 旧版
+  RT-Oscilloscope 的任何代码；FFT 为自写的基 2 Cooley–Tukey 实现，
+  因此仓库内没有捆绑任何 FFT 库。
 
-> 站内托管的第三方项目（CeJS、示波器、3D 流体、思维导图等）**均非本站原创**，
+> 站内托管的第三方项目（CeJS、3D 流体、思维导图等）**均非本站原创**，
 > 各自适用上文对应章节的许可证。特别注意：
 > - **CeJS 是第三方项目**（BSD-3-Clause，© kanasimi），本站仅原样托管，
 >   工具页与文章中均已标注「第三方」，不得表述为自研。
-> - `public/apps/oscope/` 的授权仍未确认，见 §6，上线前需处理。
+> - 工具列表中的示波器是**本站自研**（`src/lib/oscope/`），不是
+> `public/apps/oscope/` 里那个授权未确认、已下线的旧应用，见 §6。

@@ -152,11 +152,11 @@ export const builtinTools: Tool[] = [
 	{
 		slug: 'oscope',
 		name: '示波器',
-		desc: 'Web Audio 可视化，支持远程 URL、本地文件或麦克风输入',
+		desc: '触发稳定的实时示波器，自动测量频率、峰峰值与有效值',
 		icon: 'graphic-eq',
 		category: '影音',
-		status: 'app',
-		href: '/apps/oscope/index.html',
+		status: 'live',
+		href: '/tools/oscope/',
 	},
 	{
 		slug: '3dweb',
