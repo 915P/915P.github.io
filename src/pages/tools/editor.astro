@@ -12,9 +12,15 @@ import Page from '../../layouts/Page.astro';
 		<div>
 			<div class="row-between" style="margin-bottom: 0.5rem">
 				<span class="block-title">HTML</span>
-				<button type="button" id="clear" class="link-btn">清空</button>
+				<mdui-button variant="text" id="clear">清空</mdui-button>
 			</div>
-			<textarea id="src" spellcheck="false" class="mono code-area"></textarea>
+			<mdui-text-field
+				id="src"
+				variant="outlined"
+				rows="13"
+				spellcheck="false"
+				class="mono code-area"
+			></mdui-text-field>
 		</div>
 		<div>
 			<span class="block-title" style="display: block; margin-bottom: 0.5rem">预览</span>
@@ -35,7 +41,7 @@ import Page from '../../layouts/Page.astro';
 <p>在这里输入 HTML，右侧会实时预览。</p>
 <ul>
   <li>试试加粗：<strong>粗体</strong></li>
-  <li>试试颜色：<span style="color:#5468ff">蓝色文字</span></li>
+  <li>试试颜色：<span style="color:#66ccff">蓝色文字</span></li>
 </ul>`;
 
 	let t: number | undefined;

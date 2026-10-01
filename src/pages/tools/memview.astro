@@ -22,27 +22,26 @@ import Page from '../../layouts/Page.astro';
 		<div class="ctrl-row" style="margin-top: 1.25rem">
 			<div class="field" style="flex: 1 1 12rem">
 				<label for="type" id="typeLabel">类型</label>
-				<select id="type">
-					<option value="float">float（单精度，4 字节）</option>
-					<option value="double">double（双精度，8 字节）</option>
-				</select>
+				<mdui-select id="type" variant="outlined" value="float">
+					<mdui-menu-item value="float">float（单精度，4 字节）</mdui-menu-item>
+					<mdui-menu-item value="double">double（双精度，8 字节）</mdui-menu-item>
+					<mdui-icon-arrow-drop-down slot="end-icon"></mdui-icon-arrow-drop-down>
+				</mdui-select>
 			</div>
 			<div class="field" style="flex: 1 1 12rem">
 				<label for="num">数值</label>
-				<input type="text" id="num" value="3.14159" spellcheck="false" class="mono" />
+				<mdui-text-field id="num" variant="outlined" value="3.14159" class="mono"></mdui-text-field>
 			</div>
 			<div class="field" id="signedField" style="flex: 0 0 auto; justify-content: flex-end" hidden>
 				<span style="display: block; margin-bottom: 0.35rem">符号</span>
-				<div class="options" style="margin: 0">
-					<label><input type="radio" name="sg" value="signed" checked /> 有符号</label>
-					<label><input type="radio" name="sg" value="unsigned" /> 无符号</label>
-				</div>
+				<mdui-radio-group id="sg" value="signed">
+					<mdui-radio value="signed">有符号</mdui-radio>
+					<mdui-radio value="unsigned">无符号</mdui-radio>
+				</mdui-radio-group>
 			</div>
 			<div class="field" id="summarySpaceField" style="flex: 0 0 auto; justify-content: flex-end">
 				<span style="display: block; margin-bottom: 0.35rem">总结果</span>
-				<div class="options" style="margin: 0">
-					<label><input type="checkbox" id="summarySpace" /> 每 4 位空格</label>
-				</div>
+				<mdui-checkbox id="summarySpace">每 4 位空格</mdui-checkbox>
 			</div>
 		</div>
 
@@ -195,9 +194,9 @@ import Page from '../../layouts/Page.astro';
 		document.getElementById(id) as T;
 
 	const kind = $<HTMLElement & { value: string }>('kind');
-	const typeSel = $<HTMLSelectElement>('type');
+	const typeSel = $<HTMLElement & { value: string }>('type');
 	const typeLabel = $('typeLabel');
-	const num = $<HTMLInputElement>('num');
+	const num = $<HTMLElement & { value: string }>('num');
 	const signedField = $('signedField');
 	const out = $('out');
 	const err = $('err');
@@ -237,7 +236,7 @@ import Page from '../../layouts/Page.astro';
 	function renderSummary(segments: { label: string; bits: string; width: number; note?: string }[]) {
 		const sum = $('summary');
 		if (!sum) return;
-		const addSpace = $<HTMLInputElement>('summarySpace').checked;
+		const addSpace = $<HTMLElement & { checked: boolean }>('summarySpace').checked;
 		sum.innerHTML = segments
 			.map((s) => {
 				const bits = addSpace ? group4(s.bits, s.width) : s.bits;
@@ -263,23 +262,38 @@ import Page from '../../layouts/Page.astro';
 		const isFloat = kind.value === 'float';
 		signedField.hidden = isFloat;
 		$('summarySpaceField').hidden = !isFloat;
+		/*
+			mdui-select 的选项是 light DOM 里的 mdui-menu-item，
+			不能用 innerHTML 重建，必须逐个 append 后重新设 value，
+			否则选中态会丢、显示文本变空。
+		*/
+		const prev = typeSel.value;
+		const entries: [string, string][] = isFloat
+			? [
+					['float', 'float（单精度，4 字节）'],
+					['double', 'double（双精度，8 字节）'],
+				]
+			: Object.entries(INT_TYPES).map(([v, t]) => [v, t.label]);
+
+		const icon = typeSel.querySelector('mdui-icon-arrow-drop-down');
+		typeSel.replaceChildren();
+		for (const [v, label] of entries) {
+			const mi = document.createElement('mdui-menu-item');
+			mi.setAttribute('value', v);
+			mi.textContent = label;
+			typeSel.append(mi);
+		}
+		if (icon) typeSel.append(icon);
+		typeSel.value = entries.some(([v]) => v === prev) ? prev : entries[0][0];
 		if (isFloat) {
-			typeSel.innerHTML =
-				'<option value="float">float（单精度，4 字节）</option>' +
-				'<option value="double">double（双精度，8 字节）</option>';
 			num.value = num.value.includes('e') || num.value === '3.14159' ? num.value : '3.14159';
-		} else {
-			typeSel.innerHTML = Object.entries(INT_TYPES)
-				.map(([v, t]) => `<option value="${v}">${t.label}</option>`)
-				.join('');
 		}
 		run();
 	}
 
 	function signedMode(): boolean {
 		return (
-			(document.querySelector<HTMLInputElement>('input[name="sg"]:checked') ?? {}).value !==
-			'unsigned'
+			$<HTMLElement & { value: string }>('sg').value !== 'unsigned'
 		);
 	}
 
@@ -287,7 +301,7 @@ import Page from '../../layouts/Page.astro';
 		const list = kind.value === 'float' ? FLOAT_PRESETS : INT_PRESETS;
 		presets.innerHTML =
 			'<span class="text-xs faint" style="align-self:center;margin-right:.25rem">试试：</span>' +
-			list.map((v) => `<mdui-chip class="chip" variant="outlined">${esc(v)}</mdui-chip>`).join('');
+			list.map((v) => `<mdui-chip class="chip mono" variant="outlined">${esc(v)}</mdui-chip>`).join('');
 		presets.querySelectorAll('.chip').forEach((c) =>
 			c.addEventListener('click', () => {
 				num.value = c.textContent ?? '';
@@ -410,12 +424,10 @@ import Page from '../../layouts/Page.astro';
 		syncKind();
 		renderPresets();
 	});
-	$('summarySpace').addEventListener('change', run);
+	$<HTMLElement & { checked: boolean }>('summarySpace').addEventListener('change', run);
 	typeSel.addEventListener('change', run);
 	num.addEventListener('input', run);
-	document.querySelectorAll('input[name="sg"]').forEach((r) =>
-		r.addEventListener('change', run),
-	);
+	$<HTMLElement & { value: string }>('sg').addEventListener('change', run);
 	void typeLabel;
 
 	syncKind();

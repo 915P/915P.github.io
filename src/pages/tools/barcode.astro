@@ -23,81 +23,88 @@ import Page from '../../layouts/Page.astro';
 		<div class="stack">
 			<div class="field">
 				<label for="text">内容</label>
-				<textarea id="text" rows="2" class="mono">Hello, 915P!</textarea>
+				<mdui-text-field
+					id="text"
+					variant="outlined"
+					rows="2"
+					class="mono"
+					value="Hello, 915P!"
+				></mdui-text-field>
 			</div>
 
 			<div class="field">
 				<label for="format">格式</label>
-				<select id="format">
-					<optgroup label="二维码">
-						<option value="QRCode" selected>QR 码</option>
-					</optgroup>
-					<optgroup label="商品条码">
-						<option value="EAN13">EAN-13（13 位）</option>
-						<option value="EAN8">EAN-8（8 位）</option>
-						<option value="UPC">UPC（12 位）</option>
-						<option value="UPCE">UPC-E（8 位）</option>
-						<option value="EAN5">EAN-5</option>
-						<option value="EAN2">EAN-2</option>
-					</optgroup>
-					<optgroup label="通用">
-						<option value="CODE128">CODE 128</option>
-						<option value="CODE39">CODE 39</option>
-						<option value="CODE93">CODE 93</option>
-						<option value="CODE93FullASCII">CODE 93 Full ASCII</option>
-						<option value="ITF">ITF</option>
-						<option value="ITF14">ITF-14</option>
-						<option value="MSI">MSI</option>
-						<option value="MSI10">MSI-10</option>
-						<option value="MSI11">MSI-11</option>
-						<option value="MSI1010">MSI-1010</option>
-						<option value="MSI1110">MSI-1110</option>
-						<option value="codabar">Codabar</option>
-						<option value="pharmacode">Pharmacode</option>
-						<option value="GenericBarcode">Generic（按内容自动选型）</option>
-					</optgroup>
-				</select>
-			</div>
+				<mdui-select id="format" variant="outlined" value="QRCode">
+					<mdui-menu-item>二维码
+						<mdui-menu-item slot="submenu" value="QRCode">QR 码</mdui-menu-item>
+					</mdui-menu-item>
+					<mdui-menu-item>商品条码
+						<mdui-menu-item slot="submenu" value="EAN13">EAN-13（13 位）</mdui-menu-item>
+						<mdui-menu-item slot="submenu" value="EAN8">EAN-8（8 位）</mdui-menu-item>
+						<mdui-menu-item slot="submenu" value="UPC">UPC（12 位）</mdui-menu-item>
+						<mdui-menu-item slot="submenu" value="UPCE">UPC-E（8 位）</mdui-menu-item>
+						<mdui-menu-item slot="submenu" value="EAN5">EAN-5</mdui-menu-item>
+						<mdui-menu-item slot="submenu" value="EAN2">EAN-2</mdui-menu-item>
+					</mdui-menu-item>
+					<mdui-menu-item>通用
+						<mdui-menu-item slot="submenu" value="CODE128">CODE 128</mdui-menu-item>
+						<mdui-menu-item slot="submenu" value="CODE39">CODE 39</mdui-menu-item>
+						<mdui-menu-item slot="submenu" value="CODE93">CODE 93</mdui-menu-item>
+						<mdui-menu-item slot="submenu" value="CODE93FullASCII">CODE 93 Full ASCII</mdui-menu-item>
+						<mdui-menu-item slot="submenu" value="ITF">ITF</mdui-menu-item>
+						<mdui-menu-item slot="submenu" value="ITF14">ITF-14</mdui-menu-item>
+						<mdui-menu-item slot="submenu" value="MSI">MSI</mdui-menu-item>
+						<mdui-menu-item slot="submenu" value="MSI10">MSI-10</mdui-menu-item>
+						<mdui-menu-item slot="submenu" value="MSI11">MSI-11</mdui-menu-item>
+						<mdui-menu-item slot="submenu" value="MSI1010">MSI-1010</mdui-menu-item>
+						<mdui-menu-item slot="submenu" value="MSI1110">MSI-1110</mdui-menu-item>
+						<mdui-menu-item slot="submenu" value="codabar">Codabar</mdui-menu-item>
+						<mdui-menu-item slot="submenu" value="pharmacode">Pharmacode</mdui-menu-item>
+						<mdui-menu-item slot="submenu" value="GenericBarcode">Generic（按内容自动选型）</mdui-menu-item>
+					</mdui-menu-item>
+					<mdui-icon-arrow-drop-down slot="end-icon"></mdui-icon-arrow-drop-down>
+				</mdui-select>			</div>
 
 			<div id="qrOpts" class="panel stack">
 				<div class="field">
 					<label for="ec">
 						纠错等级：<span id="ecVal" style="color: rgb(var(--mdui-color-primary))">M</span>
 					</label>
-					<input type="range" id="ec" min="0" max="3" value="1" step="1" />
+					<mdui-slider id="ec" min="0" max="3" value="1" step="1"></mdui-slider>
 					<div class="row-between text-xs faint" style="gap: 0">
 						<span>L</span><span>M</span><span>Q</span><span>H</span>
 					</div>
 				</div>
 				<div class="field">
 					<label for="size">
-						尺寸：<span id="szVal" style="color: rgb(var(--mdui-color-primary))">240</span> px
+						尺寸：<span id="szVal" class="mono" style="color: rgb(var(--mdui-color-primary))">240</span> px
 					</label>
-					<input type="range" id="size" min="100" max="600" value="240" step="10" />
+					<mdui-slider id="size" min="100" max="600" value="240" step="10"></mdui-slider>
 				</div>
 				<div class="field">
 					<label for="mode">输入模式</label>
-					<select id="mode">
-						<option value="">自动</option>
-						<option value="NUMBER">仅数字</option>
-						<option value="ALPHA_NUM">数字 + 字母</option>
-					</select>
+					<mdui-select id="mode" variant="outlined" value="">
+						<mdui-menu-item value="">自动</mdui-menu-item>
+						<mdui-menu-item value="NUMBER">仅数字</mdui-menu-item>
+						<mdui-menu-item value="ALPHA_NUM">数字 + 字母</mdui-menu-item>
+						<mdui-icon-arrow-drop-down slot="end-icon"></mdui-icon-arrow-drop-down>
+					</mdui-select>
 				</div>
 			</div>
 
 			<div id="barOpts" class="panel stack hidden">
 				<div class="field">
 					<label for="h">
-						行高：<span id="hVal" style="color: rgb(var(--mdui-color-primary))">100</span> px
+						行高：<span id="hVal" class="mono" style="color: rgb(var(--mdui-color-primary))">100</span> px
 					</label>
-					<input type="range" id="h" min="30" max="300" value="100" />
+					<mdui-slider id="h" min="30" max="300" value="100" step="1"></mdui-slider>
 				</div>
 				<div class="field">
 					<span style="display: block; margin-bottom: 0.35rem">显示数值</span>
-					<div class="options">
-						<label><input type="radio" name="dv" checked /> 是</label>
-						<label><input type="radio" name="dv" /> 否</label>
-					</div>
+					<mdui-radio-group id="dv" value="yes">
+						<mdui-radio value="yes">是</mdui-radio>
+						<mdui-radio value="no">否</mdui-radio>
+					</mdui-radio-group>
 				</div>
 				<div class="field">
 					<label for="color">前景色</label>
@@ -118,6 +125,7 @@ import Page from '../../layouts/Page.astro';
 	// 两个库为 UMD 包，位于 public/ 下，用 script 标签在运行时加载
 	// @ts-ignore qrcode-generator 暴露全局 qrcode
 	declare const qrcode: any;
+
 	async function loadScript(src: string): Promise<void> {
 		await new Promise<void>((resolve, reject) => {
 			const s = document.createElement('script');
@@ -128,28 +136,33 @@ import Page from '../../layouts/Page.astro';
 		});
 	}
 
+	type Select = HTMLElement & { value: string };
+	type Slider = HTMLElement & { value: string };
+	type RadioGroup = HTMLElement & { value: string };
+
 	const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
 	const text = $<HTMLTextAreaElement>('text');
-	const format = $<HTMLSelectElement>('format');
+	const format = $<Select>('format');
 	const svg = $<HTMLElement>('svg');
 	const hint = $('hint');
 	const qrOpts = $('qrOpts');
 	const barOpts = $('barOpts');
-	const ec = $<HTMLInputElement>('ec');
-	const size = $<HTMLInputElement>('size');
-	const mode = $<HTMLSelectElement>('mode');
-	const h = $<HTMLInputElement>('h');
+	const ec = $<Slider>('ec');
+	const size = $<Slider>('size');
+	const mode = $<Select>('mode');
+	const h = $<Slider>('h');
 	const color = $<HTMLInputElement>('color');
+	const dv = $<RadioGroup>('dv');
 
 	const EC = ['L', 'M', 'Q', 'H'];
 	const MODE = ['Byte', 'Numeric', 'Alphanumeric'];
 
 	function buildQR(text: string) {
-		const s = +size.value;
+		const s = Number(size.value);
 		try {
-			const qr = qrcode(0, EC[+ec.value]!);
-			qr.addData(text || ' ', MODE[+mode.value] ?? 'Byte');
+			const qr = qrcode(0, EC[Number(ec.value)]!);
+			qr.addData(text || ' ', MODE[Number(mode.value)] ?? 'Byte');
 			qr.make();
 
 			// 直接由模块矩阵生成 SVG path，避免 canvas 中转
@@ -189,10 +202,8 @@ import Page from '../../layouts/Page.astro';
 	function buildBar(text: string) {
 		const opts: Record<string, unknown> = {
 			format: format.value,
-			height: +h.value,
-			displayValue:
-				(document.querySelector<HTMLInputElement>('[name="dv"]:checked')?.checked ??
-					true),
+			height: Number(h.value),
+			displayValue: dv.value !== 'no',
 			lineColor: color.value,
 			width: 2,
 		};
@@ -244,17 +255,50 @@ import Page from '../../layouts/Page.astro';
 	});
 
 	text.addEventListener('input', render);
-	format.addEventListener('change', render);
+	/*
+	 * mdui-select 不读取 slot="submenu" 子项的文本作显示标签 —— 实测 5 种写法
+	 * （父项有无 value、子项是否包 span、end-text）显示的都是 value 本身
+	 * （CODE128 而非 CODE 128），只有不用 submenu 的平铺写法才显示标签。
+	 * 既然要保留 submenu 分组，就在每次 change 后把显示文本补成标签。
+	 */
+	function syncFormatLabel(): void {
+		const tf = format.shadowRoot?.querySelector('mdui-text-field') as
+			| (HTMLElement & { value: string })
+			| null;
+		const item = format.querySelector(
+			`mdui-menu-item[slot="submenu"][value="${format.value}"]`,
+		);
+		const label = item?.textContent?.trim();
+		if (tf && label) tf.value = label;
+	}
+
+	format.addEventListener('change', () => {
+		// select 在 change 之后还会异步刷新一次 text-field.value，
+		// 所以同步要排到组件之后执行，否则会被它覆盖回 value。
+		queueMicrotask(syncFormatLabel);
+		render();
+	});
 	mode.addEventListener('change', render);
 	color.addEventListener('input', render);
-	document.querySelectorAll<HTMLInputElement>('[name="dv"]').forEach((r) =>
-		r.addEventListener('change', render),
-	);
+	dv.addEventListener('change', render);
 
+	/**
+	 * 序列化生成的图形。
+	 *
+	 * 注意 `#svg` **本身就是 `<svg>` 元素**，不是包裹 svg 的容器。
+	 * 原写法 `svg.querySelector('svg')` 在 svg 元素内部找子 svg，永远返回
+	 * null —— 导致 SVG/PNG 两个下载按钮自 Initial commit 起就静默失效
+	 * （serialize 返回 ''，点击直接 return）。
+	 */
 	function serialize(): string {
-		const inner = svg.querySelector('svg');
-		if (!inner) return '';
-		return new XMLSerializer().serializeToString(inner);
+		const node = svg.querySelector('svg') ?? svg;
+		if (!node.isConnected) return '';
+		let out = new XMLSerializer().serializeToString(node);
+		// 独立成文件的 SVG 必须自带命名空间，否则 Image 加载与部分阅读器会失败
+		if (!out.includes('xmlns=')) {
+			out = out.replace('<svg', '<svg xmlns="http://www.w3.org/2000/svg"');
+		}
+		return out;
 	}
 
 	$('dl')!.addEventListener('click', () => {
@@ -273,7 +317,7 @@ import Page from '../../layouts/Page.astro';
 	$('png')!.addEventListener('click', () => {
 		const s = serialize();
 		if (!s) return;
-		const size2 = svg.querySelector('svg')!.getBoundingClientRect();
+		const size2 = svg.getBoundingClientRect();
 		const img = new Image();
 		img.onload = () => {
 			const c = document.createElement('canvas');
@@ -305,6 +349,15 @@ import Page from '../../layouts/Page.astro';
 			hint.textContent = '正在加载生成器…';
 			await loadScript('/vendor/barcode/jsbarcode.js');
 			await loadScript('/vendor/barcode/qrcode.js');
+			/*
+			 * qrcode-generator 自带的 stringToBytes 用 `charCodeAt(i) & 0xff`，
+			 * 汉字码位 > 0xFF 会被截断成一个乱码字节，中文扫出来全是问号
+			 * （实测「中文测试」被编码成 [45,135,75,213]）。
+			 * 换成 TextEncoder 的 UTF-8 编码，符合 QR Code 标准的字节模式。
+			 * 必须在脚本加载完成后再覆盖 —— qrcode 这时才是全局变量。
+			 */
+			qrcode.stringToBytes = (s: string) => Array.from(new TextEncoder().encode(s));
+			syncFormatLabel();
 			render();
 		} catch (e) {
 			hint.textContent = (e as Error).message + '，请检查网络后刷新重试。';

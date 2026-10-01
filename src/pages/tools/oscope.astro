@@ -27,111 +27,151 @@ import Page from '../../layouts/Page.astro';
 
 	<div class="panel">
 		<div class="scope-row">
-			<span class="scope-row-label">输入源</span>
 			<label class="field">
 				<span>CH1</span>
-				<select id="src1">
-					<option value="math">数学函数</option>
-					<option value="oscillator">振荡器</option>
-					<option value="local">本地音频文件</option>
-					<option value="mic">麦克风输入</option>
-				</select>
+				<mdui-select id="src1" variant="outlined" value="math">
+					
+					<mdui-menu-item value="math">数学函数</mdui-menu-item>
+					
+					<mdui-menu-item value="oscillator">振荡器</mdui-menu-item>
+					
+					<mdui-menu-item value="local">本地音频文件</mdui-menu-item>
+					
+					<mdui-menu-item value="mic">麦克风输入</mdui-menu-item>
+
+					<mdui-icon-arrow-drop-down slot="end-icon"></mdui-icon-arrow-drop-down>
+				</mdui-select>
 			</label>
 			<label class="field">
 				<span>CH2</span>
-				<select id="src2">
-					<option value="off">关闭</option>
-					<option value="math">数学函数</option>
-					<option value="oscillator">振荡器</option>
-					<option value="local">本地音频文件</option>
-					<option value="mic">麦克风输入</option>
-				</select>
+				<mdui-select id="src2" variant="outlined" value="off">
+					
+					<mdui-menu-item value="off">关闭</mdui-menu-item>
+					
+					<mdui-menu-item value="math">数学函数</mdui-menu-item>
+					
+					<mdui-menu-item value="oscillator">振荡器</mdui-menu-item>
+					
+					<mdui-menu-item value="local">本地音频文件</mdui-menu-item>
+					
+					<mdui-menu-item value="mic">麦克风输入</mdui-menu-item>
+
+					<mdui-icon-arrow-drop-down slot="end-icon"></mdui-icon-arrow-drop-down>
+				</mdui-select>
 			</label>
 		</div>
 
 		<div class="scope-row" id="ch1-params">
 			<label class="field" data-when1="math">
 				<span>CH1 函数（x 为 0–1 相位，t 为秒）</span>
-				<input type="text" id="fn1" value="return Math.sin((x + t) * 2 * Math.PI * 2)" />
+				<mdui-text-field id="fn1" variant="outlined" value="return Math.sin((x + t) * 2 * Math.PI * 2)"></mdui-text-field>
 			</label>
 			<label class="field" data-when1="oscillator">
 				<span>CH1 频率 / Hz</span>
-				<input type="number" id="freq1" min="20" max="5000" step="1" value="440" />
+				<mdui-text-field id="freq1" type="number" variant="outlined" min="20" max="5000" step="1" value="440"></mdui-text-field>
 			</label>
 			<label class="field" data-when1="oscillator">
 				<span>CH1 波形</span>
-				<select id="shape1">
-					<option value="sine">正弦</option>
-					<option value="square">方波</option>
-					<option value="triangle">三角</option>
-					<option value="sawtooth">锯齿</option>
-				</select>
+				<mdui-select id="shape1" variant="outlined" value="sine">
+					
+					<mdui-menu-item value="sine">正弦</mdui-menu-item>
+					
+					<mdui-menu-item value="square">方波</mdui-menu-item>
+					
+					<mdui-menu-item value="triangle">三角</mdui-menu-item>
+					
+					<mdui-menu-item value="sawtooth">锯齿</mdui-menu-item>
+
+					<mdui-icon-arrow-drop-down slot="end-icon"></mdui-icon-arrow-drop-down>
+				</mdui-select>
 			</label>
 			<label class="field" data-when1="local">
 				<span>CH1 音频文件</span>
-				<input type="file" id="file1" accept="audio/*" />
+				<mdui-text-field id="file1" type="file" accept="audio/*"></mdui-text-field>
 			</label>
 		</div>
 
 		<div class="scope-row" id="ch2-params" hidden>
 			<label class="field" data-when2="math">
 				<span>CH2 函数（x 为 0–1 相位，t 为秒）</span>
-				<input type="text" id="fn2" value="return Math.cos(x * 2 * Math.PI * 3)" />
+				<mdui-text-field id="fn2" variant="outlined" value="return Math.cos(x * 2 * Math.PI * 3)"></mdui-text-field>
 			</label>
 			<label class="field" data-when2="oscillator">
 				<span>CH2 频率 / Hz</span>
-				<input type="number" id="freq2" min="20" max="5000" step="1" value="660" />
+				<mdui-text-field id="freq2" type="number" variant="outlined" min="20" max="5000" step="1" value="660"></mdui-text-field>
 			</label>
 			<label class="field" data-when2="oscillator">
 				<span>CH2 波形</span>
-				<select id="shape2">
-					<option value="sine">正弦</option>
-					<option value="square">方波</option>
-					<option value="triangle">三角</option>
-					<option value="sawtooth">锯齿</option>
-				</select>
+				<mdui-select id="shape2" variant="outlined" value="sine">
+					
+					<mdui-menu-item value="sine">正弦</mdui-menu-item>
+					
+					<mdui-menu-item value="square">方波</mdui-menu-item>
+					
+					<mdui-menu-item value="triangle">三角</mdui-menu-item>
+					
+					<mdui-menu-item value="sawtooth">锯齿</mdui-menu-item>
+
+					<mdui-icon-arrow-drop-down slot="end-icon"></mdui-icon-arrow-drop-down>
+				</mdui-select>
 			</label>
 			<label class="field" data-when2="local">
 				<span>CH2 音频文件</span>
-				<input type="file" id="file2" accept="audio/*" />
+				<mdui-text-field id="file2" type="file" accept="audio/*"></mdui-text-field>
 			</label>
 		</div>
 
 		<div class="scope-row">
 			<label class="field">
 				<span>时基 / 格</span>
-				<select id="timebase"></select>
+				<mdui-select id="timebase" variant="outlined">
+					<mdui-icon-arrow-drop-down slot="end-icon"></mdui-icon-arrow-drop-down>
+				</mdui-select>
 			</label>
 			<label class="field">
 				<span>CH1 垂直档位</span>
-				<select id="vdiv1"></select>
+				<mdui-select id="vdiv1" variant="outlined">
+					<mdui-icon-arrow-drop-down slot="end-icon"></mdui-icon-arrow-drop-down>
+				</mdui-select>
 			</label>
 			<label class="field" id="vdiv2-field" hidden>
 				<span>CH2 垂直档位</span>
-				<select id="vdiv2"></select>
+				<mdui-select id="vdiv2" variant="outlined">
+					<mdui-icon-arrow-drop-down slot="end-icon"></mdui-icon-arrow-drop-down>
+				</mdui-select>
 			</label>
 			<label class="field">
 				<span>视图</span>
-				<select id="view">
-					<option value="dual">双通道波形</option>
-					<option value="xy">XY 李萨如</option>
-					<option value="fft">FFT 频谱</option>
-				</select>
+				<mdui-select id="view" variant="outlined" value="dual">
+					
+					<mdui-menu-item value="dual">双通道波形</mdui-menu-item>
+					
+					<mdui-menu-item value="xy">XY 李萨如</mdui-menu-item>
+					
+					<mdui-menu-item value="fft">FFT 频谱</mdui-menu-item>
+
+					<mdui-icon-arrow-drop-down slot="end-icon"></mdui-icon-arrow-drop-down>
+				</mdui-select>
 			</label>
 		</div>
 
 		<div class="scope-row" id="trigger-row">
 			<label class="field">
 				<span>触发方式</span>
-				<select id="trigger">
-					<option value="auto">自动</option>
-					<option value="rising">上升沿</option>
-					<option value="falling">下降沿</option>
-				</select>
+				<mdui-select id="trigger" variant="outlined" value="auto">
+					
+					<mdui-menu-item value="auto">自动</mdui-menu-item>
+					
+					<mdui-menu-item value="rising">上升沿</mdui-menu-item>
+					
+					<mdui-menu-item value="falling">下降沿</mdui-menu-item>
+
+					<mdui-icon-arrow-drop-down slot="end-icon"></mdui-icon-arrow-drop-down>
+				</mdui-select>
 			</label>
 			<label class="field">
 				<span>触发电平</span>
-				<input type="range" id="level" min="-0.9" max="0.9" step="0.01" value="0" />
+				<mdui-slider id="level" min="-0.9" max="0.9" step="0.01" value="0"></mdui-slider>
 			</label>
 		</div>
 
@@ -201,24 +241,32 @@ import Page from '../../layouts/Page.astro';
 	const btnPause = $<HTMLButtonElement>('pause') as unknown as HTMLElement;
 
 	interface ChEls {
-		src: HTMLSelectElement;
-		fn: HTMLInputElement;
-		freq: HTMLInputElement;
-		shape: HTMLSelectElement;
+		src: ValueEl;
+		fn: ValueEl;
+		freq: ValueEl;
+		shape: ValueEl;
 		file: HTMLInputElement;
-		vdiv: HTMLSelectElement;
+		vdiv: ValueEl;
 		row: HTMLElement;
 		label: HTMLElement;
 	}
 
+	/*
+		mdui 组件都是自定义元素：值通过 .value 读写、change 事件通知，
+		与原生控件用法一致，下面的取值代码无需改写。
+		mdui-select 的下拉指示必须显式给 slot="end-icon"，
+		否则渲染出来像一个没有指示的输入框。
+	*/
+	type ValueEl = HTMLElement & { value: string };
+
 	function ch(prefix: string): ChEls {
 		return {
-			src: $<HTMLSelectElement>(`src${prefix}`),
-			fn: $<HTMLInputElement>(`fn${prefix}`),
-			freq: $<HTMLInputElement>(`freq${prefix}`),
-			shape: $<HTMLSelectElement>(`shape${prefix}`),
+			src: $<ValueEl>(`src${prefix}`),
+			fn: $<ValueEl>(`fn${prefix}`),
+			freq: $<ValueEl>(`freq${prefix}`),
+			shape: $<ValueEl>(`shape${prefix}`),
 			file: $<HTMLInputElement>(`file${prefix}`),
-			vdiv: $<HTMLSelectElement>(`vdiv${prefix}`),
+			vdiv: $<ValueEl>(`vdiv${prefix}`),
 			row: $(`ch${prefix}-params`),
 			label: $(`srcLabel${prefix}`),
 		};
@@ -226,29 +274,28 @@ import Page from '../../layouts/Page.astro';
 
 	const c1 = ch('1');
 	const c2 = ch('2');
-	const elTimebase = $<HTMLSelectElement>('timebase');
-	const elTrigger = $<HTMLSelectElement>('trigger');
-	const elLevel = $<HTMLInputElement>('level');
-	const elView = $<HTMLSelectElement>('view');
+	const elTimebase = $<ValueEl>('timebase');
+	const elTrigger = $<ValueEl>('trigger');
+	const elLevel = $<ValueEl>('level');
+	const elView = $<ValueEl>('view');
 	const vdiv2Field = $('vdiv2-field');
 	const triggerRow = $('trigger-row');
 
-	// 档位表 → 下拉框
-	for (const t of TIMEBASES) {
-		const o = document.createElement('option');
-		o.value = String(t.ms);
-		o.textContent = `${t.label} / 格`;
-		elTimebase.append(o);
-	}
-	elTimebase.value = '0.5';
-	for (const sel of [c1.vdiv, c2.vdiv]) {
-		for (const v of VDIVS) {
-			const o = document.createElement('option');
-			o.value = String(v.full);
-			o.textContent = v.label;
-			sel.append(o);
+	// 档位表 → mdui-select 的 menu-item
+	function fillMenu(el: ValueEl, items: [string, string][], initial: string): void {
+		for (const [value, text] of items) {
+			const mi = document.createElement('mdui-menu-item');
+			mi.setAttribute('value', value);
+			mi.className = 'mono';
+			mi.textContent = text;
+			el.append(mi);
 		}
-		sel.value = '1';
+		el.value = initial;
+	}
+
+	fillMenu(elTimebase, TIMEBASES.map((t) => [String(t.ms), `${t.label} / 格`]), '0.5');
+	for (const sel of [c1.vdiv, c2.vdiv]) {
+		fillMenu(sel, VDIVS.map((v) => [String(v.full), v.label]), '1');
 	}
 	c2.src.value = 'off';
 
@@ -617,8 +664,11 @@ import Page from '../../layouts/Page.astro';
 		display: none;
 	}
 
-	.scope-row-label {
-		display: none;
+	/* mdui 组件在 grid 里默认不撑满，需要显式 100% 才与 label 同宽 */
+	.scope-row > .field > mdui-select,
+	.scope-row > .field > mdui-text-field,
+	.scope-row > .field > mdui-slider {
+		width: 100%;
 	}
 
 	.scope-status {

@@ -35,7 +35,15 @@ active="tools"
 <div class="panel-lg">
 <label class="field">
 <span class="field-label">C/C++ 表达式</span>
-<textarea id="expr" rows="3" class="input mono" spellcheck="false" placeholder="例如：(1 + 2) * 3 - 4 / 2">1 + 2 * 3 - (4 - 1)</textarea>
+<mdui-text-field
+	id="expr"
+	variant="outlined"
+	rows="3"
+	class="mono"
+	spellcheck="false"
+	placeholder="例如：(1 + 2) * 3 - 4 / 2"
+	value="1 + 2 * 3 - (4 - 1)"
+></mdui-text-field>
 </label>
 
 <div class="row" style="gap: 0.6rem; flex-wrap: wrap; align-items: center; margin-top: 0.8rem">
@@ -224,6 +232,7 @@ background-color: rgb(var(--mdui-color-surface-container-low));
 
 .example-chip {
 cursor: pointer;
+font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
 
 @media (max-width: 599px) {

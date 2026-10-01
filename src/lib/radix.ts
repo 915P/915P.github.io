@@ -40,10 +40,10 @@ export function cleanInput(raw: string): string {
 export interface ConvertOptions {
 	/** 小数部分保留的有效位数（二进制下 0.1 这类会不终止，取前 N 位） */
 	precision?: number;
-	/** 输出是否插入分组空格/下划线 */
+	/** 输出是否插入分组空格/短横线 */
 	group?: boolean;
-	/** 分组大小，默认 4；group 为 'underscore' 时用 '_' 分隔 */
-	groupSep?: 'space' | 'underscore';
+	/** 分组大小，默认 4；groupSep 为 'hyphen' 时用 '-' 分隔 */
+	groupSep?: 'space' | 'hyphen';
 }
 
 /** 按指定宽度从右往左分组，如 1101 1010 → 1101 1010（8 位一组） */
@@ -165,7 +165,7 @@ const GROUP_SIZE = 4;
 /** 组装成完整字符串；truncated 时末尾加省略号表示这是近似值 */
 export function format(v: Converted, opts: ConvertOptions = {}): string {
 	const { group = false, groupSep = 'space' } = opts;
-	const sep = groupSep === 'underscore' ? '_' : ' ';
+	const sep = groupSep === 'hyphen' ? '-' : ' ';
 
 	let s = v.int;
 	if (v.frac.length) {

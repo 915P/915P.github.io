@@ -19,14 +19,13 @@ import { ENCODINGS } from '../../lib/hanzi-encoding';
 	<div class="panel">
 		<label class="field">
 			<span class="field-label">输入汉字</span>
-			<input
-				type="text"
+			<mdui-text-field
 				id="text"
-				class="input"
+				variant="outlined"
 				placeholder="如：高程 中 鿕"
 				autocomplete="off"
 				spellcheck="false"
-			/>
+			></mdui-text-field>
 		</label>
 		<p class="footnote">
 			逐字编码，UTF-8 为变长（1–4 字节），GB18030 的 BMP 外汉字强制四字节。
@@ -44,6 +43,7 @@ import { ENCODINGS } from '../../lib/hanzi-encoding';
 					<tr>
 						<th scope="col">汉字 / 编码</th>
 						<th scope="col">十六进制</th>
+						<th scope="col">八进制</th>
 						<th scope="col">二进制（括号内为字节数）</th>
 					</tr>
 				</thead>
@@ -73,32 +73,33 @@ import { ENCODINGS } from '../../lib/hanzi-encoding';
 	<div class="panel">
 		<h2 class="block-title">由字节反查汉字</h2>
 		<div class="row" style="gap: 0.6rem; flex-wrap: wrap; margin-bottom: 0.6rem">
-			<button type="button" class="chip" data-src="hex" aria-pressed="true">十六进制</button>
-			<button type="button" class="chip" data-src="binary" aria-pressed="false">二进制</button>
+			<mdui-segmented-button-group id="revSrc" selects="single" value="hex">
+				<mdui-segmented-button value="hex">十六进制</mdui-segmented-button>
+				<mdui-segmented-button value="octal">八进制</mdui-segmented-button>
+				<mdui-segmented-button value="binary">二进制</mdui-segmented-button>
+			</mdui-segmented-button-group>
 		</div>
 		<label class="field">
 			<span class="field-label" id="revLabel">十六进制字节</span>
-			<input
-				type="text"
+			<mdui-text-field
 				id="rev"
-				class="input"
+				variant="outlined"
 				placeholder="如：D6 D0　或　11010110 11010000"
 				autocomplete="off"
 				spellcheck="false"
-			/>
+			></mdui-text-field>
 		</label>
 		<div class="row" style="gap: 0.6rem; flex-wrap: wrap; align-items: center; margin-top: 0.8rem">
-			<label class="field" style="flex: 1 1 12rem; min-width: 10rem">
+			<div class="field" style="flex: 1 1 12rem; min-width: 10rem">
 				<span class="field-label">按此编码解码</span>
-				<div class="select-wrap">
-					<select id="revEnc" class="select">
-						{ENCODINGS.filter((e) => e.bytes).map((e) => (
-							<option value={e.key}>{e.label}</option>
-						))}
-					</select>
-				</div>
-			</label>
-			<button type="button" id="revGo" class="btn-filled">反查</button>
+				<mdui-select id="revEnc" value="gb2312">
+					{ENCODINGS.filter((e) => e.bytes).map((e) => (
+						<mdui-menu-item value={e.key}>{e.label}</mdui-menu-item>
+					))}
+					<mdui-icon-arrow-drop-down slot="end-icon"></mdui-icon-arrow-drop-down>
+				</mdui-select>
+			</div>
+			<mdui-button variant="filled" id="revGo">反查</mdui-button>
 		</div>
 		<div id="revOut" class="rev-out" hidden aria-live="polite"></div>
 	</div>
@@ -203,6 +204,8 @@ import { ENCODINGS } from '../../lib/hanzi-encoding';
 		type EncodingKey,
 	} from '../../lib/hanzi-encoding';
 
+	type TextField = HTMLElement & { value: string; placeholder: string };
+
 	const $ = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
 
 	const esc = (s: string): string =>
@@ -213,7 +216,7 @@ import { ENCODINGS } from '../../lib/hanzi-encoding';
 				({ '&': 'amp', '<': 'lt', '>': 'gt', '"': 'quot', "'": '#39' })[c]!,
 		);
 
-	const textInput = $<HTMLInputElement>('text');
+	const textInput = $<TextField>('text');
 	const resultPanel = $('resultPanel');
 	const cpPanel = $('cpPanel');
 	const encTable = $<HTMLTableElement>('encTable').tBodies[0]!;
@@ -247,6 +250,12 @@ import { ENCODINGS } from '../../lib/hanzi-encoding';
 								.map((x) => x.toString(16).toUpperCase().padStart(2, '0'))
 								.join(' ')
 						: '<span class="unsupported">—</span>';
+				const octOf = (r: (typeof gb)[number]['r']) =>
+					r.ok
+						? (r.bytes ?? [])
+								.map((x) => x.toString(8))
+								.join(' ')
+						: '<span class="unsupported">—</span>';
 				const binOf = (r: (typeof gb)[number]['r']) =>
 					r.ok
 						? (r.bytes ?? [])
@@ -264,6 +273,14 @@ import { ENCODINGS } from '../../lib/hanzi-encoding';
 									`<div class="enc-line"><span class="enc-tag">${esc(x.label)}</span><span class="mono">${hexOf(x.r)}</span></div>`,
 							)
 							.join('');
+				const octCell = allSame
+					? `<span class="mono">${esc(octOf(gb[0]!.r))}</span> <span class="faint">三码相同</span>`
+					: gb
+							.map(
+								(x) =>
+									`<div class="enc-line"><span class="enc-tag">${esc(x.label)}</span><span class="mono">${octOf(x.r)}</span></div>`,
+							)
+							.join('');
 				const binCell = allSame
 					? `<span class="mono">${esc(binOf(gb[0]!.r))}</span> <span class="faint">(${gb[0]!.r.bytes?.length})</span>`
 					: gb
@@ -273,22 +290,22 @@ import { ENCODINGS } from '../../lib/hanzi-encoding';
 							)
 							.join('');
 				const rows = [
-					`<tr><td>GB2312 / GBK / GB18030</td><td>${hexCell}</td><td>${binCell}</td></tr>`,
+					`<tr><td>GB2312 / GBK / GB18030</td><td>${hexCell}</td><td>${octCell}</td><td>${binCell}</td></tr>`,
 					...ENCODINGS.filter((e) => e.key === 'utf8' || e.key === 'big5' || e.key === 'unicode').map(
 						(e) => {
 							const r = encodeChars(ch, e.key)[0]!;
 							if (!e.bytes) {
-								return `<tr><td>${esc(e.label)}</td><td class="mono">${esc(r.cpLabel)}</td><td class="unsupported">码点，非字节</td></tr>`;
+								return `<tr><td>${esc(e.label)}</td><td class="mono">${esc(r.cpLabel)}</td><td class="unsupported" colspan="2">码点，非字节</td></tr>`;
 							}
 							if (!r.ok) {
-								return `<tr><td>${esc(e.label)}</td><td class="unsupported" colspan="2">该编码不含此字</td></tr>`;
+								return `<tr><td>${esc(e.label)}</td><td class="unsupported" colspan="3">该编码不含此字</td></tr>`;
 							}
-							return `<tr><td>${esc(e.label)}</td><td class="mono">${esc(hexOf(r))}</td><td class="mono">${esc(binOf(r))} <span class="faint">(${r.bytes?.length})</span></td></tr>`;
+							return `<tr><td>${esc(e.label)}</td><td class="mono">${esc(hexOf(r))}</td><td class="mono">${esc(octOf(r))}</td><td class="mono">${esc(binOf(r))} <span class="faint">(${r.bytes?.length})</span></td></tr>`;
 						},
 					),
 				].join('');
 				// 每个字一个 tbody 组，用第一列显示汉字
-				return `<tr class="char-head"><td colspan="3"><span class="cell-char">${esc(ch)}</span></td></tr>${rows}`;
+				return `<tr class="char-head"><td colspan="4"><span class="cell-char">${esc(ch)}</span></td></tr>${rows}`;
 			})
 			.join('');
 		// Unicode 码点表
@@ -319,22 +336,26 @@ import { ENCODINGS } from '../../lib/hanzi-encoding';
 	textInput.addEventListener('input', render);
 
 	// 反查
-	const revInput = $<HTMLInputElement>('rev');
-	const revEnc = $<HTMLSelectElement>('revEnc');
+	const revInput = $<TextField>('rev');
+	const revEnc = $<TextField>('revEnc');
 	const revOut = $('revOut');
 	const revLabel = $('revLabel');
-	let src: 'hex' | 'binary' = 'hex';
+	type ReverseFrom = 'hex' | 'octal' | 'binary';
 
-	document.querySelectorAll<HTMLElement>('[data-src]').forEach((b) => {
-		b.addEventListener('click', () => {
-			src = b.dataset.src as 'hex' | 'binary';
-			document.querySelectorAll<HTMLElement>('[data-src]').forEach((x) => {
-				x.setAttribute('aria-pressed', String(x === b));
-			});
-			revLabel.textContent = src === 'hex' ? '十六进制字节' : '二进制（每字节 8 位）';
-			revInput.placeholder = src === 'hex' ? '如：D6 D0' : '如：11010110 11010000';
-			doReverse();
-		});
+	let src: ReverseFrom = 'hex';
+
+	const revSrc = $<TextField>('revSrc');
+	revSrc.addEventListener('change', () => {
+		src = revSrc.value as ReverseFrom;
+		const SHOWN: Record<ReverseFrom, [string, string]> = {
+			hex: ['十六进制字节', '如：D6 D0'],
+			octal: ['八进制字节', '如：326 320'],
+			binary: ['二进制（每字节 8 位）', '如：11010110 11010000'],
+		};
+		const [label, placeholder] = SHOWN[src];
+		revLabel.textContent = label;
+		revInput.placeholder = placeholder;
+		doReverse();
 	});
 
 	function doReverse() {
@@ -352,13 +373,14 @@ import { ENCODINGS } from '../../lib/hanzi-encoding';
 		}
 		const meta = ENCODINGS.find((e) => e.key === key)!;
 		const enc = encodeChars(r.char, key)[0]!;
-		const back = enc.ok
-			? (enc.bytes ?? []).map((x) => esc(x.toString(16).toUpperCase().padStart(2, '0'))).join(' ')
-			: '';
+		const bytes = enc.ok ? (enc.bytes ?? []) : [];
+		const hex = bytes.map((x) => esc(x.toString(16).toUpperCase().padStart(2, '0'))).join(' ');
+		const oct = bytes.map((x) => esc(x.toString(8))).join(' ');
 		revOut.innerHTML = `
 			<div class="rev-char">${esc(r.char)}</div>
 			<div class="rev-meta">${esc(r.cpLabel)}　十进制 ${r.cp}</div>
-			${back ? `<div class="rev-meta">${esc(meta.label)} 字节：${back}</div>` : ''}
+			${hex ? `<div class="rev-meta">${esc(meta.label)} 十六进制：${hex}</div>` : ''}
+			${oct ? `<div class="rev-meta">${esc(meta.label)} 八进制：${oct}</div>` : ''}
 			${r.reason ? `<p class="footnote">${esc(r.reason)}</p>` : ''}
 		`;
 	}

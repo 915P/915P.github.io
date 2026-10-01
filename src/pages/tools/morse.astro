@@ -16,15 +16,18 @@ const codes = Object.entries(TABLE);
 		<div class="ctrl-row">
 			<div class="field" style="flex: 1 1 12rem">
 				<label for="style">符号风格</label>
-				<select id="style">
-					{STYLES.map((st) => <option value={st.value}>{st.label}</option>)}
-				</select>
+				<mdui-select id="style" value={STYLES[0].value}>
+					{STYLES.map((st) => (
+						<mdui-menu-item value={st.value}>{st.label}</mdui-menu-item>
+					))}
+					<mdui-icon-arrow-drop-down slot="end-icon"></mdui-icon-arrow-drop-down>
+				</mdui-select>
 			</div>
 			<div class="field" style="flex: 1 1 12rem">
 				<label for="wpm">
-					语速：<span id="wpmVal" style="color: rgb(var(--mdui-color-primary))">20</span> WPM
+					语速：<span id="wpmVal" class="mono" style="color: rgb(var(--mdui-color-primary))">20</span> WPM
 				</label>
-				<input type="range" id="wpm" min="5" max="40" value="20" step="1" />
+				<mdui-slider id="wpm" min="5" max="40" value="20" step="1"></mdui-slider>
 			</div>
 			<div class="field" style="flex: 0 0 auto; justify-content: flex-end">
 				<div class="row" style="gap: 0.5rem">
@@ -43,16 +46,27 @@ const codes = Object.entries(TABLE);
 	<div class="duo" style="margin-top: 1.5rem">
 		<div class="panel">
 			<h2 class="block-title" style="margin-bottom: 0.75rem">文字 → 电码</h2>
-			<textarea id="a" rows="4" class="mono" placeholder="英文字母、数字、标点或中文"
-				>SOS 915P 中文</textarea
-			>
+			<mdui-text-field
+				id="a"
+				variant="outlined"
+				rows="4"
+				class="mono"
+				placeholder="英文字母、数字、标点或中文"
+				value="SOS 915P 中文"
+			></mdui-text-field>
 			<mdui-button variant="filled" id="enc" class="full-btn">转换</mdui-button>
 			<p id="tcNote" class="text-xs faint" style="margin-top: 0.6rem"></p>
 		</div>
 
 		<div class="panel">
 			<h2 class="block-title" style="margin-bottom: 0.75rem">电码 → 文字</h2>
-			<textarea id="b" rows="4" class="mono" placeholder="… — — …"></textarea>
+			<mdui-text-field
+				id="b"
+				variant="outlined"
+				rows="4"
+				class="mono"
+				placeholder="… — — …"
+			></mdui-text-field>
 			<div class="mark-row">
 				<span class="text-xs faint">摩尔斯点划</span>
 				<button type="button" class="mark-key" data-mark=".">
@@ -64,10 +78,9 @@ const codes = Object.entries(TABLE);
 				<span class="text-xs faint">点划直接追加到上方电码串，空格分词</span>
 			</div>
 			<mdui-button variant="outlined" id="dec" class="full-btn">转换</mdui-button>
-			<label class="options" style="margin-top: 0.7rem">
-				<input type="checkbox" id="asCn" checked />
+			<mdui-checkbox id="asCn" checked style="margin-top: 0.7rem">
 				把 4 位数字组按中文电码解释
-			</label>
+			</mdui-checkbox>
 		</div>
 	</div>
 
@@ -82,10 +95,11 @@ const codes = Object.entries(TABLE);
 		<div class="ctrl-row">
 			<div class="field" style="flex: 1 1 14rem">
 				<label for="variant">中文电码表</label>
-				<select id="variant">
-					<option value="cn" selected>《标准电码本》· 大陆</option>
-					<option value="tw">《標準電碼本》· 台港</option>
-				</select>
+				<mdui-select id="variant" value="cn">
+					<mdui-menu-item value="cn">《标准电码本》· 大陆</mdui-menu-item>
+					<mdui-menu-item value="tw">《標準電碼本》· 台港</mdui-menu-item>
+					<mdui-icon-arrow-drop-down slot="end-icon"></mdui-icon-arrow-drop-down>
+				</mdui-select>
 			</div>
 			<p id="tcStat" class="text-xs faint" style="flex: 1 1 100%; align-self: flex-end">
 				正在加载码表…
@@ -104,7 +118,7 @@ const codes = Object.entries(TABLE);
 				<h3 class="block-title">电码键盘</h3>
 				<div class="row" style="gap: 0.75rem">
 					<span class="text-xs faint">每键为一个数字，标注的是该码代表的字</span>
-					<button type="button" id="kbdClear" class="link-btn">清空</button>
+					<mdui-button variant="text" id="kbdClear">清空</mdui-button>
 				</div>
 			</div>
 
@@ -237,6 +251,7 @@ const codes = Object.entries(TABLE);
 	}
 
 	.kbd-digit {
+		font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 		font-size: var(--mdui-typescale-headline-small-size);
 		font-weight: 600;
 		line-height: 1.1;
@@ -343,15 +358,18 @@ const codes = Object.entries(TABLE);
 	} from '../../lib/telegraph';
 	import { EMPTY, press, clear, renderBuf, type KeyboardState } from '../../lib/telegraph-keyboard';
 
+	type Select = HTMLElement & { value: string };
+	type Slider = HTMLElement & { value: string };
+
 	const $ = <T extends HTMLElement = HTMLElement>(id: string) =>
 		document.getElementById(id) as T;
 
 	const a = $<HTMLTextAreaElement>('a');
 	const b = $<HTMLTextAreaElement>('b');
-	const asCn = $<HTMLInputElement>('asCn');
+	const asCn = $<HTMLElement & { checked: boolean }>('asCn');
 	const tcNote = $('tcNote');
-	const styleSel = $<HTMLSelectElement>('style');
-	const wpm = $<HTMLInputElement>('wpm');
+	const styleSel = $<Select>('style');
+	const wpm = $<Slider>('wpm');
 	const wpmVal = $('wpmVal');
 	const playBtn = $<HTMLButtonElement>('play');
 	const stopBtn = $<HTMLButtonElement>('stop');
@@ -362,7 +380,7 @@ const codes = Object.entries(TABLE);
 	const currentStyle = (): StyleValue => styleSel.value as StyleValue;
 
 	/* ---------------- 中文电码表 ---------------- */
-	const variantSel = $<HTMLSelectElement>('variant');
+	const variantSel = $<Select>('variant');
 	const tcStat = $('tcStat');
 	const kbdBuf = $('kbdBuf');
 	const kbdResult = $('kbdResult');

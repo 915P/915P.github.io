@@ -49,10 +49,7 @@ const weightNames: Record<number, string> = {
 	<div class="row">
 		<mdui-button variant="filled" id="fs">全屏查看</mdui-button>
 		<mdui-button variant="outlined" id="exit" class="hidden">退出全屏</mdui-button>
-		<label class="options" style="margin: 0">
-			<input type="checkbox" id="showW" />
-			显示字重数值
-		</label>
+		<mdui-checkbox id="showW" checked>显示字重数值</mdui-checkbox>
 	</div>
 
 	<section style="margin-top: 2.5rem">
@@ -61,26 +58,18 @@ const weightNames: Record<number, string> = {
 			同一段文字在不同字体族、不同字重下的实际表现。若某两个字重看起来完全相同，说明该字体没有提供独立的字重文件。
 		</p>
 
-		<div id="tabs" class="row" style="margin-top: 1rem" role="tablist" aria-label="字体族">
+		<mdui-tabs id="tabs" value={families[0].key} variant="primary" full-width style="margin-top: 1rem">
 			{
-				families.map((f, i) => (
-					<button
-						type="button"
-						role="tab"
-						data-family={f.key}
-						aria-selected={i === 0 ? 'true' : 'false'}
-						class="tab"
-					>
+				families.map((f) => (
+					<mdui-tab value={f.key}>
 						{f.label}
-					</button>
+					</mdui-tab>
 				))
 			}
-		</div>
 
-		<div class="stack" style="margin-top: 1.5rem; gap: 2rem">
-			{
-				families.map((f, fi) => (
-					<div data-panel={f.key} hidden={fi !== 0}>
+		{
+			families.map((f) => (
+				<mdui-tab-panel slot="panel" value={f.key}>
 						<h3 class="block-title muted" style="margin-bottom: 0.6rem">
 							正常 · {f.label}
 						</h3>
@@ -111,10 +100,10 @@ const weightNames: Record<number, string> = {
 								</div>
 							))}
 						</div>
-					</div>
-				))
-			}
-		</div>
+				</mdui-tab-panel>
+			))
+		}
+		</mdui-tabs>
 
 		<details class="panel" style="margin-top: 2rem">
 			<summary class="block-title" style="cursor: pointer">常用字重映射</summary>
@@ -191,20 +180,7 @@ const weightNames: Record<number, string> = {
 </Page>
 
 <script>
-	const tabs = document.getElementById('tabs')!;
-	const panels = document.querySelectorAll<HTMLElement>('[data-panel]');
-
-	tabs.addEventListener('click', (e) => {
-		const btn = (e.target as HTMLElement).closest<HTMLElement>('[data-family]');
-		if (!btn) return;
-		const key = btn.dataset.family!;
-		tabs.querySelectorAll('[data-family]').forEach((b) => {
-			b.setAttribute('aria-selected', String(b === btn));
-		});
-		panels.forEach((p) => (p.hidden = p.dataset.panel !== key));
-	});
-
-	const showW = document.getElementById('showW') as HTMLInputElement;
+	const showW = document.getElementById('showW') as HTMLElement & { checked: boolean };
 	const fs = document.getElementById('fs')!;
 	const exit = document.getElementById('exit')!;
 

@@ -1,5 +1,20 @@
 @import 'mdui/mdui.css';
 
+/*
+ * Questrial（几何无衬线，SIL OFL 1.1）
+ *
+ * 自托管 woff2，不请求 Google Fonts —— 保持全站零第三方 CDN 依赖（见 AGENT.md §3.1）。
+ * latin 子集 20 KB，只覆盖拉丁字母与数字；中文仍回退到系统字体。
+ * license 副本在 public/fonts/Questrial-LICENSE.txt。
+ */
+@font-face {
+	font-family: 'Questrial';
+	font-style: normal;
+	font-display: swap;
+	font-weight: 400;
+	src: url('/fonts/questrial-latin-400-normal.woff2') format('woff2');
+}
+
 /* ==========================================================================
    915P 站点样式
    基于 Material Design 3 设计令牌，不使用工具类框架。
@@ -673,6 +688,8 @@ input[type='checkbox'] {
 	border-radius: var(--mdui-shape-corner-medium);
 	font-size: var(--mdui-typescale-body-large-size);
 	font-weight: 500;
+	/* 计算器读数按等宽对齐，避免数字跳动 */
+	font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 	border: 1px solid transparent;
 	transition:
 		background-color var(--mdui-motion-duration-short2),
@@ -870,4 +887,24 @@ mdui-layout-main.site-main {
 
 .flex-grow {
 	flex: 1;
+}
+
+/*
+ * 汉字转拼音的输出区用 Century Gothic。
+ *
+ * Questrial（本站自托管，OFL 许可）排在最前，全平台外观一致；
+ * Century Gothic 是 Office/Windows 附带的商业字体、不可分发，只作次选，
+ * 命中与否取决于用户机器上是否装了 Office。
+ */
+.pinyin-out,
+.pinyin-out .field,
+.pinyin-out textarea {
+	font-family:
+		'Questrial',
+		'Century Gothic',
+		'URW Gothic',
+		'Avant Garde',
+		system-ui,
+		sans-serif;
+	letter-spacing: 0.01em;
 }

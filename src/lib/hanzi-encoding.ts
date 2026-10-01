@@ -270,15 +270,18 @@ export interface ReverseResult {
 }
 
 /**
- * 从十六进制或二进制反查字符。
+ * 从十六进制、二进制或八进制反查字符。
  *
  * 1. 解析成字节序列
  * 2. 用目标编码解码
  * 3. 若解码出多个字符（全角符号等）只取第一个，并说明
+ *
+ * 八进制允许省略每个字节的前导 0（`326` 即 `0xD6`），所以按「从右往左每 3 位」
+ * 切分而不是要求长度为 3 的整数倍。
  */
 export function decodeBytes(
 	input: string,
-	from: 'hex' | 'binary',
+	from: 'hex' | 'binary' | 'octal',
 	key: EncodingKey,
 ): ReverseResult {
 	let clean = input.replace(/0x/gi, '').replace(/[\s,]+/g, '');
@@ -294,7 +297,7 @@ export function decodeBytes(
 				return { ok: false, char: '', cp: -1, cpLabel: '', reason: '十六进制位数为奇数，需补 0' };
 			}
 			bytes = clean.match(/.{2}/g)!.map((h) => parseInt(h, 16));
-		} else {
+		} else if (from === 'binary') {
 			clean = clean.replace(/[^01]/g, '');
 			if (clean === '') {
 				return { ok: false, char: '', cp: -1, cpLabel: '', reason: '只接受 0 与 1' };
@@ -303,6 +306,23 @@ export function decodeBytes(
 				return { ok: false, char: '', cp: -1, cpLabel: '', reason: '二进制需为 8 的整数倍（不足补 0）' };
 			}
 			bytes = clean.match(/.{8}/g)!.map((b) => parseInt(b, 2));
+		} else {
+			clean = clean.replace(/[^0-7]/g, '');
+			if (clean === '') {
+				return { ok: false, char: '', cp: -1, cpLabel: '', reason: '只接受 0-7' };
+			}
+			// 高位 0 可省略：从右往左每 3 位一个字节
+			const groups: string[] = [];
+			let rest = clean;
+			while (rest.length > 3) {
+				groups.unshift(rest.slice(-3));
+				rest = rest.slice(0, -3);
+			}
+			if (rest.length) groups.unshift(rest);
+			bytes = groups.map((g) => parseInt(g, 8));
+			if (bytes.some((b) => b > 255)) {
+				return { ok: false, char: '', cp: -1, cpLabel: '', reason: '存在大于 377 的字节' };
+			}
 		}
 	} catch {
 		return { ok: false, char: '', cp: -1, cpLabel: '', reason: '无法解析输入' };

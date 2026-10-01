@@ -9,25 +9,35 @@ import Page from '../../layouts/Page.astro';
 	</div>
 
 	<div class="tool-mid stack">
-		<div class="options" role="radiogroup" aria-label="输出类型">
-			<label><input type="radio" name="ptype" value="0" checked /> 带声调</label>
-			<label><input type="radio" name="ptype" value="1" /> 不带声调</label>
-			<label><input type="radio" name="ptype" value="2" /> 拼音首字母</label>
-		</div>
+		<mdui-radio-group id="ptype" value="0" aria-label="输出类型">
+			<mdui-radio value="0">带声调</mdui-radio>
+			<mdui-radio value="1">不带声调</mdui-radio>
+			<mdui-radio value="2">拼音首字母</mdui-radio>
+		</mdui-radio-group>
 
 		<div class="field">
 			<label for="src">输入中文</label>
-			<textarea id="src" rows="4" placeholder="请输入中文"
-				>小明说长大后要去看中国的长城！</textarea
-			>
+			<mdui-text-field
+				id="src"
+				variant="outlined"
+				rows="4"
+				placeholder="请输入中文"
+				value="小明说长大后要去看中国的长城！"
+			></mdui-text-field>
 		</div>
 
 		<div class="field">
 			<div class="row-between" style="margin-bottom: 0.35rem">
 				<label for="dst" style="margin: 0">转换结果</label>
-				<button type="button" id="copy" class="link-btn">复制</button>
+				<mdui-button variant="text" id="copy">复制</mdui-button>
 			</div>
-			<textarea id="dst" rows="4" class="mono" readonly></textarea>
+			<mdui-text-field
+				id="dst"
+				variant="outlined"
+				rows="4"
+				class="pinyin-out"
+				readonly
+			></mdui-text-field>
 		</div>
 
 		<div>
@@ -63,7 +73,7 @@ import Page from '../../layouts/Page.astro';
 			dst.value = '';
 			return;
 		}
-		const t = (document.querySelector('[name="ptype"]:checked') as HTMLInputElement).value;
+		const t = (document.getElementById('ptype') as HTMLElement & { value: string }).value;
 		if (t === '0') dst.value = py.getPinyin(v, ' ', true, true);
 		else if (t === '1') dst.value = py.getPinyin(v, ' ', false, true);
 		else dst.value = py.getFirstLetter(v, true);
@@ -84,9 +94,7 @@ import Page from '../../layouts/Page.astro';
 	})();
 
 	src.addEventListener('input', run);
-	document.querySelectorAll('[name="ptype"]').forEach((r) =>
-		r.addEventListener('change', run),
-	);
+	(document.getElementById('ptype') as HTMLElement).addEventListener('change', run);
 	copy.addEventListener('click', async () => {
 		if (!dst.value) return;
 		try {

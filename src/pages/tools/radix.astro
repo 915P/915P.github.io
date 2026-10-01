@@ -19,43 +19,50 @@ const ROWS = [...PRESETS, 'custom'];
 		<div class="ctrl-row">
 			<div class="field" style="flex: 1 1 12rem">
 				<label for="from">源进制</label>
-				<select id="from">
+				<mdui-select id="from" value="10">
 					{ROWS.map((r) =>
 						r === 'custom' ? (
-							<option value="custom">自定义…</option>
+							<mdui-menu-item value="custom">自定义…</mdui-menu-item>
 						) : (
-							<option value={String(r)} selected={r === 10}>{r} 进制</option>
+							<mdui-menu-item value={String(r)}>{r} 进制</mdui-menu-item>
 						),
 					)}
-				</select>
+					<mdui-icon-arrow-drop-down slot="end-icon"></mdui-icon-arrow-drop-down>
+				</mdui-select>
 			</div>
 			<div class="field" style="flex: 0 0 7rem">
-				<label for="fromCustom" id="fromCustomLabel">自定义源进制</label>
-				<input type="number" id="fromCustom" min="2" max="36" value="7" disabled />
+				<label for="fromCustom" id="fromCustomLabel">自定义源进制（2–36）</label>
+				<mdui-text-field id="fromCustom" type="number" variant="outlined" value="7" disabled></mdui-text-field>
 			</div>
 			<div class="field" style="flex: 1 1 12rem">
 				<label for="to">目标进制</label>
-				<select id="to">
+				<mdui-select id="to" value="2">
 					{ROWS.map((r) =>
 						r === 'custom' ? (
-							<option value="custom">自定义…</option>
+							<mdui-menu-item value="custom">自定义…</mdui-menu-item>
 						) : (
-							<option value={String(r)}>{r} 进制</option>
+							<mdui-menu-item value={String(r)}>{r} 进制</mdui-menu-item>
 						),
 					)}
-				</select>
+					<mdui-icon-arrow-drop-down slot="end-icon"></mdui-icon-arrow-drop-down>
+				</mdui-select>
 			</div>
 			<div class="field" style="flex: 0 0 7rem">
-				<label for="toCustom">自定义目标进制</label>
-				<input type="number" id="toCustom" min="2" max="36" value="7" disabled />
+				<label for="toCustom">自定义目标进制（2–36）</label>
+				<mdui-text-field id="toCustom" type="number" variant="outlined" value="7" disabled></mdui-text-field>
 			</div>
 		</div>
 
 		<div class="field" style="margin-top: 1rem">
 			<label for="input">数值</label>
-			<textarea id="input" rows="3" class="mono" spellcheck="false"
-				>255 128 64 32</textarea
-			>
+			<mdui-text-field
+				id="input"
+				variant="outlined"
+				rows="3"
+				class="mono"
+				spellcheck="false"
+				value="255 128 64 32"
+			></mdui-text-field>
 			<p class="text-xs faint" style="margin-top: 0.35rem">
 				空格、下划线、逗号与全角字符都会被忽略；每一段单独转换，结果逐行对应。
 			</p>
@@ -64,17 +71,17 @@ const ROWS = [...PRESETS, 'custom'];
 		<div class="ctrl-row" style="margin-top: 1rem; align-items: center">
 			<div class="field" style="flex: 1 1 10rem">
 				<label for="prec">
-					小数位保留：<span id="precVal" style="color: rgb(var(--mdui-color-primary))">16</span>
+					小数位保留：<span id="precVal" class="mono" style="color: rgb(var(--mdui-color-primary))">16</span>
 				</label>
-				<input type="range" id="prec" min="2" max="32" value="16" step="1" />
+				<mdui-slider id="prec" min="2" max="32" value="16" step="1"></mdui-slider>
 			</div>
 			<div class="field" style="flex: 1 1 10rem">
 				<span style="display: block; margin-bottom: 0.35rem">输出分组</span>
-				<div class="options" style="margin: 0">
-					<label><input type="radio" name="grp" value="off" checked /> 不分组</label>
-					<label><input type="radio" name="grp" value="space" /> 空格</label>
-					<label><input type="radio" name="grp" value="underscore" /> 下划线</label>
-				</div>
+				<mdui-radio-group id="grp" value="off">
+					<mdui-radio value="off">不分组</mdui-radio>
+					<mdui-radio value="space">空格</mdui-radio>
+					<mdui-radio value="hyphen">短横线 -</mdui-radio>
+				</mdui-radio-group>
 			</div>
 		</div>
 	</div>
@@ -151,22 +158,27 @@ const ROWS = [...PRESETS, 'custom'];
 <script>
 	import { cleanInput, validate, convert, format, parseRadix } from '../../lib/radix';
 
+	type Select = HTMLElement & { value: string };
+	type Input = HTMLElement & { value: string; disabled: boolean };
+	type Slider = HTMLElement & { value: string };
+	type RadioGroup = HTMLElement & { value: string };
+
 	const $ = <T extends HTMLElement = HTMLElement>(id: string) =>
 		document.getElementById(id) as T;
 
-	const fromSel = $<HTMLSelectElement>('from');
-	const toSel = $<HTMLSelectElement>('to');
-	const fromCustom = $<HTMLInputElement>('fromCustom');
-	const toCustom = $<HTMLInputElement>('toCustom');
+	const fromSel = $<Select>('from');
+	const toSel = $<Select>('to');
+	const fromCustom = $<Input>('fromCustom');
+	const toCustom = $<Input>('toCustom');
 	const fromCustomLabel = $('fromCustomLabel');
 	const input = $<HTMLTextAreaElement>('input');
-	const prec = $<HTMLInputElement>('prec');
+	const prec = $<Slider>('prec');
 	const precVal = $('precVal');
 	const rows = $('rows');
+	const grp = $<RadioGroup>('grp');
 	const err = $('err');
 
-	const radius = (el: HTMLInputElement) =>
-		parseRadix(el.value || el.min || '2');
+	const radius = (el: Input) => parseRadix(el.value || '2');
 
 	function currentFrom(): number {
 		return fromSel.value === 'custom' ? radius(fromCustom) : parseRadix(fromSel.value);
@@ -184,10 +196,10 @@ const ROWS = [...PRESETS, 'custom'];
 		fromCustomLabel.hidden = !onFrom;
 	}
 
-	function group(): { group: boolean; groupSep: 'space' | 'underscore' } {
-		const v = (document.querySelector<HTMLInputElement>('input[name="grp"]:checked') ?? {}).value;
+	function group(): { group: boolean; groupSep: 'space' | 'hyphen' } {
+		const v = grp.value;
 		if (v === 'space') return { group: true, groupSep: 'space' };
-		if (v === 'underscore') return { group: true, groupSep: 'underscore' };
+		if (v === 'hyphen') return { group: true, groupSep: 'hyphen' };
 		return { group: false, groupSep: 'space' };
 	}
 
@@ -247,13 +259,11 @@ const ROWS = [...PRESETS, 'custom'];
 	fromCustom.addEventListener('input', run);
 	toCustom.addEventListener('input', run);
 	prec.addEventListener('input', () => {
-		precVal.textContent = prec.value;
+		precVal.textContent = String(prec.value);
 		run();
 	});
 	input.addEventListener('input', run);
-	document.querySelectorAll('input[name="grp"]').forEach((r) =>
-		r.addEventListener('change', run),
-	);
+	grp.addEventListener('change', run);
 
 	syncCustom();
 	run();

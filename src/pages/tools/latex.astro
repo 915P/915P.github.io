@@ -151,7 +151,15 @@ aria-label={item.label}
 ))}
 </div>
 
-<textarea id="tex" class="input latex-input mono" spellcheck="false" aria-label="LaTeX 输入">{DEFAULT_TEX}</textarea>
+<mdui-text-field
+	id="tex"
+	variant="outlined"
+	rows="11"
+	class="latex-input mono"
+	spellcheck="false"
+	aria-label="LaTeX 输入"
+	value={DEFAULT_TEX}
+></mdui-text-field>
 <div class="row" style="gap: 0.5rem; flex-wrap: wrap; margin-top: 0.75rem">
 <mdui-button variant="filled" id="render">重新渲染</mdui-button>
 <mdui-button variant="outlined" id="clear">清空</mdui-button>
