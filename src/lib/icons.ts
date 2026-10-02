@@ -58,6 +58,8 @@ import '@mdui/icons/arrow-back.js';
 // mdui-select 的下拉指示（arrow-right 是 mdui 内置的 Material Icons 字形名，
 // 依赖字体且本站不引 Google Fonts，故另注册一个 SVG 图标）
 import '@mdui/icons/arrow-drop-down.js';
+import '@mdui/icons/add.js';
+import '@mdui/icons/delete.js';
 import '@mdui/icons/check-circle.js';
 
 export {};

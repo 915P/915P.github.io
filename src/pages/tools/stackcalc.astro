@@ -11,6 +11,16 @@ const EXAMPLES = [
 '1 << 4',
 '!0 || 1',
 '10 > 3 && 2 < 4',
+'a + b * 2',
+'(a + b) / 2',
+'n > 0 ? a : b',
+'a = a + 10',
+'a++ + ++a',
+'1 ? 2 : 3',
+'0xFF + 0b1010 + 017',
+'(int)3.7 + 1',
+'10.0 / 4',
+'static_cast<unsigned>(-1)',
 ];
 ---
 
@@ -65,26 +75,41 @@ active="tools"
 <p id="error" class="text-sm" style="color: rgb(var(--mdui-color-error)); margin-top: 0.3rem"></p>
 </div>
 
-<section id="stackPanel" class="panel" style="margin-top: 1.25rem" hidden>
-<div class="row-between" style="align-items: baseline; margin-bottom: 0.6rem">
+<section id="stackPanel" class="panel" style="margin-top: 1.25rem">
+<div class="row-between stack-only" style="align-items: baseline; margin-bottom: 0.6rem">
 <h2 class="block-title">双栈演示</h2>
 <span class="text-xs faint" id="stepLabel"></span>
 </div>
 
 <div class="stack-stage">
-<div class="stack-box">
+<div class="stack-box stack-only">
 <h3 class="stack-title">操作数栈</h3>
 <div id="valueStack" class="stack-lane" aria-label="操作数栈"></div>
 </div>
-<div class="stack-box">
+<div class="stack-box stack-only">
 <h3 class="stack-title">运算符栈</h3>
 <div id="opStack" class="stack-lane" aria-label="运算符栈"></div>
 </div>
+
+<!-- 变量面板：与两个栈并排，方便对着栈图改值看变化 -->
+<div class="stack-box var-box">
+<div class="var-head">
+<h3 class="stack-title">变量</h3>
+<mdui-button variant="text" id="addVar">
+<mdui-icon-add></mdui-icon-add>
+添加
+</mdui-button>
+</div>
+<div id="varList" class="var-list"></div>
+<p class="text-xs faint var-hint">
+改动立即重算，栈图随之刷新。名字用字母、数字、下划线且不以数字开头，大小写敏感。
+</p>
+</div>
 </div>
 
-<div id="stepAction" class="stack-action" aria-live="polite"></div>
+<div id="stepAction" class="stack-action stack-only" aria-live="polite"></div>
 
-<div class="row" style="gap: 0.5rem; flex-wrap: wrap; margin-top: 0.9rem">
+<div class="row stack-only" style="gap: 0.5rem; flex-wrap: wrap; margin-top: 0.9rem">
 <mdui-button variant="outlined" id="prevStep">上一步</mdui-button>
 <mdui-button variant="filled" id="playStep">▶ 自动演示</mdui-button>
 <mdui-button variant="outlined" id="nextStep">下一步</mdui-button>
@@ -113,23 +138,147 @@ active="tools"
 </div>
 </section>
 
-<p class="footnote">
-支持算术 <code class="mono">+ - * / %</code>、关系 <code class="mono">&lt; &lt;= &gt; &gt;= == !=</code>、
-逻辑 <code class="mono">&& || !</code>、位运算 <code class="mono">&amp; | ^ ~ &lt;&lt; &gt;&gt;</code>、括号、
-一元正负号与小数。整数除法向零截断，位运算按 32 位整数处理。
+<details class="syntax-help" id="syntax-help">
+<summary>语法速查</summary>
+<dl>
+<dt>运算符</dt>
+<dd>
+算术 <code>+ - * / %</code> ·
+关系 <code>&lt; &lt;= &gt; &gt;= == !=</code> ·
+逻辑 <code>&amp;&amp; || !</code> ·
+位运算 <code>&amp; | ^ ~ &lt;&lt; &gt;&gt;</code> ·
+条件 <code>?:</code>
+</dd>
+<dt>赋值</dt>
+<dd>
+<code>= += -= *= /= %= &amp;= |= ^= &lt;&lt;= &gt;&gt;=</code>，
+会改变量并回写下方变量面板
+</dd>
+<dt>其他</dt>
+<dd>
+前置与后置 <code>++ --</code> ·
+逗号 <code>,</code> ·
+幂 <code>**</code>（本站扩展，C 没有）
+</dd>
+<dt>字面量</dt>
+<dd>
+<code>0x1F</code> 十六进制 ·
+<code>0b1010</code> 二进制 ·
+<code>017</code> 八进制 ·
+后缀 <code>u</code> <code>l</code> <code>ll</code> <code>f</code>
+</dd>
+<dt>类型转换</dt>
+<dd>
+<code>(int)3.7</code> = <code>int(3.7)</code> =
+<code>static_cast&lt;int&gt;(3.7)</code>，整型按位宽回绕：
+<code>(char)300</code> = <b>44</b>、<code>(unsigned)-1</code> = <b>4294967295</b>
+</dd>
+</dl>
+<div class="rules">
+<p>
+<b>除法按写法判定</b>：<code>10 / 3</code> 得 <b>3</b>，
+<code>10.0 / 3</code> 得 <b>3.3333…</b> —— 因为 JS 里 <code>10.0 === 10</code>，
+不能看值。
 </p>
+<p>
+<b>整数运算符只吃整数</b>：<code>% &amp; | ^ &lt;&lt; &gt;&gt; ~</code> 遇到浮点会报错，
+先写 <code>(int)</code> 转一下。
+</p>
+<p>
+按 C 标准，赋值要加括号才能放进 <code>?:</code> 分支。
+<code>long</code> / <code>size_t</code> 是 64 位，超过双精度安全整数时会报错。
+</p>
+</div>
+</details>
 </Page>
+
+<style>
+.syntax-help {
+	margin-top: 1.25rem;
+	padding: 0.7rem 0.9rem;
+	border: 1px solid rgb(var(--mdui-color-outline-variant));
+	border-radius: var(--mdui-shape-corner-medium);
+	background-color: rgb(var(--mdui-color-surface-container-low));
+}
+
+.syntax-help > summary {
+	cursor: pointer;
+	font-weight: 600;
+	font-size: 0.875rem;
+	color: rgb(var(--mdui-color-primary));
+	list-style-position: inside;
+}
+
+.syntax-help dl {
+	display: grid;
+	/* 类别名一列、内容一列，窄屏自动塌成单列 */
+	grid-template-columns: max-content 1fr;
+	gap: 0.4rem 0.9rem;
+	margin: 0.7rem 0 0;
+	font-size: 0.8125rem;
+	line-height: 1.7;
+}
+
+.syntax-help dt {
+	color: rgb(var(--mdui-color-on-surface-variant));
+	white-space: nowrap;
+}
+
+.syntax-help dd {
+	margin: 0;
+	color: rgb(var(--mdui-color-on-surface));
+}
+
+.syntax-help .rules {
+	margin-top: 0.7rem;
+	padding-top: 0.6rem;
+	border-top: 1px dashed rgb(var(--mdui-color-outline-variant));
+	font-size: 0.8125rem;
+	line-height: 1.7;
+	color: rgb(var(--mdui-color-on-surface-variant));
+}
+
+.syntax-help .rules p {
+	margin: 0 0 0.3rem;
+}
+
+.syntax-help code {
+	font-size: 0.8125rem;
+}
+
+@media (max-width: 599px) {
+	.syntax-help dl {
+		grid-template-columns: 1fr;
+		gap: 0.1rem;
+	}
+
+	.syntax-help dd {
+		margin-bottom: 0.5rem;
+	}
+}
+</style>
 
 <style is:global>
 .mono {
 font-family: var(--mdui-font-family-mono, ui-monospace, monospace);
 }
 
+/*
+ * 变量面板常驻 —— 不点「开始计算」也能加减变量。
+ * 没算过的时候只把演示相关的部分（标题、两个栈、动作行、翻步按钮）藏起来，
+ * 只留「变量」这一列。
+ */
+#stackPanel:not(.ready) .stack-only {
+display: none;
+}
+
 .stack-stage {
 display: grid;
-grid-template-columns: repeat(2, minmax(0, 1fr));
+/* 操作数栈 · 运算符栈 · 变量 并排；变量列略宽以容下名称+数值两个输入框 */
+grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(15rem, 1.3fr);
 gap: 1rem;
 margin-top: 0.5rem;
+align-items: start;
 }
 
 .stack-box {
@@ -230,9 +379,59 @@ color: rgb(var(--mdui-color-on-secondary-container));
 background-color: rgb(var(--mdui-color-surface-container-low));
 }
 
+.var-head {
+display: flex;
+align-items: center;
+justify-content: space-between;
+gap: 0.4rem;
+min-height: 2rem;
+}
+
+.var-head .stack-title {
+margin-bottom: 0;
+}
+
+.var-list {
+display: flex;
+flex-direction: column;
+gap: 0.5rem;
+margin-top: 0.4rem;
+}
+
+.var-hint {
+margin: 0.5rem 0 0;
+	line-height: 1.5;
+}
+
+.var-row {
+display: grid;
+/* 变量名与数值各占一半，右侧留给删除按钮 */
+grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+gap: 0.4rem;
+align-items: center;
+}
+
+.var-empty {
+font-size: 0.8125rem;
+color: rgb(var(--mdui-color-on-surface-variant));
+padding: 0.35rem 0;
+}
+
 .example-chip {
 cursor: pointer;
 font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+@media (max-width: 599px) {
+/* 放不下三列时先退成两列，变量独占一行 */
+@media (max-width: 899px) {
+.stack-stage {
+grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.var-box {
+grid-column: 1 / -1;
+}
 }
 
 @media (max-width: 599px) {
@@ -243,7 +442,7 @@ grid-template-columns: minmax(0, 1fr);
 </style>
 
 <script>
-import { evaluateExpression, type Step } from '../../lib/stack-eval';
+import { evaluateExpression, formatNumber, type Operand, type Step } from '../../lib/stack-eval';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) =>
 document.getElementById(id) as T;
@@ -279,6 +478,12 @@ return [...items]
 .join('');
 }
 
+/** 操作数 → 栈图上的文字：来自变量的显示成「a（5）」，其余就是数值本身 */
+function operandText(o: Operand): string {
+const v = String(o.value);
+return o.name ? `${o.name}（${v}）` : v;
+}
+
 function stopAuto() {
 if (timer !== null) {
 window.clearInterval(timer);
@@ -291,7 +496,7 @@ function showStep(index: number) {
 if (!currentSteps.length) return;
 currentStep = Math.max(0, Math.min(index, currentSteps.length - 1));
 const step = currentSteps[currentStep]!;
-valueStack.innerHTML = stackHtml(step.operands.map((n) => String(n)));
+valueStack.innerHTML = stackHtml(step.operands.map(operandText));
 opStack.innerHTML = stackHtml(step.operators, 'op');
 stepAction.textContent = `读取「${step.token}」：${step.action}`;
 stepLabel.textContent = `第 ${currentStep + 1} / ${currentSteps.length} 步`;
@@ -303,14 +508,14 @@ tr.classList.toggle('is-current', i === currentStep);
 function renderSteps(steps: Step[]) {
 currentSteps = steps;
 stepsPanel.hidden = steps.length === 0;
-stackPanel.hidden = steps.length === 0;
+stackPanel.classList.toggle('ready', steps.length > 0);
 stepCount.textContent = `${steps.length} 步`;
 stepsBody.innerHTML = steps
 .map(
 (s, i) => `<tr data-step="${i}">
 <td>${i + 1}</td>
 <td class="mono">${esc(s.token)}</td>
-<td>${esc(`[${s.operands.join(', ')}]`)}</td>
+<td>${esc(`[${s.operands.map(operandText).join(', ')}]`)}</td>
 <td>${esc(s.operators.join(' '))}</td>
 <td>${esc(s.action)}</td>
 </tr>`,
@@ -319,23 +524,180 @@ stepsBody.innerHTML = steps
 if (steps.length) showStep(0);
 }
 
+type Field = HTMLElement & { value: string };
+
+const varList = $('varList');
+
+/** 示例表达式所需的变量表：点示例 chip 时自动填好（定义在 script 内，frontmatter 取不到） */
+const EXAMPLE_VARS: Record<string, { name: string; value: string }[]> = {
+'a + b * 2': [
+{ name: 'a', value: '5' },
+{ name: 'b', value: '3' },
+],
+'(a + b) / 2': [
+{ name: 'a', value: '10' },
+{ name: 'b', value: '4' },
+],
+'n > 0 ? a : b': [
+{ name: 'n', value: '1' },
+{ name: 'a', value: '7' },
+{ name: 'b', value: '9' },
+],
+'a = a + 10': [{ name: 'a', value: '5' }],
+'a++ + ++a': [{ name: 'a', value: '1' }],
+};
+/** 变量编辑状态：name 为空表示这是一个空占位行，不参与求值 */
+let vars: { name: string; value: string }[] = [];
+
+function renderVars(): void {
+if (!vars.length) {
+varList.innerHTML = '<p class="var-empty">尚未定义变量，直接在表达式里写数字即可。</p>';
+return;
+}
+varList.innerHTML = vars
+.map(
+(v, i) => `<div class="var-row">
+<mdui-text-field
+variant="outlined"
+class="mono var-name"
+data-i="${i}"
+data-f="name"
+value="${escapeAttr(v.name)}"
+placeholder="变量名"
+autocomplete="off"
+spellcheck="false"
+aria-label="变量名"
+></mdui-text-field>
+<mdui-text-field
+variant="outlined"
+type="number"
+class="mono var-value"
+data-i="${i}"
+data-f="value"
+value="${escapeAttr(v.value)}"
+placeholder="数值"
+aria-label="变量值"
+></mdui-text-field>
+<mdui-button-icon
+variant="standard"
+class="var-del"
+data-i="${i}"
+aria-label="删除变量"
+title="删除变量"
+><mdui-icon-delete></mdui-icon-delete></mdui-button-icon>
+</div>`,
+)
+.join('');
+}
+
+function escapeAttr(s: string): string {
+return s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+}
+
+/** 收集当前变量表：名称合法且数值可解析的才进求值 */
+function collectVars(): { table: Record<string, number>; errors: string[] } {
+const table: Record<string, number> = {};
+const errors: string[] = [];
+vars.forEach((v, i) => {
+const name = v.name.trim();
+if (!name) return;
+if (!/^[A-Za-z_]\w*$/.test(name)) {
+errors.push(`第 ${i + 1} 个变量名「${name}」不合法：需以字母或下划线开头`);
+return;
+}
+const num = Number(v.value.trim());
+if (v.value.trim() === '' || !Number.isFinite(num)) {
+errors.push(`变量「${name}」的值不是有效数字`);
+return;
+}
+table[name] = num;
+});
+return { table, errors };
+}
+
 function run() {
 stopAuto();
 const source = expr.value.trim();
+const { table, errors } = collectVars();
 resultPanel.classList.add('hidden');
 renderSteps([]);
+if (errors.length) {
+resultPanel.classList.remove('hidden');
+result.textContent = '—';
+error.textContent = errors.join('；');
+return;
+}
 if (!source) return;
-const res = evaluateExpression(source);
+const res = evaluateExpression(source, table);
 resultPanel.classList.remove('hidden');
 if (res.ok) {
-result.textContent = String(res.result);
+// 与步骤快照用同一个格式化函数，否则大字结果会露出 3.3333333333333335 这种 double 噪声
+result.textContent = formatNumber(res.result!);
 error.textContent = '';
 } else {
 result.textContent = '—';
 error.textContent = res.error ?? '无法计算';
 }
 renderSteps(res.steps);
+
+/*
+ * 赋值与 ++/-- 会改变量表（evaluateExpression 返回 variables）。
+ * 把新值写回变量面板，这样「a = 5」算完后面板里 a 就变成 5，
+ * 继续算下一条表达式时接着用 —— 相当于一串语句连续求值。
+ */
+if (res.variables) {
+let changed = false;
+vars.forEach((v) => {
+const name = v.name.trim();
+if (!name) return;
+const next = res.variables![name];
+if (next !== undefined && next !== Number(v.value)) {
+v.value = String(next);
+changed = true;
 }
+});
+// 表达式里新声明的变量（a = 5 而 a 原本不存在）补进面板
+for (const [name, value] of Object.entries(res.variables)) {
+if (!vars.some((v) => v.name.trim() === name)) {
+vars.push({ name, value: String(value) });
+changed = true;
+}
+}
+if (changed) renderVars();
+}
+}
+
+$('addVar').addEventListener('click', () => {
+vars.push({ name: '', value: '' });
+renderVars();
+const last = varList.querySelector<HTMLElement>('.var-row:last-child .var-name');
+last?.shadowRoot?.querySelector<HTMLInputElement>('input')?.focus();
+});
+
+// 用 input 事件做实时求值；mdui-text-field 的 input 会冒泡到宿主
+varList.addEventListener('input', (e) => {
+const t = e.target as Field;
+if (!t.dataset || (t.dataset.f !== 'name' && t.dataset.f !== 'value')) return;
+const i = Number(t.dataset.i);
+if (!vars[i]) return;
+vars[i]![t.dataset.f as 'name' | 'value'] = t.value;
+run();
+});
+
+varList.addEventListener('click', (e) => {
+const btn = (e.target as HTMLElement).closest<HTMLElement>('.var-del');
+if (!btn) return;
+vars.splice(Number(btn.dataset.i), 1);
+renderVars();
+run();
+});
+
+// 带 #syntax-help 直接进来时展开，否则跳到页面底部只看到一行折叠标题
+if (location.hash === '#syntax-help') {
+document.querySelector('.syntax-help')?.setAttribute('open', '');
+}
+
+renderVars();
 
 $('go').addEventListener('click', run);
 $('clear').addEventListener('click', () => {
@@ -385,6 +747,12 @@ showStep(Number(tr.dataset.step));
 document.querySelectorAll<HTMLElement>('[data-expr]').forEach((chip) => {
 chip.addEventListener('click', () => {
 expr.value = chip.dataset.expr ?? '';
+// 带变量的示例自动填好变量，避免点了就报「未定义的变量」
+const preset = EXAMPLE_VARS[chip.dataset.expr ?? ''];
+if (preset) {
+vars = preset.map((x) => ({ ...x }));
+renderVars();
+}
 run();
 expr.focus();
 });
