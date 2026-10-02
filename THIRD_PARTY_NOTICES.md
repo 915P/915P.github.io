@@ -337,6 +337,35 @@ Telecommunications' 《标准电码本》.
 - **Copyright notice**: the `LICENSE` file in this directory is distributed
   alongside the source, satisfying MIT's notice-retention requirement.
 
+## 9a. XITS (math font for the LaTeX editor)
+
+- **Location**: `public/fonts/math/`
+- **Upstream**: <https://ctan.org/pkg/xits> (STIX fonts by STI Pub Companies,
+  MicroPress, Elsevier, (URW)++, Khaled Hosny and Daniel Benjamin Miller)
+- **Version**: 2019 release (files dated 2020-07-02)
+- **License**: **SIL Open Font License 1.1**
+- **Files**:
+  - `XITS-Main-Regular.woff2`, `XITS-Main-Italic.woff2`,
+    `XITS-Main-Bold.woff2`, `XITS-Main-BoldItalic.woff2` (~104 KB total)
+  - `XITS-OFL.txt` (upstream license text)
+- **Modifications**: the upstream OTF files were subsetted with `fontTools`
+  (`pyftsubset`) to a Latin-only character set — ASCII, Latin-1 Supplement,
+  Greek, Mathematical Alphanumeric Symbols (U+1D400–U+1D7FF) and common math
+  operators — then converted to WOFF2. No glyph outlines were modified, only
+  the character set was narrowed. The upstream `XITSMath-*` files were dropped
+  because their italic variants are the same glyphs as `XITS-Italic`.
+- **Usage**: optional math typeface for `/tools/latex/`, selectable in the page
+  header of the “渲染结果” panel, and persisted in `localStorage` under
+  `915p-latex-math-font`.
+  It replaces KaTeX's `KaTeX_Main` and `KaTeX_Math` families only; the symbol
+  families (`KaTeX_Size1/2/3/4`, `KaTeX_AMS`, …) remain KaTeX's own.
+  See `src/styles/katex-fonts.css`.
+- **Copyright notice**: `XITS-OFL.txt` is distributed alongside the fonts,
+  satisfying OFL's notice-retention requirement. The OFL requires that the
+  Reserved Font Names (`STIX Fonts`, `TM Math`) not be used for modified
+  versions; the family is referenced as `XITS` and no modified build is
+  redistributed under a reserved name.
+
 ---
 
 ## 10. html-to-image (LaTeX formula export)

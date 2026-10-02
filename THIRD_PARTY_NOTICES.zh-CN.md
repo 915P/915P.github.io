@@ -272,6 +272,29 @@ translatewiki，采用 **CC BY 3.0**，不在 BSD-3-Clause 覆盖范围内。
   公式输入只在浏览器本地计算，不上传服务器。
 - **版权声明**：本目录内 `LICENSE` 文件随源码一同分发，满足 MIT 的保留声明义务。
 
+## 9a. XITS（LaTeX 编辑器的数学字体）
+
+- **位置**：`public/fonts/math/`
+- **上游**：<https://ctan.org/pkg/xits>（STIX 字体，作者包括 STI Pub Companies、
+  MicroPress、Elsevier、(URW)++、Khaled Hosny、Daniel Benjamin Miller）
+- **版本**：2019 版（文件日期 2020-07-02）
+- **许可证**：**SIL Open Font License 1.1**
+- **文件**：
+  - `XITS-Main-Regular.woff2`、`XITS-Main-Italic.woff2`、
+    `XITS-Main-Bold.woff2`、`XITS-Main-BoldItalic.woff2`（合计约 104 KB）
+  - `XITS-OFL.txt`（上游许可证原文）
+- **本站改动**：上游 OTF 用 `fontTools`（`pyftsubset`）子集化为仅含拉丁字符集
+  —— ASCII、Latin-1 补充、希腊字母、数学字母数字符号（U+1D400–U+1D7FF）
+  与常用数学运算符 —— 再转为 WOFF2。**未修改任何字形轮廓**，只收窄了字符集。
+  上游的 `XITSMath-*` 文件被舍弃，因为其斜体字形与 `XITS-Italic` 相同。
+- **用途**：`/tools/latex/` 可选数学字体，在「渲染结果」面板标题行切换，
+  选择结果存于 `localStorage`（键名 `915p-latex-math-font`）。它只替换 KaTeX 的
+  `KaTeX_Main` 与 `KaTeX_Math` 两个字体族；符号族（`KaTeX_Size1/2/3/4`、
+  `KaTeX_AMS` 等）仍用 KaTeX 自带的。详见 `src/styles/katex-fonts.css`。
+- **版权声明**：`XITS-OFL.txt` 随字体一同分发，满足 OFL 的保留声明义务。
+  OFL 要求修改版本不得使用保留字体名（`STIX Fonts`、`TM Math`）；本站以
+  `XITS` 引用该字体族，且未以保留名分发任何修改版本。
+
 ---
 
 ## 10. html-to-image（LaTeX 公式导出）

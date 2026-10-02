@@ -1,0 +1,94 @@
+/*
+ * KaTeX 数学字体可切换（XITS ↔ KaTeX 原生）。
+ *
+ * ── 加载顺序 ────────────────────────────────────────────────────────────
+ * 本文件必须排在 katex.min.css **之后**。实测 dist 产物中 global.css 排在
+ * katex.min.css 之前，若把规则写进 global.css 会被后者的规则盖掉。
+ * latex.astro 在 katex 的 <link> 之后引用本文件，顺序才正确。
+ *
+ * ── 为什么只覆盖这 8 条 ─────────────────────────────────────────────────
+ * 从 katex.min.css 里提取所有声明了 KaTeX_Main / KaTeX_Math 的规则，
+ * 一共只有 8 条选择器（见下方注释）。符号族 KaTeX_Size1/2/3/4、KaTeX_AMS、
+ * KaTeX_Caligraphic、KaTeX_Fraktur、KaTeX_SansSerif、KaTeX_Script、
+ * KaTeX_Typewriter 全部不动 —— 积分号、求和号、大运算符这些字形只有
+ * KaTeX_Size 系列与 AMS 里有，XITS 不提供对应切片，动它们会直接缺字。
+ *
+ * 用 CSS 变量而不是重定义 @font-face：@font-face 无法按 html 属性条件化，
+ * 没法做成可切换的。
+ *
+ * ── 字体 ────────────────────────────────────────────────────────────────
+ * XITS，SIL Open Font License 1.1。latin 子集约 104 KB，自托管于
+ * public/fonts/math/，授权副本见同目录 XITS-OFL.txt。
+ */
+
+@font-face {
+	font-family: 'XITS';
+	font-style: normal;
+	font-weight: 400;
+	font-display: swap;
+	src: url('/fonts/math/XITS-Main-Regular.woff2') format('woff2');
+}
+
+@font-face {
+	font-family: 'XITS';
+	font-style: italic;
+	font-weight: 400;
+	font-display: swap;
+	src: url('/fonts/math/XITS-Main-Italic.woff2') format('woff2');
+}
+
+@font-face {
+	font-family: 'XITS';
+	font-style: normal;
+	font-weight: 700;
+	font-display: swap;
+	src: url('/fonts/math/XITS-Main-Bold.woff2') format('woff2');
+}
+
+@font-face {
+	font-family: 'XITS';
+	font-style: italic;
+	font-weight: 700;
+	font-display: swap;
+	src: url('/fonts/math/XITS-Main-BoldItalic.woff2') format('woff2');
+}
+
+/* 未开启 data-katex-font 时这两个变量不生效，默认仍是 KaTeX 原生 */
+:root[data-katex-font='xits'] {
+	--katex-main: 'XITS';
+	--katex-math: 'XITS';
+}
+
+:root {
+	--katex-main: 'KaTeX_Main';
+	--katex-math: 'KaTeX_Math';
+}
+
+/*
+ * 这 8 条与 katex.min.css 里的选择器一一对应：
+ *   .katex            .katex .mathnormal   .katex .mathrm
+ *   .katex .mathit     .katex .mathbf       .katex .boldsymbol
+ *   .katex .mainrm    .katex .textrm
+ *
+ * 后面跟 KaTeX 原生族作兜底：XITS 缺某个字形时回退，避免显示成豆腐块。
+ */
+:root[data-katex-font='xits'] .katex,
+:root[data-katex-font='xits'] .katex .mathnormal,
+:root[data-katex-font='xits'] .katex .mathit,
+:root[data-katex-font='xits'] .katex .mathrm,
+:root[data-katex-font='xits'] .katex .mathbf,
+:root[data-katex-font='xits'] .katex .boldsymbol,
+:root[data-katex-font='xits'] .katex .mainrm,
+:root[data-katex-font='xits'] .katex .textrm {
+	font-family: var(--katex-main), var(--katex-math);
+}
+
+/*
+ * 变量、直立体与 \mathrm/\textrm 固定用 XITS 正体切片；
+ * .mathit 自带 font-style: italic，浏览器会自动取 XITS 斜体切片。
+ */
+:root[data-katex-font='xits'] .katex .mathit,
+:root[data-katex-font='xits'] .katex .mathnormal,
+:root[data-katex-font='xits'] .katex .textrm {
+	font-family: 'XITS', var(--katex-math);
+}
