@@ -309,6 +309,56 @@ translatewiki，采用 **CC BY 3.0**，不在 BSD-3-Clause 覆盖范围内。
 
 ---
 
+## 11. @cantoo/pdf-lib（PDF 工具箱：页面重组与元数据）
+
+- **位置**：`public/vendor/pdf/`
+- **上游**：<https://github.com/cantoo-scribe/pdf-lib>（npm 包 `@cantoo/pdf-lib`），
+  <https://github.com/Hopding/pdf-lib> 的维护中分支
+- **版本**：2.11.1
+- **许可证**：**MIT**，Copyright (c) 2019 Andrew Dillon
+- **文件**：`pdf-lib.min.js`（UMD 构建，617 KB）、`LICENSE.md`
+- **用途**：在 `/tools/pdf/` 中合并、拆分、重排、旋转、删除、复制页面，
+  把图片转成 PDF 页面，以及读写文档元数据。首次使用时才懒加载。
+- **本站改动**：无（上游 UMD 构建原样复制）。
+- **补充说明**：该包同时出现在 `devDependencies`，仅为让 `src/lib/pdf-ops.ts`
+  使用其TypeScript 类型、并让 `scripts/pdf-test.mjs` 能在 Node 里跑回归测试；
+  浏览器加载的始终是上面 vendor 的 UMD 构建，不会打进 npm 那份。
+
+---
+
+## 12. pdf.js（PDF 工具箱：页面缩略图渲染）
+
+- **位置**：`public/vendor/pdfjs/`
+- **上游**：<https://github.com/mozilla/pdf.js>（npm 包 `pdfjs-dist`）
+- **版本**：6.4.299
+- **许可证**：**Apache-2.0**，Copyright Mozilla Foundation 与 pdf.js 贡献者
+- **文件**：`build/pdf.min.mjs` + `build/pdf.worker.min.mjs`
+  （vendor 时改名为 `pdf.min.mjs` / `pdf.worker.min.mjs`）、
+  `cmaps/`（1.7 MB，CJK 编码用的字符映射）、`standard_fonts/`
+  （820 KB，14 种标准字体的度量与字体程序）、`LICENSE`
+- **用途**：在 `/tools/pdf/` 中渲染页面缩略图、报告页数，并处理
+  带打开密码的加密文档（`password` 选项）。
+- **本站改动**：无。未 vendor 的部分：`wasm/`、`legacy/`、`web/`、
+  `image_decoders/`、`iccs/`（页面设置了 `useWasm: false`，因此不携带
+  JPEG 2000 / JBIG2 的 WASM 解码器，这类图片会渲染为空白）。
+- **商标**：「Mozilla」与 pdf.js 标识是 Mozilla 基金会商标；
+  本项目与其无隶属或背书关系。
+
+---
+
+## 13. fflate（PDF 工具箱：拆分结果打包 ZIP）
+
+- **位置**：`public/vendor/fflate/`
+- **上游**：<https://github.com/101arrowz/fflate>（npm 包 `fflate`）
+- **版本**：0.8.3
+- **许可证**：**MIT**，Copyright (c) 2026 Arjun Barrett
+- **文件**：`fflate.umd.js`（UMD 构建）、`LICENSE`
+- **用途**：在 `/tools/pdf/` 中把拆分得到的多个单页 PDF 打包成一个 ZIP
+  （`level: 0`，即不再二次压缩）。
+- **本站改动**：无（文件取自包内的 `umd/index.js`）。
+
+---
+
 ## 站点自研部分
 
 以下内容为本站原创，采用根目录 [LICENSE](LICENSE) 中的 MIT 许可：
@@ -324,6 +374,11 @@ translatewiki，采用 **CC BY 3.0**，不在 BSD-3-Clause 覆盖范围内。
   取自通用的 Octocat 16×16 路径
 - 博客文章正文（`src/content/blog/*.md`）
 - GitHub Actions 部署流程（`.github/workflows/deploy.yml`）
+- **`/tools/pdf/` PDF 工具箱** —— 本站从零自研：`src/lib/pdf-ops.ts`
+  （基于 pdf-lib 的页面重组、元数据、图片转 PDF）、`src/lib/pdf-loader.ts`
+  （三个 vendor 库的懒加载）与 `src/pages/tools/pdf.astro`，
+  以及 Node 回归测试 `scripts/pdf-test.mjs`。不含任何第三方代码，
+  pdf-lib / pdf.js / fflate 均以未经修改的上游构建引入（见 §11–§13）。
 - **`/tools/oscope/` 示波器** —— 本站从零自研：`src/lib/oscope/`
   （`types.ts`、`capture.ts`、`ring.ts`、`measure.ts`、`fft.ts`、`render.ts`、
   `export.ts`、`recorder.ts`）与 `src/pages/tools/oscope.astro`。

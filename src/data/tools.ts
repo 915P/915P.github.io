@@ -132,6 +132,15 @@ export const builtinTools: Tool[] = [
 		href: '/tools/latex/',
 	},
 	{
+		slug: 'pdf',
+		name: 'PDF 工具箱',
+		desc: '合并、拆分、页面管理与图片转 PDF，全部本地完成',
+		icon: 'picture-as-pdf',
+		category: '工具',
+		status: 'live',
+		href: '/tools/pdf/',
+	},
+	{
 		slug: 'mindmap',
 		name: '思维导图',
 		desc: 'My Mind 开源思维导图编辑器',

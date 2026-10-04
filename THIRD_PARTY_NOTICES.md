@@ -382,6 +382,58 @@ Telecommunications' 《标准电码本》.
 
 ---
 
+## 11. @cantoo/pdf-lib (PDF toolbox: page assembly and metadata)
+
+- **Location**: `public/vendor/pdf/`
+- **Upstream**: <https://github.com/cantoo-scribe/pdf-lib> (npm package
+  `@cantoo/pdf-lib`), a maintained fork of <https://github.com/Hopding/pdf-lib>
+- **Version**: 2.11.1
+- **License**: **MIT**, Copyright (c) 2019 Andrew Dillon
+- **Files**: `pdf-lib.min.js` (UMD build, 617 KB), `LICENSE.md`
+- **Purpose**: in `/tools/pdf/`, merges, splits, reorders, rotates, deletes and
+  duplicates pages, converts images into PDF pages, and reads/writes document
+  metadata. Loaded lazily on first use.
+- **Site modifications**: none (unmodified upstream UMD build).
+- **Note**: the package is also present in `devDependencies` purely so that
+  `src/lib/pdf-ops.ts` can use its TypeScript types and so that
+  `scripts/pdf-test.mjs` can run the regression tests in Node; the browser loads
+  the vendored UMD build above, never the npm copy.
+
+---
+
+## 12. pdf.js (PDF toolbox: page preview rendering)
+
+- **Location**: `public/vendor/pdfjs/`
+- **Upstream**: <https://github.com/mozilla/pdf.js> (npm package `pdfjs-dist`)
+- **Version**: 6.4.299
+- **License**: **Apache-2.0**, Copyright Mozilla Foundation and pdf.js contributors
+- **Files**: `build/pdf.min.mjs` + `build/pdf.worker.min.mjs` (vendored as
+  `pdf.min.mjs` / `pdf.worker.min.mjs`), `cmaps/` (1.7 MB, character maps for
+  CJK encodings), `standard_fonts/` (820 KB, metrics and program files for the
+  14 standard fonts), `LICENSE`
+- **Purpose**: in `/tools/pdf/`, renders page thumbnails and reports the page
+  count; also handles password-protected documents (`password` option).
+- **Site modifications**: none. Not vendored: `wasm/`, `legacy/`, `web/`,
+  `image_decoders/`, `iccs/` (the page sets `useWasm: false`, so the WASM
+  decoders for JPEG 2000 / JBIG2 are not shipped; such images render blank).
+- **Trademarks**: "Mozilla" and the pdf.js logo are trademarks of the Mozilla
+  Foundation. This project is not affiliated with or endorsed by them.
+
+---
+
+## 13. fflate (PDF toolbox: ZIP packaging for split output)
+
+- **Location**: `public/vendor/fflate/`
+- **Upstream**: <https://github.com/101arrowz/fflate> (npm package `fflate`)
+- **Version**: 0.8.3
+- **License**: **MIT**, Copyright (c) 2026 Arjun Barrett
+- **Files**: `fflate.umd.js` (UMD build), `LICENSE`
+- **Purpose**: in `/tools/pdf/`, packs the single-page PDFs produced by the split
+  tool into one ZIP archive (`level: 0`, i.e. stored without re-compression).
+- **Site modifications**: none (file copied from the package's `umd/index.js`).
+
+---
+
 ## The site's own work
 
 The following is original to this site and is covered by the MIT license in the
@@ -402,6 +454,12 @@ root [LICENSE](LICENSE):
   generic Octocat 16×16 path
 - Blog post bodies (`src/content/blog/*.md`)
 - The GitHub Actions deployment flow (`.github/workflows/deploy.yml`)
+- **The PDF toolbox at `/tools/pdf/`** — written from scratch for this site:
+  `src/lib/pdf-ops.ts` (page assembly, metadata and image conversion on top of
+  pdf-lib), `src/lib/pdf-loader.ts` (lazy loading of the three vendored
+  libraries) and `src/pages/tools/pdf.astro`, plus the Node regression test
+  `scripts/pdf-test.mjs`. It bundles no third-party code; pdf-lib, pdf.js and
+  fflate are used as unmodified upstream builds (§11–§13).
 - **The oscilloscope at `/tools/oscope/`** — written from scratch for this site:
   `src/lib/oscope/` (`types.ts`, `capture.ts`, `ring.ts`, `measure.ts`, `fft.ts`,
   `render.ts`, `export.ts`, `recorder.ts`) and `src/pages/tools/oscope.astro`.

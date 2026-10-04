@@ -1,0 +1,1449 @@
+---
+import Page from '../../layouts/Page.astro';
+---
+
+<Page
+	title="PDF 工具箱"
+	description="在浏览器里合并、拆分、旋转与重排 PDF 页面，把图片转成 PDF，编辑文档元数据。文件不上传。"
+	active="tools"
+>
+	<div class="tool-head head-split">
+		<div class="head-title">
+			<h1>PDF 工具箱</h1>
+			<p class="lede">
+				合并、拆分、页面管理与图片转 PDF，全部在浏览器本地完成，文件不会上传到任何服务器。
+			</p>
+		</div>
+		<div class="head-tools">
+			<mdui-chip variant="tonal">
+				<mdui-icon-lock></mdui-icon-lock>
+				本地处理
+			</mdui-chip>
+		</div>
+	</div>
+
+	<section class="panel-lg pdf-progress" id="progressPanel" hidden>
+		<div class="row-between pdf-progress-head">
+			<span class="text-sm" id="progressText" role="status">准备中…</span>
+			<span class="text-xs faint" id="progressPercent"></span>
+		</div>
+		<mdui-linear-progress id="progressBar" value="0" max="1"></mdui-linear-progress>
+	</section>
+
+	<mdui-tabs value="merge" full-width id="pdfTabs" class="pdf-tabs">
+		<mdui-tab value="merge">合并</mdui-tab>
+		<mdui-tab value="split">拆分</mdui-tab>
+		<mdui-tab value="pages">页面管理</mdui-tab>
+		<mdui-tab value="images">图片转 PDF</mdui-tab>
+		<mdui-tab value="meta">元数据</mdui-tab>
+
+		<mdui-tab-panel slot="panel" value="merge">
+			<section class="pdf-tab-body">
+				<div class="pdf-picker">
+					<div class="pdf-drop" id="mergeDrop">
+						<mdui-button variant="outlined" id="mergePick">
+							<mdui-icon-upload slot="icon"></mdui-icon-upload>
+							选择 PDF 文件（可多选）
+						</mdui-button>
+						<span class="text-xs faint">也可以把文件直接拖到这里</span>
+					</div>
+					<p class="text-xs faint">
+						按列表顺序合并，可用 ↑ ↓ 调整先后；文件名重复的会自动加序号。
+					</p>
+				</div>
+				<ul class="pdf-list" id="mergeList"></ul>
+				<div class="row pdf-actions">
+					<mdui-button variant="filled" id="mergeRun">合并并下载</mdui-button>
+					<mdui-button variant="text" id="mergeClear">清空列表</mdui-button>
+					<span class="text-xs faint" id="mergeSummary"></span>
+				</div>
+			</section>
+		</mdui-tab-panel>
+
+		<mdui-tab-panel slot="panel" value="split">
+			<section class="pdf-tab-body">
+				<div class="pdf-picker">
+					<div class="pdf-drop" id="splitDrop">
+						<mdui-button variant="outlined" id="splitPick">
+							<mdui-icon-upload slot="icon"></mdui-icon-upload>
+							选择一个 PDF 文件
+						</mdui-button>
+						<span class="text-xs faint">也可以把文件直接拖到这里</span>
+					</div>
+					<p class="text-xs faint" id="splitInfo">支持加密文件：遇到密码会弹出输入框。</p>
+				</div>
+
+				<mdui-radio-group value="each" id="splitMode" class="pdf-modes">
+					<mdui-radio value="each">每页一个文件</mdui-radio>
+					<mdui-radio value="range">按区间拆分</mdui-radio>
+					<mdui-radio value="pick">勾选需要的页面</mdui-radio>
+				</mdui-radio-group>
+
+				<div id="splitRangeBox" hidden>
+					<mdui-text-field
+						id="splitRanges"
+						variant="outlined"
+						label="页码区间"
+						value="1-3,4-8"
+						helper="逗号分隔；5 表示第 5 页，5- 表示第 5 页到末尾，-3 表示开头到第 3 页"
+					></mdui-text-field>
+				</div>
+
+				<div id="splitPickBox" hidden>
+					<div class="pdf-grid" id="splitGrid"></div>
+				</div>
+
+				<div class="row pdf-actions">
+					<mdui-button variant="filled" id="splitRun">拆分并下载 ZIP</mdui-button>
+					<mdui-button variant="text" id="splitAll">全选 / 全不选</mdui-button>
+				</div>
+			</section>
+		</mdui-tab-panel>
+
+		<mdui-tab-panel slot="panel" value="pages">
+			<section class="pdf-tab-body">
+				<div class="pdf-picker">
+					<div class="pdf-drop" id="pagesDrop">
+						<mdui-button variant="outlined" id="pagesPick">
+							<mdui-icon-upload slot="icon"></mdui-icon-upload>
+							选择一个 PDF 文件
+						</mdui-button>
+						<span class="text-xs faint">也可以把文件直接拖到这里</span>
+					</div>
+					<p class="text-xs faint" id="pagesInfo">
+						拖动缩略图可以调整顺序，也可以用 ↑ ↓；旋转、复制、删除都在卡片上。
+					</p>
+				</div>
+				<div class="pdf-grid" id="pagesGrid"></div>
+				<div class="row pdf-actions">
+					<mdui-button variant="filled" id="pagesRun">应用并下载</mdui-button>
+					<mdui-button variant="text" id="pagesReset">重置</mdui-button>
+					<span class="text-xs faint" id="pagesSummary"></span>
+				</div>
+			</section>
+		</mdui-tab-panel>
+
+		<mdui-tab-panel slot="panel" value="images">
+			<section class="pdf-tab-body">
+				<div class="pdf-picker">
+					<div class="pdf-drop" id="imagesDrop">
+						<mdui-button variant="outlined" id="imagesPick">
+							<mdui-icon-upload slot="icon"></mdui-icon-upload>
+							选择图片（可多选）
+						</mdui-button>
+						<span class="text-xs faint">也可以把图片直接拖到这里</span>
+					</div>
+					<p class="text-xs faint">
+						支持 PNG / JPEG / WebP / GIF / AVIF，其它格式会先在浏览器里转成 PNG 再嵌入；
+						顺序即页序。
+					</p>
+				</div>
+				<ul class="pdf-list pdf-list-images" id="imagesList"></ul>
+
+				<div class="pdf-options">
+					<mdui-select id="imagesSize" variant="outlined" label="页面尺寸" value="fit">
+						<mdui-menu-item value="fit">适应图片</mdui-menu-item>
+						<mdui-menu-item value="a4">A4</mdui-menu-item>
+						<mdui-menu-item value="letter">Letter</mdui-menu-item>
+					</mdui-select>
+
+					<mdui-select id="imagesOrient" variant="outlined" label="方向" value="auto">
+						<mdui-menu-item value="auto">自动</mdui-menu-item>
+						<mdui-menu-item value="portrait">纵向</mdui-menu-item>
+						<mdui-menu-item value="landscape">横向</mdui-menu-item>
+					</mdui-select>
+
+					<mdui-select id="imagesMargin" variant="outlined" label="边距" value="24">
+						<mdui-menu-item value="0">无边距</mdui-menu-item>
+						<mdui-menu-item value="12">小（12 pt）</mdui-menu-item>
+						<mdui-menu-item value="24">中（24 pt）</mdui-menu-item>
+						<mdui-menu-item value="48">大（48 pt）</mdui-menu-item>
+					</mdui-select>
+				</div>
+
+				<div class="row pdf-actions">
+					<mdui-button variant="filled" id="imagesRun">生成 PDF</mdui-button>
+					<mdui-button variant="text" id="imagesClear">清空列表</mdui-button>
+					<span class="text-xs faint" id="imagesSummary"></span>
+				</div>
+			</section>
+		</mdui-tab-panel>
+
+		<mdui-tab-panel slot="panel" value="meta">
+			<section class="pdf-tab-body">
+				<div class="pdf-picker">
+					<div class="pdf-drop" id="metaDrop">
+						<mdui-button variant="outlined" id="metaPick">
+							<mdui-icon-upload slot="icon"></mdui-icon-upload>
+							选择一个 PDF 文件
+						</mdui-button>
+						<span class="text-xs faint">也可以把文件直接拖到这里</span>
+					</div>
+					<p class="text-xs faint" id="metaInfo">读取后可编辑；留空的字段会被清空。</p>
+				</div>
+
+				<div class="pdf-form">
+					<mdui-text-field id="metaTitle" variant="outlined" label="标题 Title"></mdui-text-field>
+					<mdui-text-field id="metaAuthor" variant="outlined" label="作者 Author"></mdui-text-field>
+					<mdui-text-field id="metaSubject" variant="outlined" label="主题 Subject"></mdui-text-field>
+					<mdui-text-field
+						id="metaKeywords"
+						variant="outlined"
+						label="关键词 Keywords"
+						helper="用逗号分隔"
+					></mdui-text-field>
+					<mdui-text-field id="metaProducer" variant="outlined" label="生成工具 Producer"></mdui-text-field>
+					<mdui-text-field id="metaCreator" variant="outlined" label="创建程序 Creator"></mdui-text-field>
+					<mdui-text-field id="metaCreated" variant="outlined" label="创建时间" readonly></mdui-text-field>
+					<mdui-text-field id="metaModified" variant="outlined" label="修改时间" readonly></mdui-text-field>
+				</div>
+
+				<div class="row pdf-actions">
+					<mdui-button variant="filled" id="metaRun">保存并下载</mdui-button>
+					<span class="text-xs faint" id="metaSummary"></span>
+				</div>
+			</section>
+		</mdui-tab-panel>
+	</mdui-tabs>
+
+	<mdui-dialog id="pwdDialog" headline="需要打开密码" close-on-esc>
+		<p class="text-sm muted">这个 PDF 已加密，请输入打开密码。</p>
+		<mdui-text-field id="pwdInput" type="password" toggle-password label="打开密码"></mdui-text-field>
+		<mdui-button slot="action" variant="text" id="pwdCancel">取消</mdui-button>
+		<mdui-button slot="action" variant="filled" id="pwdOk">确定</mdui-button>
+	</mdui-dialog>
+
+	<p class="footnote">
+		pdf-lib（MIT）、pdf.js（Apache-2.0）与 fflate（MIT）均为第三方开源库，本站本地分发；
+		许可与溯源详见仓库内 <code class="mono">THIRD_PARTY_NOTICES.md</code>。
+		注意：这些工具只重组页面与追加内容，<strong>不会压缩</strong>扫描件，也不保留原文件的书签目录。
+	</p>
+</Page>
+
+<style is:global>
+.pdf-tabs {
+	margin-top: 1.25rem;
+}
+
+/*
+ * 每个标签页内容留出内边距：直接放在 mdui-tab-panel 里的话，元素会贴着
+ * 内容区左右边缘「顶格」。这里只要留白，不要卡片底色。
+ */
+.pdf-tab-body {
+	display: flex;
+	flex-direction: column;
+	gap: 0.25rem;
+	padding: 1.15rem;
+}
+
+.pdf-progress {
+padding: 0.9rem 1.15rem;
+	margin-bottom: 1rem;
+}
+
+.pdf-progress-head {
+align-items: baseline;
+gap: 0.5rem;
+margin-bottom: 0.6rem;
+}
+
+.pdf-picker {
+max-width: 34rem;
+}
+
+.pdf-picker mdui-text-field {
+width: 100%;
+}
+
+.pdf-picker p {
+margin: 0.45rem 0 0;
+}
+
+/*
+ * 文件选择区 = 一个按钮 + 可拖放区域。
+ * 之前用 <mdui-text-field type="file">：它内部的原生 file input 与 outlined
+ * 标签叠在一起，标签文字和「选择文件」按钮互相压住，非常难看。
+ */
+.pdf-drop {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 0.5rem 0.85rem;
+	padding: 0.85rem;
+	border: 1px dashed rgb(var(--mdui-color-outline-variant));
+	border-radius: var(--mdui-shape-corner-medium);
+	transition:
+		border-color var(--mdui-motion-duration-short2),
+		background-color var(--mdui-motion-duration-short2);
+}
+
+.pdf-drop.is-over {
+	border-color: rgb(var(--mdui-color-primary));
+	background-color: rgb(var(--mdui-color-surface-container-high));
+}
+
+.pdf-list {
+display: flex;
+flex-direction: column;
+gap: 0.5rem;
+margin: 1rem 0 0;
+	padding: 0;
+	list-style: none;
+}
+
+.pdf-list:empty {
+display: none;
+}
+
+.pdf-item {
+display: flex;
+align-items: center;
+gap: 0.75rem;
+padding: 0.55rem 0.75rem;
+	border: 1px solid rgb(var(--mdui-color-outline-variant));
+	border-radius: var(--mdui-shape-corner-medium);
+	background-color: rgb(var(--mdui-color-surface-container-lowest));
+}
+
+.pdf-item-index {
+min-width: 1.6rem;
+	font-variant-numeric: tabular-nums;
+	color: rgb(var(--mdui-color-outline));
+}
+
+.pdf-item-body {
+flex: 1;
+min-width: 0;
+}
+
+.pdf-item-name {
+overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	font-size: var(--mdui-typescale-body-medium-size);
+}
+
+.pdf-item-meta {
+	font-size: var(--mdui-typescale-label-medium-size);
+	color: rgb(var(--mdui-color-outline));
+}
+
+.pdf-item-thumb {
+width: 2.6rem;
+	height: 3.4rem;
+	object-fit: cover;
+	border-radius: var(--mdui-shape-corner-small);
+	background-color: rgb(var(--mdui-color-surface-container-high));
+}
+
+.pdf-item-actions {
+display: flex;
+align-items: center;
+	gap: 0.15rem;
+}
+
+.pdf-actions {
+gap: 0.6rem;
+	margin-top: 1.1rem;
+}
+
+.pdf-modes {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.5rem 1.25rem;
+	margin-top: 1.1rem;
+}
+
+.pdf-grid {
+	display: grid;
+	gap: 0.75rem;
+	margin-top: 1.1rem;
+	grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr));
+}
+
+.pdf-grid:empty {
+	display: none;
+}
+
+.pdf-card {
+	display: flex;
+	flex-direction: column;
+	gap: 0.4rem;
+	padding: 0.5rem;
+	border: 1px solid rgb(var(--mdui-color-outline-variant));
+	border-radius: var(--mdui-shape-corner-medium);
+	background-color: rgb(var(--mdui-color-surface-container-lowest));
+}
+
+.pdf-card.is-dragging {
+opacity: 0.5;
+}
+
+.pdf-card.is-drop-target {
+	border-color: rgb(var(--mdui-color-primary));
+}
+
+.pdf-card canvas {
+display: block;
+	width: 100%;
+	height: auto;
+	border-radius: var(--mdui-shape-corner-small);
+	background-color: rgb(var(--mdui-color-surface-container-high));
+}
+
+/* 标签一行、按钮一行：5 个图标按钮挤在标题旁边会溢出卡片并压到相邻卡片上 */
+.pdf-card-bar {
+	display: flex;
+	flex-direction: column;
+	gap: 0.15rem;
+}
+
+.pdf-card-no {
+	font-size: var(--mdui-typescale-label-large-size);
+	font-variant-numeric: tabular-nums;
+}
+
+.pdf-card-from {
+	font-size: var(--mdui-typescale-label-medium-size);
+	color: rgb(var(--mdui-color-outline));
+}
+
+.pdf-card-tools {
+display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 0;
+	margin-top: 0.15rem;
+}
+
+.pdf-card-tools mdui-button-icon {
+	width: 1.9rem;
+	height: 1.9rem;
+}
+
+.pdf-options {
+	display: grid;
+	gap: 0.85rem;
+	margin-top: 1.1rem;
+	grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+}
+
+.pdf-form {
+	display: grid;
+	gap: 0.85rem;
+	margin-top: 1.1rem;
+	grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+}
+
+.pdf-empty {
+	margin-top: 1.1rem;
+	padding: 1.5rem 1rem;
+	border: 1px dashed rgb(var(--mdui-color-outline-variant));
+	border-radius: var(--mdui-shape-corner-medium);
+	text-align: center;
+	color: rgb(var(--mdui-color-outline));
+}
+</style>
+
+<script>
+	import { loadFflate, loadPdfJs, loadPdfLib, type PdfJsDocument } from '../../lib/pdf-loader';
+	import * as ops from '../../lib/pdf-ops';
+
+	type TextField = HTMLElement & { value: string; files?: FileList | null; updateComplete?: Promise<boolean> };
+	type Button = HTMLElement & { disabled: boolean };
+
+	const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
+
+	/* ------------------------------------------------------------------ 进度条 */
+
+	const progressPanel = $('progressPanel');
+	const progressBar = $<HTMLElement & { value: number }>('progressBar');
+	const progressText = $('progressText');
+	const progressPercent = $('progressPercent');
+	let progressDepth = 0;
+
+	function beginProgress(label: string): void {
+		progressDepth++;
+		progressPanel.hidden = false;
+		setProgress(0, 0, label);
+	}
+
+	function setProgress(loaded: number, total: number, label: string): void {
+		progressText.textContent = label;
+		if (total > 0) {
+			const ratio = Math.min(1, loaded / total);
+			progressBar.value = ratio;
+			progressPercent.textContent = `${Math.round(ratio * 100)}%`;
+		} else {
+			// 拿不到总大小（无 Content-Length / 不确定进度）时交给 indeterminate
+			progressBar.removeAttribute('value');
+			progressPercent.textContent = '';
+		}
+	}
+
+	function endProgress(text?: string): void {
+		progressDepth = Math.max(0, progressDepth - 1);
+		if (progressDepth > 0) return;
+		if (text) {
+			progressText.textContent = text;
+			progressBar.value = 1;
+			progressPercent.textContent = '100%';
+			window.setTimeout(() => {
+				progressPanel.hidden = true;
+			}, 1600);
+			return;
+		}
+		progressPanel.hidden = true;
+	}
+
+	/** 把 ops.Progress 的 (done, total, label) 接到进度条上 */
+	function fromOps() {
+		return (done: number, total: number, text: string) => setProgress(done, total, text);
+	}
+
+	/* ------------------------------------------------------------------ 通用 */
+
+	function toast(message: string): void {
+		const mdui = (window as unknown as { mdui?: { snackbar?: (o: { message: string }) => void } }).mdui;
+		mdui?.snackbar?.({ message });
+	}
+
+	function fail(error: unknown): void {
+		const message = ops.describeError(error);
+		endProgress();
+		toast(message);
+		console.error(error);
+	}
+
+	function download(bytes: Uint8Array, filename: string, type = 'application/pdf'): void {
+		const blob = new Blob([bytes as BlobPart], { type });
+		const url = URL.createObjectURL(blob);
+		const a = document.createElement('a');
+		a.href = url;
+		a.download = filename;
+		document.body.appendChild(a);
+		a.click();
+		a.remove();
+		window.setTimeout(() => URL.revokeObjectURL(url), 4000);
+	}
+
+	function baseName(name: string): string {
+		return name.replace(/\.[^.]+$/, '') || '未命名';
+	}
+
+	async function readBytes(file: File): Promise<Uint8Array> {
+		return new Uint8Array(await file.arrayBuffer());
+	}
+
+	/*
+	 * 文件选择：一个 <mdui-button> + 一个游离在 DOM 里的原生 <input type=file>。
+	 *
+	 * 不用 <mdui-text-field type="file">：它只把 type 透传给内部 input，
+	 * accept / multiple 要自己补，内部原生控件又与 outlined 标签叠在一起，
+	 * 文字和「选择文件」按钮互相压住（见 git 历史里被砍掉的那版）。
+	 * 这里按钮负责「打开文件对话框」，input 只在选完之后读一次 files，
+	 * 每次用完就丢弃，不会有 FileList 被清空的问题。
+	 * 拖放区同时支持把文件直接拖进来。
+	 */
+	function wireFilePicker(options: {
+		buttonId: string;
+		dropId: string;
+		accept: string;
+		multiple: boolean;
+		/** accept 的扩展名形式，用来过滤拖进来但类型不对的文件 */
+		extensions?: string[];
+		onFiles: (files: File[]) => void;
+	}): void {
+		const { buttonId, dropId, accept, multiple, extensions = [], onFiles } = options;
+		const pick = (list: FileList | null | undefined): File[] => {
+			const all = Array.from(list ?? []);
+			const ok = extensions.length
+				? all.filter((file) => {
+						const ext = file.name.slice(file.name.lastIndexOf('.')).toLowerCase();
+						return extensions.includes(ext);
+					})
+				: all;
+			if (all.length && ok.length !== all.length) toast('已忽略不支持的文件类型');
+			return multiple ? ok : ok.slice(0, 1);
+		};
+		const button = document.getElementById(buttonId);
+		const drop = document.getElementById(dropId);
+		const input = document.createElement('input');
+		input.type = 'file';
+		input.accept = accept;
+		input.multiple = multiple;
+		input.hidden = true;
+		input.dataset.picker = dropId;
+		input.addEventListener('change', () => {
+			const files = pick(input.files);
+			// 清空，保证同一个文件再次选择也会触发 change
+			input.value = '';
+			if (files.length) onFiles(files);
+		});
+		document.body.appendChild(input);
+		button?.addEventListener('click', () => input.click());
+		if (!drop) return;
+		drop.addEventListener('dragover', (event) => {
+			event.preventDefault();
+			drop.classList.add('is-over');
+		});
+		drop.addEventListener('dragleave', () => drop.classList.remove('is-over'));
+		drop.addEventListener('drop', (event) => {
+			event.preventDefault();
+			drop.classList.remove('is-over');
+			const files = pick(event.dataTransfer?.files);
+			if (files.length) onFiles(files);
+		});
+	}
+
+	function setDisabled(id: string, disabled: boolean): void {
+		const el = document.getElementById(id) as Button | null;
+		if (el) el.disabled = disabled;
+	}
+
+	/* ------------------------------------------------------------------ 打开文档（含密码） */
+
+	const pwdDialog = $<HTMLElement & { open: boolean }>('pwdDialog');
+	const pwdInput = $<TextField>('pwdInput');
+
+	function askPassword(): Promise<string | null> {
+		return new Promise((resolve) => {
+			pwdInput.value = '';
+			pwdDialog.open = true;
+			const finish = (value: string | null) => {
+				$('pwdOk').removeEventListener('click', onOk);
+				$('pwdCancel').removeEventListener('click', onCancel);
+				pwdDialog.removeEventListener('closed', onCancel);
+				// 必须关掉：mdui-dialog 是模态，留着会盖住整页，
+				// 后面所有按钮的真实点击都会落在遮罩上。
+				pwdDialog.open = false;
+				resolve(value);
+			};
+			const onOk = () => finish(pwdInput.value);
+			const onCancel = () => finish(null);
+			$('pwdOk').addEventListener('click', onOk);
+			$('pwdCancel').addEventListener('click', onCancel);
+			pwdDialog.addEventListener('closed', onCancel);
+		});
+	}
+
+	interface Preview {
+		doc: PdfJsDocument;
+		/** pdf.js v6 已移除 PDFDocumentProxy.destroy()，只能 cleanup + 销毁 loadingTask */
+		close: () => Promise<void>;
+	}
+
+	/** 用 pdf.js 打开（只为缩略图与页数），密码由对话框收集 */
+	async function openForPreview(bytes: Uint8Array, name: string): Promise<Preview> {
+		const pdfjs = await loadPdfJs((loaded, total, label) => setProgress(loaded, total, `${label}…`));
+		for (let attempt = 0; attempt < 3; attempt++) {
+			const task = pdfjs.getDocument({
+				// 必须给副本：pdf.js 会把 buffer transfer 给 worker，原数组随即 detach，
+				// 第二次尝试（比如重输密码）就会拿到空 buffer。
+				data: bytes.slice(),
+				...(pdfPassword ? { password: pdfPassword } : {}),
+				cMapUrl: '/vendor/pdfjs/cmaps/',
+				cMapPacked: true,
+				standardFontDataUrl: '/vendor/pdfjs/standard_fonts/',
+				useWasm: false,
+				isEvalSupported: false,
+			});
+			task.onProgress?.((state) => {
+				if (state.total > 0) setProgress(state.loaded, state.total, `解析 ${name}…`);
+			});
+			try {
+				const doc = await task.promise;
+				return {
+					doc,
+					close: async () => {
+						doc.cleanup();
+						await task.destroy();
+					},
+				};
+			} catch (error) {
+				await task.destroy().catch(() => undefined);
+				const kind = String((error as { name?: string })?.name ?? '');
+				if (kind === 'PasswordException' && attempt < 2) {
+					const password = await askPassword();
+					if (password === null) throw new Error('已取消输入密码');
+					pdfPassword = password;
+					continue;
+				}
+				throw error;
+			}
+		}
+		throw new Error('密码不正确');
+	}
+
+	let pdfPassword: string | undefined;
+
+	/** 顺序打开：先试无密码，失败再问密码（pdf-lib 抛的是纯 Error） */
+	async function loadDoc(bytes: Uint8Array): Promise<ops.MetaInfo> {
+		try {
+			return await ops.readMeta(bytes, { password: pdfPassword, updateProgress: fromOps() });
+		} catch (error) {
+			if (/加密|password|密码/i.test(String((error as Error).message)) && !pdfPassword) {
+				const password = await askPassword();
+				if (password === null) throw new Error('已取消输入密码');
+				pdfPassword = password;
+				return ops.readMeta(bytes, { password, updateProgress: fromOps() });
+			}
+			throw error;
+		}
+	}
+
+	/* ------------------------------------------------------------------ 缩略图 */
+
+	const THUMB_WIDTH = 150;
+
+	// 每次重绘网格 / 换文件都会 +1；旧渲染任务发现自己过期就直接退出，
+	// 否则 pdf.js 会对已销毁的文档刷一串 "Invalid page request" 警告。
+	let thumbGeneration = 0;
+	let thumbQueue: Promise<unknown> = Promise.resolve();
+
+	/** 串行渲染：同一页被复制成多张卡片时并发 getPage/render 会触发 pdf.js 的 Invalid page request */
+	function enqueueThumb(task: () => Promise<void>): void {
+		thumbQueue = thumbQueue.then(task).catch(() => undefined);
+	}
+
+	async function paintPage(
+		view: PdfJsDocument,
+		pageNumber: number,
+		canvas: HTMLCanvasElement,
+		rotation = 0,
+		generation = thumbGeneration,
+	): Promise<void> {
+		// pdf.js v6 的 getPage 是 **1 基**的（getPage(0) 会抛 Invalid page request）
+		const page = await view.getPage(pageNumber);
+		if (generation !== thumbGeneration) {
+			page.cleanup();
+			return;
+		}
+		const base = page.getViewport({ scale: 1 });
+		const scale = THUMB_WIDTH / base.width;
+		const viewport = page.getViewport({ scale, rotation });
+		const dpr = Math.min(2, window.devicePixelRatio || 1);
+		canvas.width = Math.ceil(viewport.width * dpr);
+		canvas.height = Math.ceil(viewport.height * dpr);
+		canvas.style.aspectRatio = `${viewport.width} / ${viewport.height}`;
+		await page.render({ canvas, viewport, transform: [dpr, 0, 0, dpr, 0, 0] }).promise;
+		page.cleanup();
+	}
+
+	/** 缩略图懒渲染：只有滚进视口的卡片才真的去画 */
+	const thumbObservers: IntersectionObserver[] = [];
+
+	function stopThumbnails(): void {
+		while (thumbObservers.length) thumbObservers.pop()?.disconnect();
+	}
+
+	function lazyThumbnails(container: HTMLElement, view: PdfJsDocument): void {
+		stopThumbnails();
+		thumbGeneration++;
+		for (const card of container.querySelectorAll<HTMLElement>('[data-page]')) {
+			card.dataset.generation = String(thumbGeneration);
+		}
+		const observer = new IntersectionObserver(
+		(entries) => {
+			for (const entry of entries) {
+				if (!entry.isIntersecting) continue;
+				const card = entry.target as HTMLElement;
+				observer.unobserve(card);
+				const pageNumber = Number(card.dataset.page);
+				const rotation = Number(card.dataset.rotation ?? 0);
+				const canvas = card.querySelector('canvas');
+				if (!canvas) continue;
+				const generation = Number(card.dataset.generation ?? 0);
+				enqueueThumb(() =>
+					paintPage(view, pageNumber, canvas, rotation, generation).catch((error) => {
+						if (Number(card.dataset.generation ?? 0) !== thumbGeneration) return;
+						canvas.replaceWith(
+							Object.assign(document.createElement('div'), {
+								className: 'pdf-empty',
+								textContent: '这一页渲染失败',
+							}),
+						);
+						console.warn(error);
+					}),
+				);
+			}
+		},
+		{ rootMargin: '320px' },
+	);
+		thumbObservers.push(observer);
+		for (const card of container.querySelectorAll<HTMLElement>('[data-page]')) observer.observe(card);
+	}
+
+	/* ------------------------------------------------------------------ 合并 */
+
+	const mergeList = $<HTMLUListElement>('mergeList');
+	let mergeFiles: { name: string; bytes: Uint8Array; pages?: number }[] = [];
+
+	function renderMergeList(): void {
+		mergeList.textContent = '';
+		mergeFiles.forEach((file, index) => {
+			const li = document.createElement('li');
+			li.className = 'pdf-item';
+
+			const no = document.createElement('span');
+			no.className = 'pdf-item-index';
+			no.textContent = String(index + 1);
+
+			const body = document.createElement('div');
+			body.className = 'pdf-item-body';
+			const name = document.createElement('div');
+			name.className = 'pdf-item-name';
+			name.textContent = file.name;
+			const meta = document.createElement('div');
+			meta.className = 'pdf-item-meta';
+			meta.textContent = `${ops.formatBytes(file.bytes.length)}${
+				file.pages ? ` · ${file.pages} 页` : ' · 页数读取中'
+			}`;
+			body.append(name, meta);
+
+			const actions = document.createElement('div');
+			actions.className = 'pdf-item-actions';
+			actions.append(
+				iconButton('arrow-upward', '上移', () => moveMerge(index, -1), index === 0),
+				iconButton('arrow-downward', '下移', () => moveMerge(index, 1), index === mergeFiles.length - 1),
+				iconButton('delete', '移除', () => {
+					mergeFiles.splice(index, 1);
+					renderMergeList();
+				}),
+			);
+
+			li.append(no, body, actions);
+			mergeList.appendChild(li);
+		});
+		const totalPages = mergeFiles.reduce((sum, file) => sum + (file.pages ?? 0), 0);
+		$('mergeSummary').textContent = mergeFiles.length
+			? `${mergeFiles.length} 个文件${totalPages ? ` · 合计 ${totalPages} 页` : ''}`
+			: '';
+		setDisabled('mergeRun', mergeFiles.length === 0);
+	}
+
+	function iconButton(icon: string, label: string, onClick: () => void, disabled = false) {
+		const button = document.createElement('mdui-button-icon');
+		button.setAttribute('variant', 'standard');
+		button.setAttribute('aria-label', label);
+		button.setAttribute('title', label);
+		button.toggleAttribute('disabled', disabled);
+		button.appendChild(document.createElement(`mdui-icon-${icon}`));
+		button.addEventListener('click', onClick);
+		return button;
+	}
+
+	function moveMerge(index: number, delta: number): void {
+		const target = index + delta;
+		if (target < 0 || target >= mergeFiles.length) return;
+		const [item] = mergeFiles.splice(index, 1);
+		mergeFiles.splice(target, 0, item);
+		renderMergeList();
+	}
+
+	async function onMergePick(files: File[]): Promise<void> {
+		if (files.length === 0) return;
+		beginProgress(`读取 ${files.length} 个文件…`);
+		try {
+			await loadPdfLib((loaded, total, label) => setProgress(loaded, total, `${label}…`));
+			let done = 0;
+			for (const file of files) {
+				const bytes = await readBytes(file);
+				setProgress(++done, files.length, `读取 ${file.name}…`);
+				let pages: number | undefined;
+				try {
+					// 页数用 pdf-lib 数就够了，不必为列表额外加载渲染引擎
+					const doc = await ops.loadDocument(bytes, { password: pdfPassword });
+					pages = doc.getPageCount();
+				} catch {
+					pages = undefined;
+				}
+				mergeFiles.push({ name: file.name, bytes, pages });
+			}
+			renderMergeList();
+			endProgress(`已加入 ${files.length} 个文件`);
+		} catch (error) {
+			fail(error);
+		}
+	}
+
+	async function onMergeRun(): Promise<void> {
+		if (mergeFiles.length === 0) return;
+		beginProgress('合并中…');
+		try {
+			await loadPdfLib((loaded, total, label) => setProgress(loaded, total, `${label}…`));
+			const bytes = await ops.mergePdfs(mergeFiles, {
+				password: pdfPassword,
+				updateProgress: fromOps(),
+			});
+			download(bytes, `${baseName(mergeFiles[0].name)}-合并.pdf`);
+			endProgress('合并完成');
+		} catch (error) {
+			fail(error);
+		}
+	}
+
+	/* ------------------------------------------------------------------ 拆分 */
+
+	let splitBytes: Uint8Array | null = null;
+	let splitName = '';
+	let splitPreview: Preview | null = null;
+	const pickedPages = new Set<number>();
+
+	async function loadSplitFile(file: File): Promise<void> {
+		beginProgress('读取文件…');
+		try {
+			await loadPdfJs((loaded, total, label) => setProgress(loaded, total, `${label}…`));
+			const bytes = await readBytes(file);
+			if (splitPreview) {
+				stopThumbnails();
+				await splitPreview.close().catch(() => undefined);
+			}
+			splitPreview = await openForPreview(bytes, file.name);
+			const pages = splitPreview.doc.numPages;
+			splitBytes = bytes;
+			splitName = file.name;
+			pickedPages.clear();
+			$('splitInfo').textContent = `${file.name} · ${pages} 页 · ${ops.formatBytes(bytes.length)}`;
+			setDisabled('splitRun', false);
+			renderSplitMode();
+			endProgress(`已载入 ${pages} 页`);
+		} catch (error) {
+			splitBytes = null;
+			splitPreview = null;
+			setDisabled('splitRun', true);
+			$('splitInfo').textContent = '读取失败，换一个 PDF 试试。';
+			fail(error);
+		}
+	}
+
+	function renderSplitMode(): void {
+		const mode = $<HTMLElement & { value: string }>('splitMode').value;
+		$('splitRangeBox').hidden = mode !== 'range';
+		$('splitPickBox').hidden = mode !== 'pick';
+		$('splitAll').hidden = mode !== 'pick';
+		if (mode !== 'pick' || !splitPreview) {
+			$('splitGrid').textContent = '';
+			return;
+		}
+		const grid = $('splitGrid');
+		grid.textContent = '';
+		const view = splitPreview.doc;
+		for (let i = 1; i <= view.numPages; i++) {
+			const card = document.createElement('div');
+			card.className = 'pdf-card';
+			card.dataset.page = String(i);
+			card.append(document.createElement('canvas'));
+			const bar = document.createElement('div');
+			bar.className = 'pdf-card-bar';
+			const label = document.createElement('label');
+			label.className = 'pdf-card-no';
+			const box = document.createElement('mdui-checkbox');
+			box.toggleAttribute('checked', pickedPages.has(i));
+			box.addEventListener('change', () => {
+				if ((box as unknown as { checked: boolean }).checked) pickedPages.add(i);
+				else pickedPages.delete(i);
+			});
+			label.append(box, ` 第 ${i} 页`);
+			bar.append(label);
+			card.append(bar);
+			grid.appendChild(card);
+		}
+		lazyThumbnails(grid, view);
+	}
+
+	async function onSplitRun(): Promise<void> {
+		if (!splitBytes) return;
+		const mode = $<HTMLElement & { value: string }>('splitMode').value;
+		beginProgress('拆分中…');
+		try {
+			await loadPdfLib((loaded, total, label) => setProgress(loaded, total, `${label}…`));
+			if (mode === 'each') {
+				const ranges = Array.from({ length: splitPreview?.doc.numPages ?? 0 }, (_, i) => ({
+					from: i + 1,
+					to: i + 1,
+				}));
+				await downloadParts(
+					await ops.splitByRanges(splitBytes, ranges, {
+						password: pdfPassword,
+						updateProgress: fromOps(),
+					}),
+				);
+			} else if (mode === 'range') {
+				const text = $<TextField>('splitRanges').value;
+				const ranges = ops.parseRanges(text, splitPreview?.doc.numPages ?? 0);
+				await downloadParts(
+					await ops.splitByRanges(splitBytes, ranges, {
+						password: pdfPassword,
+						updateProgress: fromOps(),
+					}),
+				);
+			} else {
+				const indices = Array.from(pickedPages)
+					.sort((a, b) => a - b)
+					.map((page) => page - 1);
+				const bytes = await ops.selectPages(splitBytes, indices, {
+					password: pdfPassword,
+					updateProgress: fromOps(),
+				});
+				download(bytes, `${baseName(splitName)}-选页.pdf`);
+				endProgress(`已导出 ${indices.length} 页`);
+				return;
+			}
+		} catch (error) {
+			fail(error);
+		}
+	}
+
+	async function downloadParts(parts: ops.NamedBytes[]): Promise<void> {
+		if (parts.length === 1) {
+			download(parts[0].bytes, parts[0].name);
+			endProgress(`已生成 ${parts[0].name}`);
+			return;
+		}
+		const fflate = (await loadFflate((loaded, total, label) =>
+			setProgress(loaded, total, `${label}…`),
+		)) as unknown as {
+			zipSync: (files: Record<string, Uint8Array>, opts: { level: number }) => Uint8Array;
+		};
+		const payload: Record<string, Uint8Array> = {};
+		const used = new Set<string>();
+		for (const part of parts) {
+			// ZIP 里同名文件会互相覆盖，这里保证名字唯一（a.pdf / a-2.pdf …）
+			let name = part.name;
+			let n = 2;
+			while (used.has(name)) {
+				name = part.name.replace(/(\.pdf)$/, `-${n++}$1`);
+			}
+			used.add(name);
+			payload[name] = part.bytes;
+		}
+		const totalSize = parts.reduce((sum, part) => sum + part.bytes.length, 0);
+		setProgress(0, 0, `打包 ZIP：${parts.length} 个文件，共 ${ops.formatBytes(totalSize)}`);
+		// zipSync 是同步的，先让出一帧，进度条才画得出来
+		await new Promise((resolve) => requestAnimationFrame(() => resolve(null)));
+		const out = fflate.zipSync(payload, { level: 0 });
+		setProgress(out.length, out.length, `打包完成：${ops.formatBytes(out.length)}`);
+		download(out, `${baseName(splitName)}-拆分.zip`, 'application/zip');
+		endProgress(`已打包 ${parts.length} 个文件`);
+	}
+
+	/* ------------------------------------------------------------------ 页面管理 */
+
+	let pagesBytes: Uint8Array | null = null;
+	let pagesName = '';
+	let pagesPreview: Preview | null = null;
+	let pageState: { origin: number; rotation: number }[] = [];
+
+	function renderPageGrid(): void {
+		const grid = $('pagesGrid');
+		grid.textContent = '';
+		pageState.forEach((page, index) => {
+			const card = document.createElement('div');
+			card.className = 'pdf-card';
+			card.draggable = true;
+			card.dataset.page = String(page.origin);
+			card.dataset.rotation = String(page.rotation);
+			card.dataset.position = String(index);
+			card.append(document.createElement('canvas'));
+
+			const bar = document.createElement('div');
+			bar.className = 'pdf-card-bar';
+			const no = document.createElement('span');
+			no.className = 'pdf-card-no';
+			no.textContent = `第 ${index + 1} / ${pageState.length} 页`;
+			const from = document.createElement('span');
+			from.className = 'pdf-card-from';
+			from.textContent = `原第 ${page.origin} 页`;
+			const tools = document.createElement('div');
+			tools.className = 'pdf-card-tools';
+			tools.append(
+				iconButton('arrow-upward', '前移', () => movePage(index, -1), index === 0),
+				iconButton('arrow-downward', '后移', () => movePage(index, 1), index === pageState.length - 1),
+				iconButton('rotate-right', '顺时针旋转 90°', () => rotatePage(index)),
+				iconButton('content-copy', '复制此页', () => copyPage(index)),
+				iconButton('delete', '删除此页', () => {
+					pageState.splice(index, 1);
+					renderPageGrid();
+				}, pageState.length <= 1),
+			);
+			bar.append(no, from, tools);
+			card.append(bar);
+			grid.appendChild(card);
+		});
+		if (pagesPreview) lazyThumbnails(grid, pagesPreview.doc);
+		$('pagesSummary').textContent = pageState.length ? `${pageState.length} 页待输出` : '';
+		setDisabled('pagesRun', pageState.length === 0);
+	}
+
+	function movePage(index: number, delta: number): void {
+		const target = index + delta;
+		if (target < 0 || target >= pageState.length) return;
+		const [item] = pageState.splice(index, 1);
+		pageState.splice(target, 0, item);
+		renderPageGrid();
+	}
+
+	function rotatePage(index: number): void {
+		pageState[index].rotation = (pageState[index].rotation + 90) % 360;
+		renderPageGrid();
+	}
+
+	function copyPage(index: number): void {
+		pageState.splice(index + 1, 0, { ...pageState[index] });
+		renderPageGrid();
+	}
+
+	function wireDragReorder(grid: HTMLElement): void {
+		let from = -1;
+		grid.addEventListener('dragstart', (event) => {
+			const card = (event.target as HTMLElement).closest<HTMLElement>('.pdf-card');
+			if (!card) return;
+			from = Number(card.dataset.position);
+			card.classList.add('is-dragging');
+			event.dataTransfer?.setData('text/plain', card.dataset.position ?? '');
+		});
+		grid.addEventListener('dragend', () => {
+			from = -1;
+			grid.querySelectorAll('.is-dragging, .is-drop-target').forEach((el) =>
+				el.classList.remove('is-dragging', 'is-drop-target'),
+			);
+		});
+		grid.addEventListener('dragover', (event) => {
+			if (from < 0) return;
+			event.preventDefault();
+			const card = (event.target as HTMLElement).closest<HTMLElement>('.pdf-card');
+			grid.querySelectorAll('.is-drop-target').forEach((el) => el.classList.remove('is-drop-target'));
+			card?.classList.add('is-drop-target');
+		});
+		grid.addEventListener('drop', (event) => {
+			if (from < 0) return;
+			event.preventDefault();
+			const card = (event.target as HTMLElement).closest<HTMLElement>('.pdf-card');
+			const to = card ? Number(card.dataset.position) : -1;
+			if (to < 0 || to === from) return;
+			const [item] = pageState.splice(from, 1);
+			pageState.splice(to, 0, item);
+			renderPageGrid();
+		});
+	}
+
+	async function loadPagesFile(file: File): Promise<void> {
+		beginProgress('读取文件…');
+		try {
+			await loadPdfJs((loaded, total, label) => setProgress(loaded, total, `${label}…`));
+			const bytes = await readBytes(file);
+			if (pagesPreview) {
+				stopThumbnails();
+				await pagesPreview.close().catch(() => undefined);
+			}
+			pagesPreview = await openForPreview(bytes, file.name);
+			const count = pagesPreview.doc.numPages;
+			pagesBytes = bytes;
+			pagesName = file.name;
+			pageState = Array.from({ length: count }, (_, i) => ({ origin: i + 1, rotation: 0 }));
+			$('pagesInfo').textContent = `${file.name} · ${count} 页 · ${ops.formatBytes(bytes.length)}`;
+			renderPageGrid();
+			endProgress(`已载入 ${count} 页`);
+		} catch (error) {
+			pagesBytes = null;
+			pagesPreview = null;
+			pageState = [];
+			renderPageGrid();
+			$('pagesInfo').textContent = '读取失败，换一个 PDF 试试。';
+			fail(error);
+		}
+	}
+
+	async function onPagesRun(): Promise<void> {
+		if (!pagesBytes || pageState.length === 0) return;
+		beginProgress('应用页面操作…');
+		try {
+			await loadPdfLib((loaded, total, label) => setProgress(loaded, total, `${label}…`));
+			// 键必须是**原页 0 基下标**，与 order 同一口径（origin 是 1 基页码）
+			const rotation: Record<number, 0 | 90 | 180 | 270> = {};
+			for (const page of pageState) {
+				rotation[page.origin - 1] = page.rotation as 0 | 90 | 180 | 270;
+			}
+			const bytes = await ops.applyPageEdits(pagesBytes, {
+				order: pageState.map((page) => page.origin - 1),
+				rotation,
+				password: pdfPassword,
+				updateProgress: fromOps(),
+			});
+			download(bytes, `${baseName(pagesName)}-页面管理.pdf`);
+			endProgress('页面操作完成');
+		} catch (error) {
+			fail(error);
+		}
+	}
+
+	/* ------------------------------------------------------------------ 图片转 PDF */
+
+	interface ImageItem {
+		name: string;
+		kind: ops.ImageKind;
+		bytes: Uint8Array;
+		url: string;
+	}
+	const imagesList = $<HTMLUListElement>('imagesList');
+	let imageItems: ImageItem[] = [];
+
+	function renderImageList(): void {
+		imagesList.textContent = '';
+		imageItems.forEach((item, index) => {
+			const li = document.createElement('li');
+			li.className = 'pdf-item';
+			const no = document.createElement('span');
+			no.className = 'pdf-item-index';
+			no.textContent = String(index + 1);
+			const img = document.createElement('img');
+			img.className = 'pdf-item-thumb';
+			img.src = item.url;
+			img.alt = item.name;
+			const body = document.createElement('div');
+			body.className = 'pdf-item-body';
+			const name = document.createElement('div');
+			name.className = 'pdf-item-name';
+			name.textContent = item.name;
+			const meta = document.createElement('div');
+			meta.className = 'pdf-item-meta';
+			meta.textContent = `${item.kind.toUpperCase()} · ${ops.formatBytes(item.bytes.length)}`;
+			body.append(name, meta);
+			const actions = document.createElement('div');
+			actions.className = 'pdf-item-actions';
+			actions.append(
+				iconButton('arrow-upward', '前移', () => moveImage(index, -1), index === 0),
+				iconButton('arrow-downward', '后移', () => moveImage(index, 1), index === imageItems.length - 1),
+				iconButton('delete', '移除', () => {
+					URL.revokeObjectURL(item.url);
+					imageItems.splice(index, 1);
+					renderImageList();
+				}),
+			);
+			li.append(no, img, body, actions);
+			imagesList.appendChild(li);
+		});
+		$('imagesSummary').textContent = imageItems.length ? `${imageItems.length} 张图片` : '';
+		setDisabled('imagesRun', imageItems.length === 0);
+	}
+
+	function moveImage(index: number, delta: number): void {
+		const target = index + delta;
+		if (target < 0 || target >= imageItems.length) return;
+		const [item] = imageItems.splice(index, 1);
+		imageItems.splice(target, 0, item);
+		renderImageList();
+	}
+
+	/** PDF 只认 PNG / JPEG，其余格式先用 canvas 转成 PNG */
+	async function toSupportedImage(file: File): Promise<{ kind: ops.ImageKind; bytes: Uint8Array }> {
+		const raw = await readBytes(file);
+		const sniffed = ops.sniffImageKind(raw);
+		if (sniffed) return { kind: sniffed, bytes: raw };
+		const bitmap = await createImageBitmap(file);
+		const canvas = document.createElement('canvas');
+		canvas.width = bitmap.width;
+		canvas.height = bitmap.height;
+		canvas.getContext('2d')?.drawImage(bitmap, 0, 0);
+		bitmap.close();
+		const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/png'));
+		if (!blob) throw new Error(`${file.name} 无法转换`);
+		return { kind: 'png', bytes: new Uint8Array(await blob.arrayBuffer()) };
+	}
+
+	async function onImagesPick(files: File[]): Promise<void> {
+		if (files.length === 0) return;
+		beginProgress(`读取 ${files.length} 张图片…`);
+		try {
+			let done = 0;
+			for (const file of files) {
+				setProgress(++done, files.length, `转换 ${file.name}…`);
+				const { kind, bytes } = await toSupportedImage(file);
+				imageItems.push({ name: file.name, kind, bytes, url: URL.createObjectURL(file) });
+			}
+			renderImageList();
+			endProgress(`已加入 ${files.length} 张图片`);
+		} catch (error) {
+			fail(error);
+		}
+	}
+
+	async function onImagesRun(): Promise<void> {
+		if (imageItems.length === 0) return;
+		beginProgress('生成 PDF…');
+		try {
+			await loadPdfLib((loaded, total, label) => setProgress(loaded, total, `${label}…`));
+			const pageSize = $<HTMLElement & { value: string }>('imagesSize').value as ops.ImageOptions['pageSize'];
+			const bytes = await ops.imagesToPdf(
+				imageItems.map(({ name, kind, bytes }) => ({ name, kind, bytes })),
+				{
+					pageSize,
+					orientation: $<HTMLElement & { value: string }>('imagesOrient').value as ops.Orientation,
+					margin: Number($<HTMLElement & { value: string }>('imagesMargin').value),
+					title: baseName(imageItems[0].name),
+				},
+				fromOps(),
+			);
+			download(bytes, `${baseName(imageItems[0].name)}.pdf`);
+			endProgress('PDF 已生成');
+		} catch (error) {
+			fail(error);
+		}
+	}
+
+	/* ------------------------------------------------------------------ 元数据 */
+
+	let metaBytes: Uint8Array | null = null;
+
+	async function loadMetaFile(file: File): Promise<void> {
+		beginProgress('读取元数据…');
+		try {
+			await loadPdfLib((loaded, total, label) => setProgress(loaded, total, `${label}…`));
+			metaBytes = await readBytes(file);
+			pdfPassword = undefined;
+			const info = await loadDoc(metaBytes);
+			$<TextField>('metaTitle').value = info.title;
+			$<TextField>('metaAuthor').value = info.author;
+			$<TextField>('metaSubject').value = info.subject;
+			$<TextField>('metaKeywords').value = info.keywords;
+			$<TextField>('metaProducer').value = info.producer;
+			$<TextField>('metaCreator').value = info.creator;
+			$<TextField>('metaCreated').value = info.creationDate;
+			$<TextField>('metaModified').value = info.modificationDate;
+			$('metaInfo').textContent = `${file.name} · ${ops.formatBytes(metaBytes.length)}`;
+			$('metaSummary').textContent = '';
+			setDisabled('metaRun', false);
+			endProgress('元数据已读取');
+		} catch (error) {
+			metaBytes = null;
+			setDisabled('metaRun', true);
+			fail(error);
+		}
+	}
+
+	async function onMetaRun(): Promise<void> {
+		if (!metaBytes) return;
+		beginProgress('写入元数据…');
+		try {
+			await loadPdfLib((loaded, total, label) => setProgress(loaded, total, `${label}…`));
+			const bytes = await ops.writeMeta(
+				metaBytes,
+				{
+					title: $<TextField>('metaTitle').value,
+					author: $<TextField>('metaAuthor').value,
+					subject: $<TextField>('metaSubject').value,
+					keywords: $<TextField>('metaKeywords').value,
+					producer: $<TextField>('metaProducer').value,
+					creator: $<TextField>('metaCreator').value,
+				},
+				{ password: pdfPassword, updateProgress: fromOps() },
+			);
+			const name = baseName(metaBytes.length ? ($<TextField>('metaTitle').value || 'document') : 'document');
+			download(bytes, `${name}.pdf`);
+			$('metaSummary').textContent = `已写入，${ops.formatBytes(bytes.length)}`;
+			endProgress('保存完成');
+		} catch (error) {
+			fail(error);
+		}
+	}
+
+	/* ------------------------------------------------------------------ 启动 */
+
+	async function boot(): Promise<void> {
+		wireFilePicker({
+			buttonId: 'mergePick',
+			dropId: 'mergeDrop',
+			accept: 'application/pdf,.pdf',
+			multiple: true,
+			extensions: ['.pdf'],
+			onFiles: (files) => void onMergePick(files),
+		});
+		wireFilePicker({
+			buttonId: 'splitPick',
+			dropId: 'splitDrop',
+			accept: 'application/pdf,.pdf',
+			multiple: false,
+			extensions: ['.pdf'],
+			onFiles: (files) => files[0] && void loadSplitFile(files[0]),
+		});
+		wireFilePicker({
+			buttonId: 'pagesPick',
+			dropId: 'pagesDrop',
+			accept: 'application/pdf,.pdf',
+			multiple: false,
+			extensions: ['.pdf'],
+			onFiles: (files) => files[0] && void loadPagesFile(files[0]),
+		});
+		wireFilePicker({
+			buttonId: 'imagesPick',
+			dropId: 'imagesDrop',
+			accept: 'image/*',
+			multiple: true,
+			extensions: ['.png', '.jpg', '.jpeg', '.webp', '.gif', '.avif', '.bmp'],
+			onFiles: (files) => void onImagesPick(files),
+		});
+		wireFilePicker({
+			buttonId: 'metaPick',
+			dropId: 'metaDrop',
+			accept: 'application/pdf,.pdf',
+			multiple: false,
+			extensions: ['.pdf'],
+			onFiles: (files) => files[0] && void loadMetaFile(files[0]),
+		});
+		await customElements.whenDefined('mdui-linear-progress');
+		progressBar.value = 0;
+
+		$('mergeRun').addEventListener('click', onMergeRun);
+		$('mergeClear').addEventListener('click', () => {
+			mergeFiles = [];
+			renderMergeList();
+		});
+
+		$('splitMode').addEventListener('change', renderSplitMode);
+		$('splitRun').addEventListener('click', onSplitRun);
+		$('splitAll').addEventListener('click', () => {
+			const view = splitPreview?.doc;
+			if (!view) return;
+			const all = pickedPages.size === view.numPages;
+			pickedPages.clear();
+			if (!all) for (let i = 1; i <= view.numPages; i++) pickedPages.add(i);
+			renderSplitMode();
+		});
+
+		$('pagesRun').addEventListener('click', onPagesRun);
+		$('pagesReset').addEventListener('click', () => {
+			const view = pagesPreview?.doc;
+			if (!view) return;
+			pageState = Array.from({ length: view.numPages }, (_, i) => ({ origin: i + 1, rotation: 0 }));
+			renderPageGrid();
+		});
+		wireDragReorder($('pagesGrid'));
+
+		$('imagesRun').addEventListener('click', onImagesRun);
+		$('imagesClear').addEventListener('click', () => {
+			imageItems.forEach((item) => URL.revokeObjectURL(item.url));
+			imageItems = [];
+			renderImageList();
+		});
+		$('imagesSize').addEventListener('change', () => {
+			const fit = $<HTMLElement & { value: string }>('imagesSize').value === 'fit';
+			const orient = $<HTMLElement & { value: string }>('imagesOrient');
+			orient.toggleAttribute('disabled', fit);
+			if (fit) orient.value = 'auto';
+		});
+
+		$('metaRun').addEventListener('click', onMetaRun);
+
+		renderMergeList();
+		renderImageList();
+		renderPageGrid();
+		setDisabled('mergeRun', true);
+		setDisabled('splitRun', true);
+		setDisabled('pagesRun', true);
+		setDisabled('imagesRun', true);
+		setDisabled('metaRun', true);
+	}
+
+	void boot();
+</script>

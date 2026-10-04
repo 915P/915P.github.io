@@ -567,6 +567,41 @@ input[type='checkbox'] {
 	color: rgb(var(--mdui-color-on-surface-variant));
 }
 
+/*
+ * 页头右侧放控件（chip、下拉等）：标题在左、控件在右、底部对齐。
+ * 标题块必须能收缩（flex: 1 1 20rem），否则导语的max-content 宽度
+ * 会把右侧控件挤到下一行。
+ */
+.tool-head.head-split {
+display: flex;
+flex-wrap: wrap;
+align-items: flex-end;
+justify-content: space-between;
+gap: 0.75rem 1.5rem;
+}
+
+.tool-head .head-title {
+flex: 1 1 20rem;
+min-width: 0;
+}
+
+.head-tools {
+display: flex;
+flex-wrap: wrap;
+align-items: flex-end;
+gap: 0.75rem;
+}
+
+@media (max-width: 599px) {
+.tool-head.head-split {
+align-items: stretch;
+}
+
+.head-tools {
+justify-content: space-between;
+}
+}
+
 /* 窄版内容容器 */
 .tool-narrow {
 	max-width: 26rem;

@@ -62,4 +62,13 @@ import '@mdui/icons/add.js';
 import '@mdui/icons/delete.js';
 import '@mdui/icons/check-circle.js';
 
+// PDF 工具箱
+import '@mdui/icons/picture-as-pdf.js';
+import '@mdui/icons/lock.js';
+import '@mdui/icons/arrow-upward.js';
+import '@mdui/icons/arrow-downward.js';
+import '@mdui/icons/content-copy.js';
+import '@mdui/icons/rotate-right.js';
+import '@mdui/icons/upload.js';
+
 export {};
