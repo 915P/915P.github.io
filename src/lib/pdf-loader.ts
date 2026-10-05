@@ -21,6 +21,7 @@ const SPECS = {
 	pdfLib: { url: `${VENDOR}pdf/pdf-lib.min.js`, label: 'PDF 处理引擎 pdf-lib' },
 	pdfJs: { url: `${VENDOR}pdfjs/pdf.min.mjs`, label: 'PDF 渲染引擎 pdf.js' },
 	fflate: { url: `${VENDOR}fflate/fflate.umd.js`, label: 'ZIP 打包组件 fflate' },
+	fontkit: { url: `${VENDOR}fontkit/fontkit.umd.min.js`, label: '字体引擎 fontkit' },
 } satisfies Record<string, VendorSpec>;
 
 /** 流式 fetch，能拿到 Content-Length 就报百分比，拿不到就退化成不确定进度 */
@@ -126,11 +127,18 @@ export interface PdfJsModule {
 export interface PdfJsViewport {
 	width: number;
 	height: number;
+	rotation: number;
+}
+
+export interface PdfJsTextItem {
+	str: string;
+	hasEOL: boolean;
 }
 
 export interface PdfJsPage {
 	getViewport: (options: { scale: number; rotation?: number }) => PdfJsViewport;
 	render: (options: Record<string, unknown>) => { promise: Promise<void>; cancel: () => void };
+	getTextContent: (options?: Record<string, unknown>) => Promise<{ items: unknown[] }>;
 	cleanup: () => void;
 }
 
@@ -152,4 +160,30 @@ export function loadPdfJs(onProgress?: LoadProgress): Promise<PdfJsModule> {
 		return mod;
 	})();
 	return pdfJsTask;
+}
+/**
+ * 准备「可内嵌中文字体」的环境：确保 pdf-lib 与 fontkit 都已加载。
+ *
+ * 注意 **registerFontkit 是 PDFDocument 的实例方法**，命名空间上没有 ——
+ * 由 pdf-ops 的 ensureFontkit() 在每个文档上注册一次。
+ *
+ * 必须是 @cantoo/fontkit：老的 @pdf-lib/fontkit 1.1.1 在这份字体子集上
+ * 会抛 "Cannot read properties of undefined (reading 'pos')"。
+ */
+export async function setupCjkFont(onProgress?: LoadProgress): Promise<void> {
+	await loadUmd('pdfLib', 'PDFLib', onProgress);
+	await loadUmd('fontkit', 'fontkit', onProgress);
+}
+
+/** 内置中文字体子集（2.3 MB），带进度 */
+export async function loadCjkFont(onProgress?: LoadProgress): Promise<Uint8Array> {
+	const w = window as unknown as { __cjkFont?: Uint8Array; __cjkFontTask?: Promise<Uint8Array> };
+	if (w.__cjkFont) return w.__cjkFont;
+	w.__cjkFontTask ??= (async () => {
+		const bytes = await fetchWithProgress('/fonts/pdf/NotoSansSC-PDF.ttf', '中文字体', onProgress);
+		const out = new Uint8Array(await bytes.arrayBuffer());
+		w.__cjkFont = out;
+		return out;
+	})();
+	return w.__cjkFontTask;
 }

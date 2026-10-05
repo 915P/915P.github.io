@@ -434,6 +434,49 @@ Telecommunications' 《标准电码本》.
 
 ---
 
+## 14. @cantoo/fontkit (PDF toolbox: font embedding engine)
+
+- **Location**: `public/vendor/fontkit/`
+- **Upstream**: <https://github.com/cantoo-scribe/fontkit> (npm package
+  `@cantoo/fontkit`), a maintained fork of <https://github.com/foliojs/fontkit>
+- **Version**: 2.0.12
+- **License**: **MIT**, Copyright (c) 2017 foliojs
+- **Files**: `fontkit.umd.min.js` (UMD build, 378 KB), `LICENSE`
+- **Purpose**: in `/tools/pdf/`, parses the embedded CJK font so that pdf-lib can
+  subset and embed it when drawing watermarks and page numbers. Loaded lazily,
+  only when a text watermark or a page number is actually drawn.
+- **Site modifications**: none (unmodified upstream UMD build).
+- **Note**: the package is also present in `devDependencies` so that
+  `scripts/pdf-test.mjs` can exercise the same code path in Node. Do **not**
+  substitute the older `@pdf-lib/fontkit` 1.1.1 here: it crashes on this font
+  with `Cannot read properties of undefined (reading 'pos')`.
+
+---
+
+## 15. Noto Sans SC (subset, PDF toolbox watermark and page numbers)
+
+- **Location**: `public/fonts/pdf/`
+- **Upstream**: Noto Sans SC, <https://github.com/notofonts/noto-cjk>
+  (Copyright 2014-2021 Adobe, with Reserved Font Name `Source`)
+- **License**: **SIL Open Font License 1.1** — full text in
+  [`NotoSansSC-OFL.txt`](public/fonts/pdf/NotoSansSC-OFL.txt)
+- **Files**: `NotoSansSC-PDF.ttf` (2.2 MB), `NotoSansSC-OFL.txt`
+- **Purpose**: the only CJK-capable font shipped with the site, so that the
+  PDF toolbox can draw Chinese watermarks and page numbers entirely in the
+  browser, without uploading anything. Embedded and subset per output document
+  by pdf-lib, so produced PDFs stay self-contained.
+- **Site modifications**: this is a **modified version**. Glyphs were subset
+  from the upstream font: the 6763 hanzi of GB 2312 plus common symbols and
+  Latin/digits, 7782 glyphs in total. The family name was changed to
+  `Noto Sans SC Subset` so that the Reserved Font Name `Source` is not used by
+  a derivative work, as OFL clause 3 requires. No glyph outlines were altered.
+  Because it is a subset, characters outside that coverage (rare hanzi,
+  traditional-only forms, Japanese and Korean kana) will not render.
+- **Note**: the subsetting is reproducible but not scripted; the build step is
+  documented in `AGENT.md` rather than in `package.json`.
+
+---
+
 ## The site's own work
 
 The following is original to this site and is covered by the MIT license in the
@@ -455,11 +498,13 @@ root [LICENSE](LICENSE):
 - Blog post bodies (`src/content/blog/*.md`)
 - The GitHub Actions deployment flow (`.github/workflows/deploy.yml`)
 - **The PDF toolbox at `/tools/pdf/`** — written from scratch for this site:
-  `src/lib/pdf-ops.ts` (page assembly, metadata and image conversion on top of
-  pdf-lib), `src/lib/pdf-loader.ts` (lazy loading of the three vendored
-  libraries) and `src/pages/tools/pdf.astro`, plus the Node regression test
-  `scripts/pdf-test.mjs`. It bundles no third-party code; pdf-lib, pdf.js and
-  fflate are used as unmodified upstream builds (§11–§13).
+  `src/lib/pdf-ops.ts` (page assembly, metadata, image conversion, cropping and
+  size normalization, text/image watermarks, page numbers, form filling,
+  encryption, PDF/A and embedded-image extraction on top of pdf-lib),
+  `src/lib/pdf-loader.ts` (lazy loading of the four vendored libraries and the
+  CJK font) and `src/pages/tools/pdf.astro`, plus the Node regression test
+  `scripts/pdf-test.mjs`. It bundles no third-party code; pdf-lib, pdf.js,
+  fflate and fontkit are used as unmodified upstream builds (§11–§14).
 - **The oscilloscope at `/tools/oscope/`** — written from scratch for this site:
   `src/lib/oscope/` (`types.ts`, `capture.ts`, `ring.ts`, `measure.ts`, `fft.ts`,
   `render.ts`, `export.ts`, `recorder.ts`) and `src/pages/tools/oscope.astro`.

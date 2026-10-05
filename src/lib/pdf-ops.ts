@@ -1,4 +1,4 @@
-import type { PDFDocument, PDFPage } from '@cantoo/pdf-lib';
+import type { PDFFont, PDFDocument, PDFPage } from '@cantoo/pdf-lib';
 
 /*
  * PDF 工具箱的纯逻辑层。
@@ -29,6 +29,7 @@ export interface MetaInfo {
 	keywords: string;
 	producer: string;
 	creator: string;
+	language: string;
 	creationDate: string;
 	modificationDate: string;
 }
@@ -123,6 +124,7 @@ export async function readMeta(bytes: Uint8Array, options: LoadOptions = {}): Pr
 		keywords: doc.getKeywords() ?? '',
 		producer: doc.getProducer() ?? '',
 		creator: doc.getCreator() ?? '',
+		language: doc.getLanguage() ?? '',
 		creationDate: formatPdfDate(doc.getCreationDate()),
 		modificationDate: formatPdfDate(doc.getModificationDate()),
 	};
@@ -139,6 +141,7 @@ export async function writeMeta(
 	doc.setSubject(meta.subject ?? '');
 	doc.setProducer(meta.producer ?? '');
 	doc.setCreator(meta.creator ?? '');
+	if (meta.language !== undefined) doc.setLanguage(meta.language.trim());
 	doc.setKeywords(
 		(meta.keywords ?? '')
 			.split(/[,，;；、\s]+/)
@@ -374,3 +377,662 @@ export function describeError(error: unknown): string {
 }
 
 export type { PDFDocument, PDFPage };
+/* ========================================================================== *
+ *  第二批：裁剪 / 尺寸归一 / 水印 / 页码 / 表单 / 加密 / PDF-A
+ * ========================================================================== */
+
+/** 站点自托管的中文子集字体（GB2312 全码 + 常用符号，2.3 MB） */
+export const CJK_FONT_URL = '/fonts/pdf/NotoSansSC-PDF.ttf';
+
+export type FontRole = 'cjk' | 'standard';
+
+export interface FontOptions {
+	/** cjk = 内置中文子集字体；standard = pdf-lib 自带 Helvetica（仅 ASCII） */
+	role?: FontRole;
+	/** 自定义字体字节，优先于 role */
+	bytes?: Uint8Array;
+}
+
+/**
+ * resolver 必须用**目标文档**的 embedFont：字体对象归属于创建它的文档，
+ * 拿别的文档 embed 出来的字体再 drawText，会在保存时炸 ForeignPageError。
+ */
+export interface FontEngine {
+	/** fontkit 实例，交给 doc.registerFontkit() */
+	fontkit: unknown;
+	/** 中文子集字体字节 */
+	cjkBytes: Uint8Array;
+}
+
+let fontEngine: FontEngine | null = null;
+let cjkFontBytes: Uint8Array | null = null;
+const fontkitReady = new WeakSet<object>();
+
+/**
+ * 页面把 fontkit 与中文字体准备好后注入这里；纯逻辑层自己不碰网络，
+ * 这样 scripts/pdf-test.mjs 才能在 Node 里跑（Node 侧注入同一份字体文件）。
+ */
+export function registerFontEngine(engine: FontEngine | null): void {
+	fontEngine = engine;
+}
+
+export async function loadCjkFontBytes(): Promise<Uint8Array> {
+	if (cjkFontBytes) return cjkFontBytes;
+	const response = await fetch(CJK_FONT_URL);
+	if (!response.ok) throw new Error(`中文字体加载失败（HTTP ${response.status}）`);
+	cjkFontBytes = new Uint8Array(await response.arrayBuffer());
+	return cjkFontBytes;
+}
+
+/**
+ * 嵌入字体。pdf-lib 自带的 14 种标准字体只含 ASCII，中文必须内嵌字体。
+ * 注意 registerFontkit 是**实例方法**，且字体必须由目标文档自己 embed，
+ * 否则保存时会抛 ForeignPageError。
+ */
+export async function embedFont(doc: PDFDocument, options: FontOptions = {}): Promise<PDFFont> {
+	const { StandardFonts } = lib();
+	if (options.bytes) {
+		if (fontEngine) ensureFontkit(doc);
+		return doc.embedFont(options.bytes, { subset: true });
+	}
+	if ((options.role ?? 'cjk') === 'standard') return doc.embedFont(StandardFonts.Helvetica);
+	if (!fontEngine) throw new Error('中文字体尚未就绪，请稍候或改用纯英文内容');
+	ensureFontkit(doc);
+	return doc.embedFont(fontEngine.cjkBytes, { subset: true });
+}
+
+function ensureFontkit(doc: PDFDocument): void {
+	if (!fontEngine) throw new Error('字体引擎尚未就绪');
+	if (fontkitReady.has(doc as unknown as object)) return;
+	doc.registerFontkit(fontEngine.fontkit as never);
+	fontkitReady.add(doc as unknown as object);
+}
+
+function assertFinite(name: string, value: number): number {
+	if (!Number.isFinite(value) || value < 0) throw new Error(`「${name}」必须是不小于 0 的数字`);
+	return value;
+}
+
+/* ---------------------------------------------------------------- 页面裁剪 */
+
+export interface CropOptions extends LoadOptions {
+	/** 四边裁掉的点数，顺序 左 / 上 / 右 / 下 */
+	left: number;
+	top: number;
+	right: number;
+	bottom: number;
+}
+
+/** 页面裁剪：同时改 CropBox 并把内容反向平移，不留下空白边 */
+export async function cropPages(bytes: Uint8Array, crop: CropOptions): Promise<Uint8Array> {
+	const left = assertFinite('左', crop.left);
+	const top = assertFinite('上', crop.top);
+	const right = assertFinite('右', crop.right);
+	const bottom = assertFinite('下', crop.bottom);
+	const doc = await loadDocument(bytes, { ...crop, label: '页面裁剪' });
+	const pages = doc.getPages();
+	report(crop.updateProgress, 0, pages.length, '计算裁剪框…');
+	for (let i = 0; i < pages.length; i++) {
+		const page = pages[i];
+		const box = page.getCropBox();
+		const width = box.width - left - right;
+		const height = box.height - top - bottom;
+		if (width < 24 || height < 24) {
+			throw new Error(`第 ${i + 1} 页裁剪后只剩 ${Math.round(width)}×${Math.round(height)} pt，太小了`);
+		}
+		// 内容反向平移后再把新页面摆到 (0,0)，同时让 MediaBox 等于 CropBox。
+		// 阅读器取 MediaBox 与 CropBox 的交集，两者必须一致，否则会二次裁剪。
+		page.translateContent(-left, -bottom);
+		page.setCropBox(0, 0, width, height);
+		page.setMediaBox(0, 0, width, height);
+		if (i % 10 === 0) {
+			report(crop.updateProgress, i, pages.length, `裁剪第 ${i + 1} / ${pages.length} 页`);
+			await tick();
+		}
+	}
+	report(crop.updateProgress, pages.length, pages.length, '写出结果…');
+	return doc.save();
+}
+
+/* -------------------------------------------------------------- 尺寸归一 */
+
+export interface NormalizeOptions extends LoadOptions {
+	pageSize: PageSizePreset;
+	orientation: Orientation;
+	/** fit = 留白居中，cover = 铺满并裁掉溢出部分 */
+	mode: 'fit' | 'cover';
+	margin: number;
+}
+
+/** 页面尺寸归一：所有页面统一到 A4 / Letter */
+export async function normalizePageSize(
+	bytes: Uint8Array,
+	options: NormalizeOptions,
+): Promise<Uint8Array> {
+	const { PDFDocument: Doc } = lib();
+	const preset = PAGE_SIZES[options.pageSize];
+	const doc = await loadDocument(bytes, { ...options, label: '尺寸归一' });
+	const sources = doc.getPages();
+	const total = sources.length;
+	const embedded = await doc.embedPages(sources);
+	const margin = Math.max(0, options.margin);
+	const out = await Doc.create();
+	report(options.updateProgress, 0, total, '按新尺寸重排页面…');
+	for (let i = 0; i < total; i++) {
+		const sourceSize = sources[i].getSize();
+		const landscape =
+			options.orientation === 'landscape' ||
+			(options.orientation === 'auto' && sourceSize.width > sourceSize.height);
+		const target = {
+			width: landscape ? preset.height : preset.width,
+			height: landscape ? preset.width : preset.height,
+		};
+		const boxWidth = Math.max(1, target.width - margin * 2);
+		const boxHeight = Math.max(1, target.height - margin * 2);
+		const scale =
+			options.mode === 'cover'
+				? Math.max(boxWidth / sourceSize.width, boxHeight / sourceSize.height)
+				: Math.min(boxWidth / sourceSize.width, boxHeight / sourceSize.height);
+		const page = out.addPage([target.width, target.height]);
+		page.drawPage(embedded[i], {
+			x: (target.width - sourceSize.width * scale) / 2,
+			y: (target.height - sourceSize.height * scale) / 2,
+			width: sourceSize.width * scale,
+			height: sourceSize.height * scale,
+		});
+		if (i % 5 === 0) {
+			report(options.updateProgress, i, total, `处理第 ${i + 1} / ${total} 页`);
+			await tick();
+		}
+	}
+	report(options.updateProgress, total, total, '写出结果…');
+	return out.save();
+}
+
+/* ------------------------------------------------------------------ 水印 */
+
+export type WatermarkPosition = 'center' | 'top' | 'bottom' | 'diagonal' | 'tile';
+
+export interface WatermarkOptions extends LoadOptions {
+	kind: 'text' | 'image';
+	text?: string;
+	image?: { name: string; kind: ImageKind; bytes: Uint8Array };
+	font?: FontOptions;
+	fontSize?: number;
+	color?: { r: number; g: number; b: number };
+	opacity?: number;
+	/** 文字水印旋转角度；平铺固定 45 */
+	rotation?: number;
+	position?: WatermarkPosition;
+	/** 距页边距离（pt） */
+	margin?: number;
+	/** 只处理这些页（0 基），空 = 全部 */
+	pages?: number[];
+}
+
+/** 水印：文字（内嵌中文字体）或图片，叠在页面内容之上 */
+export async function applyWatermark(
+	bytes: Uint8Array,
+	options: WatermarkOptions,
+): Promise<Uint8Array> {
+	if (options.kind === 'text' && !(options.text ?? '').trim()) throw new Error('请填写水印文字');
+	if (options.kind === 'image' && !options.image) throw new Error('请先选择一张水印图片');
+	const doc = await loadDocument(bytes, { ...options, label: '添加水印' });
+	const { degrees, rgb } = lib();
+	const color = rgb(options.color?.r ?? 0.5, options.color?.g ?? 0.5, options.color?.b ?? 0.5);
+	const opacity = Math.min(1, Math.max(0.02, options.opacity ?? 0.25));
+	const position = options.position ?? 'diagonal';
+	const margin = Math.max(0, options.margin ?? 36);
+	const fontSize = options.fontSize ?? 42;
+	const angle = position === 'diagonal' || position === 'tile' ? (options.rotation ?? 45) : (options.rotation ?? 0);
+	const target = new Set(options.pages ?? []);
+	const pages = doc.getPages();
+	const total = pages.length;
+
+	const font = options.kind === 'text' ? await embedFont(doc, options.font ?? { role: 'cjk' }) : null;
+	const image = options.kind === 'image' && options.image
+		? options.image.kind === 'jpg'
+			? await doc.embedJpg(options.image.bytes)
+			: await doc.embedPng(options.image.bytes)
+		: null;
+
+	for (let i = 0; i < total; i++) {
+		if (target.size && !target.has(i)) continue;
+		const page = pages[i];
+		const size = page.getSize();
+		// 页面被 /Rotate 转过时，按可视方向摆水印
+		const swap = Math.abs(page.getRotation().angle % 180) === 90;
+		const pageWidth = swap ? size.height : size.width;
+		const pageHeight = swap ? size.width : size.height;
+		const cx = pageWidth / 2;
+		const cy = pageHeight / 2;
+		const anchorX = position === 'top' ? cx : position === 'bottom' ? cx : cx;
+		const anchorY = position === 'top' ? pageHeight - margin : position === 'bottom' ? margin : cy;
+		const rotate = swap ? degrees(-angle) : degrees(angle);
+
+		if (font && options.text) {
+			const fontSizeUsed = position === 'tile' ? Math.min(fontSize, pageWidth / 6) : fontSize;
+			const textWidth = font.widthOfTextAtSize(options.text, fontSizeUsed);
+			if (position === 'tile') {
+				const stepX = Math.max(textWidth + fontSizeUsed * 2, 72);
+				const stepY = Math.max(fontSizeUsed * 5, 90);
+				for (let ty = -pageHeight; ty <= pageHeight; ty += stepY) {
+					for (let tx = -pageWidth; tx <= pageWidth; tx += stepX) {
+						page.drawText(options.text, {
+							x: cx + tx - textWidth / 2,
+							y: cy + ty - fontSizeUsed / 2,
+							size: fontSizeUsed,
+							font,
+							color,
+							opacity,
+							rotate: swap ? degrees(45) : degrees(45),
+						});
+					}
+				}
+			} else {
+				page.drawText(options.text, {
+					x: anchorX - textWidth / 2,
+					y: anchorY - fontSizeUsed / 2,
+					size: fontSizeUsed,
+					font,
+					color,
+					opacity,
+					rotate,
+				});
+			}
+		}
+		if (image) {
+			const longest = Math.max(pageWidth, pageHeight);
+			const scale =
+				position === 'tile'
+					? Math.min(1, longest / (Math.max(image.width, image.height) * 6))
+					: Math.min(1, (position === 'center' ? Math.min(pageWidth, pageHeight) * 0.4 : Math.min(pageWidth, pageHeight) * 0.22) / image.width);
+			const drawWidth = image.width * scale;
+			const drawHeight = image.height * scale;
+			page.drawImage(image, {
+				x: anchorX - drawWidth / 2,
+				y: anchorY - drawHeight / 2,
+				width: drawWidth,
+				height: drawHeight,
+				opacity,
+				rotate,
+			});
+		}
+		if (i % 10 === 0) {
+			report(options.updateProgress, i, total, `处理第 ${i + 1} / ${total} 页`);
+			await tick();
+		}
+	}
+	report(options.updateProgress, total, total, '写出结果…');
+	return doc.save();
+}
+
+/* ------------------------------------------------------------------ 页码 */
+
+export type NumberFormat = 'arabic' | 'roman' | 'alpha' | 'none';
+
+export type PageNumberPosition =
+	| 'bottom-center'
+	| 'bottom-left'
+	| 'bottom-right'
+	| 'top-center'
+	| 'top-left'
+	| 'top-right';
+
+export interface PageNumberOptions extends LoadOptions {
+	position: PageNumberPosition;
+	format?: NumberFormat;
+	/** 显示格式串，{n} 为页码，{total} 为总页数 */
+	template?: string;
+	startAt?: number;
+	/** 从第几页开始显示（1 基），用于跳过封面 */
+	fromPage?: number;
+	font?: FontOptions;
+	fontSize?: number;
+	margin?: number;
+}
+
+const ROMAN: [number, string][] = [
+	[1000, 'm'], [900, 'cm'], [500, 'd'], [400, 'cd'], [100, 'c'], [90, 'xc'],
+	[50, 'l'], [40, 'xl'], [10, 'x'], [9, 'ix'], [5, 'v'], [4, 'iv'], [1, 'i'],
+];
+
+function toRoman(value: number): string {
+	let rest = Math.max(1, Math.floor(value));
+	let out = '';
+	for (const [num, letters] of ROMAN) {
+		while (rest >= num) {
+			out += letters;
+			rest -= num;
+		}
+	}
+	return out;
+}
+
+function toAlpha(value: number): string {
+	let rest = Math.max(1, Math.floor(value));
+	let out = '';
+	while (rest > 0) {
+		rest -= 1;
+		out = String.fromCharCode(65 + (rest % 26)) + out;
+		rest = Math.floor(rest / 26);
+	}
+	return out;
+}
+
+export function formatPageNumber(value: number, format: NumberFormat): string {
+	switch (format) {
+		case 'roman':
+			return toRoman(value);
+		case 'alpha':
+			return toAlpha(value);
+		case 'none':
+			return '';
+		default:
+			return String(Math.max(0, Math.floor(value)));
+	}
+}
+
+/** 页码：位置 / 格式 / 起始号 / 跳过前几页 / 自定义格式串 */
+export async function addPageNumbers(
+	bytes: Uint8Array,
+	options: PageNumberOptions,
+): Promise<Uint8Array> {
+	const { rgb, degrees } = lib();
+	const doc = await loadDocument(bytes, { ...options, label: '添加页码' });
+	const pages = doc.getPages();
+	const total = pages.length;
+	const fontSize = options.fontSize ?? 10;
+	const margin = Math.max(8, options.margin ?? 26);
+	const format = options.format ?? 'arabic';
+	const template = options.template ?? '{n}';
+	const startAt = options.startAt ?? 1;
+	const fromPage = Math.max(1, options.fromPage ?? 1);
+	// 编号只按「可见页」递增，跳过封面时页码不会跳号
+	const visible = pages.map((_, index) => index).filter((index) => index + 1 >= fromPage);
+	let font: PDFFont | null = null;
+
+	for (const order of visible.keys()) {
+		const index = visible[order];
+		const text = template
+			.replace('{n}', formatPageNumber(startAt + order, format))
+			.replace('{total}', String(visible.length));
+		if (!text) continue;
+		const page = pages[index];
+		const size = page.getSize();
+		const swap = Math.abs(page.getRotation().angle % 180) === 90;
+		const pageWidth = swap ? size.height : size.width;
+		const pageHeight = swap ? size.width : size.height;
+		const ascii = /^[\x20-\x7E]*$/.test(text);
+		if (!font) font = await embedFont(doc, options.font ?? (ascii ? { role: 'standard' } : { role: 'cjk' }));
+		const textWidth = font.widthOfTextAtSize(text, fontSize);
+		const [vertical, horizontal] = options.position.split('-') as ['top' | 'bottom', 'left' | 'center' | 'right'];
+		const alongX =
+			horizontal === 'left'
+				? margin
+				: horizontal === 'right'
+					? pageWidth - margin - textWidth
+					: (pageWidth - textWidth) / 2;
+		const alongY = vertical === 'top' ? pageHeight - margin - fontSize : margin;
+		page.drawText(text, {
+			x: swap ? alongY : alongX,
+			y: swap ? pageWidth - alongX - textWidth : alongY,
+			size: fontSize,
+			font,
+			color: rgb(0.35, 0.35, 0.42),
+			opacity: 0.9,
+			rotate: swap ? degrees(-90) : degrees(0),
+		});
+	}
+	report(options.updateProgress, total, total, '写出结果…');
+	return doc.save();
+}
+
+/* ------------------------------------------------------------------ 表单 */
+
+export interface FormFieldInfo {
+	name: string;
+	type: 'text' | 'checkbox' | 'choice';
+	value: string;
+	readOnly: boolean;
+	required: boolean;
+	options?: string[];
+	maxLength?: number | null;
+}
+
+/** 读出表单字段（页面上据此渲染填写界面） */
+export async function readFormFields(
+	bytes: Uint8Array,
+	options: LoadOptions = {},
+): Promise<FormFieldInfo[]> {
+	const doc = await loadDocument(bytes, { ...options, label: '读取表单' });
+	const form = doc.getForm();
+	const out: FormFieldInfo[] = [];
+	const { PDFField, PDFTextField, PDFCheckBox, PDFRadioGroup, PDFOptionList, PDFAcroChoice } = lib();
+	for (const field of form.getFields().values()) {
+		const name = field.getName();
+		const base = { name, readOnly: field.isReadOnly(), required: field.isRequired() };
+		try {
+			if (field instanceof PDFTextField) {
+				out.push({
+					...base,
+					type: 'text',
+					value: field.getText() ?? '',
+					maxLength: field.getMaxLength() ?? null,
+				});
+			} else if (field instanceof PDFCheckBox) {
+				out.push({ ...base, type: 'checkbox', value: field.isChecked() ? 'true' : 'false' });
+			} else if (field instanceof PDFRadioGroup || field instanceof PDFOptionList) {
+				const choices = [...field.getOptions()];
+				let selected = choices[0] ?? '';
+				try {
+					// 多选列表返回数组
+					const raw = field.getSelected() as string | string[] | undefined;
+					const first = Array.isArray(raw) ? raw[0] : raw;
+					if (first) selected = first;
+				} catch {
+					/* 保持默认值 */
+				}
+				out.push({
+					...base,
+					type: 'choice',
+					value: selected,
+					options: choices,
+				});
+			} else {
+				continue;
+			}
+		} catch {
+			// 畸形字段读不出取值就跳过，不让整个列表挂掉
+			continue;
+		}
+	}
+	void PDFField;
+	void PDFAcroChoice;
+	report(options.updateProgress, out.length, out.length, `共 ${out.length} 个字段`);
+	return out;
+}
+
+export interface FormFillOptions extends LoadOptions {
+	values: Record<string, string>;
+	/** true = 填完把表单域压平（之后不可再编辑） */
+	flatten: boolean;
+	/** 视为「选中」的取值 */
+	checkboxTrue?: string[];
+}
+
+/** 填写表单，可选压平 */
+export async function fillForm(bytes: Uint8Array, options: FormFillOptions): Promise<Uint8Array> {
+	const doc = await loadDocument(bytes, { ...options, label: '填写表单' });
+	const form = doc.getForm();
+	const { PDFTextField, PDFCheckBox, PDFRadioGroup, PDFOptionList } = lib();
+	const truthy = new Set((options.checkboxTrue ?? ['on', 'true', '1', 'yes']).map((v) => v.toLowerCase()));
+	const entries = Object.entries(options.values).filter(([, value]) => value !== '');
+	let nonAscii = false;
+	let filled = 0;
+	const skipped: string[] = [];
+
+	for (let i = 0; i < entries.length; i++) {
+		const [name, value] = entries[i];
+		try {
+			const field = form.getField(name);
+			if (field.isReadOnly()) {
+				skipped.push(name);
+				continue;
+			}
+			if (field instanceof PDFCheckBox) {
+				if (truthy.has(value.toLowerCase())) field.check();
+				else field.uncheck();
+			} else if (field instanceof PDFRadioGroup || field instanceof PDFOptionList) {
+				field.select(value);
+			} else if (field instanceof PDFTextField) {
+				field.setText(value);
+			} else {
+				skipped.push(name);
+				continue;
+			}
+			if (!/^[\x20-\x7E]*$/.test(value)) nonAscii = true;
+			filled++;
+		} catch {
+			skipped.push(name);
+		}
+		if (i % 5 === 0) {
+			report(options.updateProgress, i, entries.length, `填写 ${i + 1} / ${entries.length}`);
+			await tick();
+		}
+	}
+	if (entries.length > 0 && filled === 0) throw new Error('没有可写的字段（可能全是只读域）');
+	if (options.flatten) {
+		// 压平前必须重算外观，否则阅读器里看不到刚填进去的字
+		const font = await embedFont(doc, nonAscii ? { role: 'cjk' } : { role: 'standard' });
+		form.updateFieldAppearances(font);
+		form.flatten();
+	}
+	if (skipped.length) console.warn('跳过的字段：', skipped.join(', '));
+	report(options.updateProgress, entries.length, entries.length, '写出结果…');
+	return doc.save();
+}
+
+/* ------------------------------------------------------------ 加密与 PDF/A */
+
+export interface EncryptOptions extends LoadOptions {
+	userPassword?: string;
+	ownerPassword?: string;
+	allowPrinting?: boolean;
+	allowCopying?: boolean;
+	allowModifying?: boolean;
+}
+
+/** 加密 + 权限限制（省略打开密码则只设权限） */
+export async function encryptDocument(
+	bytes: Uint8Array,
+	options: EncryptOptions,
+): Promise<Uint8Array> {
+	const doc = await loadDocument(bytes, { ...options, label: '设置权限' });
+	const userPassword = options.userPassword ?? '';
+	const ownerPassword = options.ownerPassword || userPassword || '915p-owner';
+	report(options.updateProgress, 1, 2, '写入加密字典…');
+	doc.encrypt({
+		userPassword,
+		ownerPassword,
+		permissions: {
+			printing: options.allowPrinting === false ? false : 'highResolution',
+			copying: options.allowCopying !== false,
+			modifying: options.allowModifying !== false,
+			annotating: true,
+			fillingForms: true,
+			contentAccessibility: true,
+			documentAssembly: true,
+		},
+	});
+	report(options.updateProgress, 2, 2, '写出加密文档…');
+	return doc.save();
+}
+
+/* ---------------------------------------------------------------- 内嵌图片 */
+
+/** extractContents() 里我们只关心图片分支 */
+interface ImageExtractAsset {
+	kind: 'image';
+	width: number;
+	height: number;
+	mimeType: string;
+	getBytes(): Uint8Array;
+}
+type ExtractAsset = ImageExtractAsset | { kind: 'text' | 'graphics' };
+
+export interface EmbeddedImage extends NamedBytes {
+	/** 1 基页码 */
+	page: number;
+	/** 该页内第几张（1 基） */
+	seq: number;
+	width: number;
+	height: number;
+	mimeType: string;
+}
+
+/**
+ * 提取页面里的位图。
+ *
+ * 走 PDFPage.extractContents()：它已经处理了 DCTDecode（JPEG 原样取出）
+ * 与 8 位 DeviceRGB/DeviceGray（重新编码成 PNG），也认识 Form XObject 里的嵌套图。
+ * 但矢量图、带 SMask 之外高级色彩空间的图会直接被跳过，这是库的限制。
+ */
+export async function extractEmbeddedImages(
+	bytes: Uint8Array,
+	options: LoadOptions = {},
+): Promise<EmbeddedImage[]> {
+	const doc = await loadDocument(bytes, { ...options, label: '提取内嵌图片' });
+	const pages = doc.getPages();
+	const out: EmbeddedImage[] = [];
+	for (let i = 0; i < pages.length; i++) {
+		report(options.updateProgress, i, pages.length, `扫描第 ${i + 1} / ${pages.length} 页…`);
+		let assets: ExtractAsset[];
+		try {
+			assets = pages[i].extractContents() as ExtractAsset[];
+		} catch {
+			// 内容流损坏不该让整份文档的提取失败
+			assets = [];
+		}
+		let seq = 0;
+		for (const asset of assets) {
+			if (asset.kind !== 'image') continue;
+			seq++;
+			const data = asset.getBytes();
+			if (!data || data.length < 512) continue;
+			const isPng = data[0] === 0x89 && data[1] === 0x50;
+			const isJpg = data[0] === 0xff && data[1] === 0xd8;
+			if (!isPng && !isJpg) continue;
+			out.push({
+				page: i + 1,
+				seq,
+				name: `p${i + 1}-${seq}.${isPng ? 'png' : 'jpg'}`,
+				bytes: data,
+				width: asset.width,
+				height: asset.height,
+				mimeType: isPng ? 'image/png' : 'image/jpeg',
+			});
+		}
+		await tick();
+	}
+	report(options.updateProgress, pages.length, pages.length, `共找到 ${out.length} 张图片`);
+	return out;
+}
+
+export type PdfaConformance = '1B' | '2B' | '2U' | '3B' | '3U';
+
+/**
+ * 转 PDF/A。注意：这里只写入 PDF/A 的元数据与输出意图声明，
+ * 不做「所有字体必须嵌入」之类的合规体检，导出前请自行确认。
+ */
+export async function convertToPdfa(
+	bytes: Uint8Array,
+	conformance: PdfaConformance,
+	options: LoadOptions = {},
+): Promise<Uint8Array> {
+	const doc = await loadDocument(bytes, { ...options, label: '转换 PDF/A' });
+	report(options.updateProgress, 1, 2, `写入 PDF/A-${conformance} 声明…`);
+	doc.convertToPDFA({ conformance });
+	report(options.updateProgress, 2, 2, '写出结果…');
+	return doc.save();
+}

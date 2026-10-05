@@ -4,8 +4,19 @@
  * Questrial（几何无衬线，SIL OFL 1.1）
  *
  * 自托管 woff2，不请求 Google Fonts —— 保持全站零第三方 CDN 依赖（见 AGENT.md §3.1）。
- * latin 子集 20 KB，只覆盖拉丁字母与数字；中文仍回退到系统字体。
- * license 副本在 public/fonts/Questrial-LICENSE.txt。
+ * 中文仍回退到系统字体。license 副本在 public/fonts/Questrial-LICENSE.txt。
+ *
+ * 拆成 latin + latin-ext 两条 @font-face，且**必须**都写 unicode-range：
+ * fontsource 按 Unicode 区间预切好了子集，浏览器靠 unicode-range 判断该下哪一份。
+ * 不写的话两条 src 都会被当成同一份字体下载，latin-ext 的 31 KB 白费。
+ * 区间取值抄自 @fontsource/questrial 的 index.css，与上游一致。
+ *
+ * 只挂 latin 时拼音的 ǎ ǐ ǒ ǔ（U+01CE 等）不在子集里，会掉到下一级回退字体，
+ * 同一个词里字形风格突变 —— latin-ext 正是补这个洞。
+ *
+ * 注意区间里有一部分越南语声调符号（U+1E00-1E9F）Questrial 上游没做字形，
+ * 声明了也查不到、仍会回退系统字体。照抄上游是为了与包的切分保持一致，
+ * 本站拼音用不到这些字符，不影响。
  */
 @font-face {
 	font-family: 'Questrial';
@@ -13,6 +24,20 @@
 	font-display: swap;
 	font-weight: 400;
 	src: url('/fonts/questrial-latin-400-normal.woff2') format('woff2');
+	unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA,
+		U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193,
+		U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+	font-family: 'Questrial';
+	font-style: normal;
+	font-display: swap;
+	font-weight: 400;
+	src: url('/fonts/questrial-latin-ext-400-normal.woff2') format('woff2');
+	unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF,
+		U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020,
+		U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
 }
 
 /* ==========================================================================

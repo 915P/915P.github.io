@@ -359,6 +359,44 @@ translatewiki，采用 **CC BY 3.0**，不在 BSD-3-Clause 覆盖范围内。
 
 ---
 
+## 14. @cantoo/fontkit（PDF 工具箱：字体嵌入引擎）
+
+- **位置**：`public/vendor/fontkit/`
+- **上游**：<https://github.com/cantoo-scribe/fontkit>（npm 包 `@cantoo/fontkit`），
+  是 <https://github.com/foliojs/fontkit> 的维护分支
+- **版本**：2.0.12
+- **许可证**：**MIT**，Copyright (c) 2017 foliojs
+- **文件**：`fontkit.umd.min.js`（UMD 构建，378 KB）、`LICENSE`
+- **用途**：在 `/tools/pdf/` 中解析内嵌的中文字体，使 pdf-lib 能在绘制水印与页码时
+  对字体做子集化并嵌入 PDF。按需懒加载，只有真正绘制文字水印或页码时才会下载。
+- **本站改动**：无（未经修改的上游 UMD 构建）。
+- **说明**：该包同时出现在 `devDependencies` 中，仅为让 `scripts/pdf-test.mjs`
+  能在 Node 里走同一条代码路径。**不要**换成旧的 `@pdf-lib/fontkit` 1.1.1：
+  它处理这份字体会抛 `Cannot read properties of undefined (reading 'pos')`。
+
+---
+
+## 15. Noto Sans SC（子集，PDF 工具箱水印与页码用）
+
+- **位置**：`public/fonts/pdf/`
+- **上游**：Noto Sans SC，<https://github.com/notofonts/noto-cjk>
+  （Copyright 2014-2021 Adobe，保留字体名 `Source`）
+- **许可证**：**SIL Open Font License 1.1** —— 完整文本见
+  [`NotoSansSC-OFL.txt`](public/fonts/pdf/NotoSansSC-OFL.txt)
+- **文件**：`NotoSansSC-PDF.ttf`（2.2 MB）、`NotoSansSC-OFL.txt`
+- **用途**：站内唯一自带的中日韩字体，使 PDF 工具箱的水印与页码能完全在浏览器内
+  渲染中文，无需上传任何文件。由 pdf-lib 按输出文档做子集化并嵌入，
+  因此生成的 PDF 仍是自包含的。
+- **本站改动**：这是一份**修改版**。字形由上游字体裁剪而来：GB 2312 的 6763 个汉字
+  加上常用符号与拉丁字母、数字，共 7782 个字形。字体家族名已改为
+  `Noto Sans SC Subset`，以免衍生作品使用 OFL 第 3 条禁止使用的保留字体名
+  `Source`。未改动任何字形轮廓。由于是子集，覆盖范围之外的字符（生僻字、
+  仅繁体字形、日文与韩文假名）不会显示。
+- **说明**：子集制作过程可复现但未写成脚本，构建步骤记录在 `AGENT.md` 而非
+  `package.json` 里。
+
+---
+
 ## 站点自研部分
 
 以下内容为本站原创，采用根目录 [LICENSE](LICENSE) 中的 MIT 许可：
@@ -375,10 +413,12 @@ translatewiki，采用 **CC BY 3.0**，不在 BSD-3-Clause 覆盖范围内。
 - 博客文章正文（`src/content/blog/*.md`）
 - GitHub Actions 部署流程（`.github/workflows/deploy.yml`）
 - **`/tools/pdf/` PDF 工具箱** —— 本站从零自研：`src/lib/pdf-ops.ts`
-  （基于 pdf-lib 的页面重组、元数据、图片转 PDF）、`src/lib/pdf-loader.ts`
-  （三个 vendor 库的懒加载）与 `src/pages/tools/pdf.astro`，
-  以及 Node 回归测试 `scripts/pdf-test.mjs`。不含任何第三方代码，
-  pdf-lib / pdf.js / fflate 均以未经修改的上游构建引入（见 §11–§13）。
+  （基于 pdf-lib 的页面重组、元数据、图片转 PDF、页面裁剪与尺寸归一、
+  文字/图片水印、页码、表单填写、加密、PDF/A、内嵌图片提取）、
+  `src/lib/pdf-loader.ts`（四个 vendor 库与中文字体的懒加载）
+  与 `src/pages/tools/pdf.astro`，以及 Node 回归测试 `scripts/pdf-test.mjs`。
+  不含任何第三方代码，pdf-lib / pdf.js / fflate / fontkit 均以未经修改的
+  上游构建引入（见 §11–§14）。
 - **`/tools/oscope/` 示波器** —— 本站从零自研：`src/lib/oscope/`
   （`types.ts`、`capture.ts`、`ring.ts`、`measure.ts`、`fft.ts`、`render.ts`、
   `export.ts`、`recorder.ts`）与 `src/pages/tools/oscope.astro`。
