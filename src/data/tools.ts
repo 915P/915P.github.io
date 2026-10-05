@@ -159,6 +159,15 @@ export const builtinTools: Tool[] = [
 		href: '/tools/cejs/',
 	},
 	{
+		slug: 'media',
+		name: '音视频处理',
+		desc: '改容器、提取音轨、裁剪拼接与压制，全部在浏览器本地完成',
+		icon: 'video-file',
+		category: '影音',
+		status: 'live',
+		href: '/tools/media/',
+	},
+	{
 		slug: 'oscope',
 		name: '示波器',
 		desc: '触发稳定的实时示波器，自动测量频率、峰峰值与有效值',

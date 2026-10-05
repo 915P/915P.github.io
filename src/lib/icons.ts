@@ -71,4 +71,16 @@ import '@mdui/icons/content-copy.js';
 import '@mdui/icons/rotate-right.js';
 import '@mdui/icons/upload.js';
 
+// 音视频工具箱（movie-edit 在 @mdui/icons 里没有，改用 video-file）
+import '@mdui/icons/video-file.js';
+import '@mdui/icons/audio-file.js';
+import '@mdui/icons/image.js';
+import '@mdui/icons/warning.js';
+import '@mdui/icons/play-arrow.js';
+import '@mdui/icons/download.js';
+import '@mdui/icons/info.js';
+import '@mdui/icons/stop.js';
+// 拼接列表的移除按钮（cancel 是 mdui 内置名，不重复注册，见文件头注释）
+import '@mdui/icons/close.js';
+
 export {};

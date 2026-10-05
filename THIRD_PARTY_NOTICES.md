@@ -477,6 +477,156 @@ Telecommunications' 《标准电码本》.
 
 ---
 
+## 16. ffmpeg.wasm (media toolbox: format conversion, trimming, concatenation, transcoding) ⚠️ **GPL, runtime-loaded only**
+
+This entry is different from every other one in this file: **nothing here is
+redistributed with this site.** The binaries are fetched by the visitor's own
+browser, at their request, directly from a public CDN. They are never bundled,
+committed, built into `dist/`, or served from this repository. Read the
+"Licensing boundary" section below carefully — it is the whole reason for the
+design.
+
+### 16.1 @ffmpeg/ffmpeg (the JavaScript wrapper)
+
+- **Location**: none — loaded at runtime, cached in the visitor's IndexedDB
+- **Upstream**: <https://github.com/ffmpegwasm/ffmpeg.wasm> (npm package
+  `@ffmpeg/ffmpeg`)
+- **Version**: 0.12.10
+- **License**: **MIT**, Copyright (c) 2022 ffmpeg.wasm contributors
+- **Files**: `dist/umd/ffmpeg.js` (4 KB), `dist/umd/814.ffmpeg.js` (2.6 KB)
+- **Purpose**: in `/tools/media/`, provides the `FFmpeg` class, the web worker
+  and the postMessage RPC between page and ffmpeg.
+- **Site modifications**: the UMD build is **patched at load time**. Its worker
+  entry point is rewritten so that it points at a locally cached blob URL
+  instead of a cross-origin CDN path, because browsers forbid constructing a
+  `Worker` from a cross-origin script. The patch is a single structural regex
+  substitution in `src/lib/media-loader.ts`; no bytes of the upstream file are
+  otherwise altered.
+
+### 16.2 @ffmpeg/core (the actual ffmpeg build)
+
+- **Location**: none — loaded at runtime, cached in the visitor's IndexedDB
+- **Upstream**: <https://github.com/ffmpegwasm/ffmpeg.wasm> (npm package
+  `@ffmpeg/core`), which compiles FFmpeg to WebAssembly
+- **Version**: 0.12.10
+- **License**: **GPL-2.0-or-later**
+- **Files**: `dist/umd/ffmpeg-core.js` (112 KB),
+  `dist/umd/ffmpeg-core.wasm` (**32.2 MB**)
+- **Purpose**: in `/tools/media/`, performs all actual media work — remuxing,
+  stream extraction, trimming, concatenation, and real re-encoding
+  (transcoding) in the *压制* / "Compress" tab.
+- **Site modifications**: none. The unmodified upstream build is used, served by
+  the CDN.
+- **Trademarks**: "FFmpeg" is a trademark of the FFmpeg project. This site is
+  not affiliated with or endorsed by it.
+
+### 16.3 Licensing boundary — why this does not change this site's license
+
+The root [LICENSE](LICENSE) of this repository is MIT. That is deliberate, and
+the following reasoning is the reason `@ffmpeg/core` is **not** vendored here:
+
+1. `@ffmpeg/core` is GPL-2.0-or-later. GPL copyleft attaches to *distribution*.
+   Including the 32 MB `.wasm` in this repository would be distribution, and
+   would oblige the whole site to be distributed under GPL.
+2. Instead, `/tools/media/` fetches both packages **at runtime** from a public
+   CDN, in the visitor's browser. The visitor's browser contacts the CDN
+   directly; the bytes never pass through, or become part of, anything this
+   project publishes.
+3. No `@ffmpeg/*` package appears in `package.json`, in `public/vendor/`, in
+   `dist/`, or in any commit. The tool is the only page that uses it, and it
+   degrades to a clear "you must download it first" prompt elsewhere.
+4. Because of (3), this site **conveys** the ffmpeg binaries to the visitor
+   rather than distributing them, so the GPL obligations attaching to
+   distribution are not triggered here.
+
+This is a considered engineering decision, not a claim of legal advice. It is
+recorded here so the reasoning is auditable. If this project ever changes to
+*vendoring* the core (for example to remove the runtime download, or to support
+offline use), that change would place the site under GPL-2.0-or-later and this
+entry **must** be rewritten and the root `LICENSE` changed accordingly.
+
+### 16.4 Practical limitations that follow from the above
+
+- **First use needs network access** to a CDN. The 32 MB core is cached in the
+  visitor's IndexedDB afterwards, so subsequent visits do not re-download it.
+- **`@ffmpeg/core-mt` cannot be used.** The multi-threaded build needs
+  `SharedArrayBuffer`, which requires `Cross-Origin-Opener-Policy` and
+  `Cross-Origin-Embedder-Policy` response headers. GitHub Pages does not allow
+  custom headers, so only the single-threaded build is usable on this host.
+- **No hardware acceleration.** Everything runs in software inside
+  WebAssembly, on one thread (see §16.5).
+- **Transcoding works, but is slow and lossy.** The *压制* tab really does run
+  encoders rather than copying streams. Speed scales with pixel count, so a
+  1080p video takes roughly nine times as long as the same video at 360p. The
+  page states measured figures up front rather than a vague "it may be slow".
+
+### 16.5 What the encoder set actually contains (measured, not assumed)
+
+The available encoders are a property of how the upstream maintainers compiled
+the wasm core, not of FFmpeg in general. The 0.12.10 core prints its own build
+configuration, and it is worth reading rather than guessing:
+
+```
+--disable-pthreads --enable-gpl --enable-libx264 --enable-libx265
+--enable-libvpx --enable-libmp3lame --enable-libtheora --enable-libvorbis
+--enable-libopus
+```
+
+Because that list is authoritative and can change between releases, the page
+**parses `ffmpeg -encoders` at runtime** (`parseEncoderList()` in
+`src/lib/media-ops.ts`) and greys out any option the loaded core does not
+provide, instead of letting the user discover it through an "Unknown encoder"
+error. The list of candidates is only a starting point.
+
+Three capabilities were tested in a real browser against this exact core and
+deliberately left out, because offering a one-click option that reliably fails
+is worse than not offering it:
+
+| Wanted | Why it is not offered |
+| --- | --- |
+| **H.265 / HEVC** (`libx265`) | Included in the build, but **hangs forever**. The encoder initialises ("Thread pool created using 1 threads") and then emits no progress at all; 361 s of wall clock produced zero `frame=` lines. `pools=1:frame-threads=1` did not help. `--disable-pthreads` and x265's internal thread pool do not get along. |
+| **VP9** (`libvpx-vp9`) | Encodes **exactly one frame** and then dies with `RuntimeError: memory access out of bounds`, in both constant-quality and bitrate mode, and at every resolution tried. Reproduced through the site's own custom-command tab with hand-written flags, so it is the core, not this site's argument building. |
+| **AV1** (`libaom-av1`, `libsvtav1`) | Never compiled in — the configuration line above contains no `--enable-libaom` or `--enable-libsvtav1`. AV1 can only be decoded here, never encoded. This is the one case where the reference tool this page was modelled on cannot be matched. |
+
+Consequences worth stating plainly: **WebM output is still possible** (via VP8,
+which works), but the modern efficient choice of VP9 is not available.
+
+Encoders that were measured working in a real browser, on a 640×360, 6-second
+clip:
+
+| Encoder | Result | Speed |
+| --- | --- | --- |
+| `libx264` (H.264) | 203.6 KB → 215.0 KB | 3–6× real time |
+| `mpeg4` (MPEG-4 Part 2) | → 387.1 KB | 6× real time |
+| `libvpx` (VP8) | → 258.2 KB | 3× real time, but varied to 1/8× |
+| `libtheora` (Theora) | → 108.6 KB | 28× real time |
+| `aac`, `libmp3lame`, `libopus`, `flac` | audio only | 14–64× real time |
+
+Theora is restricted to OGG and MKV: WebM only permits VP8/VP9/AV1 video, and
+ffmpeg refuses the combination outright.
+
+One consequence of using encoders at all is that **ffmpeg can now fail** where
+copying streams could not. ffmpeg.wasm's `exec()` only rejects when the worker
+itself dies; when ffmpeg reports an error it *resolves* and returns a non-zero
+exit code. Ignoring that return value was observed to hand a user a 264-byte
+corrupt file and report "done", so the page now checks the exit code
+(`execChecked()` in `src/pages/tools/media.astro`) and surfaces ffmpeg's own
+last log lines. A crashed instance is also discarded and reloaded, because
+after a heap failure the same instance returns `memory access out of bounds`
+forever.
+
+### 16.6 Alternatives considered
+
+| Option | Why not |
+| --- | --- |
+| Vendor `@ffmpeg/core` into `public/vendor/` | Would be distribution → forces the whole site under GPL; also adds 32 MB to `dist/` and `.git` (currently 7.4 MB and 31 MB) |
+| `mupdf.js` (rejected earlier for the same class of reason) | AGPL-3.0, which additionally has network-use copyleft |
+| WebCodecs API + `mp4box.js` | No GPL, no 32 MB download — but Chromium-only, cannot transcode, and requires hand-writing container handling. Kept as the fallback if the CDN approach ever has to be abandoned |
+| Building a LGPL-only ffmpeg with Emscripten | Would need the GPL components (x264, libvpx …) removed, which removes most of the format support; not worth the build complexity |
+| Compiling a custom `@ffmpeg/core` with AV1 and working `libx265` | Would fix the three gaps in §16.5, but a self-built core is a fork that must be tracked, rebuilt and re-audited whenever upstream moves — and it would still be GPL, so the boundary in §16.3 would have to be re-examined rather than relaxed |
+
+---
+
 ## The site's own work
 
 The following is original to this site and is covered by the MIT license in the
@@ -505,6 +655,16 @@ root [LICENSE](LICENSE):
   CJK font) and `src/pages/tools/pdf.astro`, plus the Node regression test
   `scripts/pdf-test.mjs`. It bundles no third-party code; pdf-lib, pdf.js,
   fflate and fontkit are used as unmodified upstream builds (§11–§14).
+- **The media toolbox at `/tools/media/`** — written from scratch for this site:
+  `src/lib/media-ops.ts` (validation, ffmpeg argument assembly and runtime
+  encoder-capability parsing, free of any browser API so it runs in Node),
+  `src/lib/media-loader.ts` (CDN source probing, IndexedDB caching, worker entry
+  rewriting) and `src/pages/tools/media.astro`,
+  plus the Node regression test `scripts/media-test.mjs`. It bundles no
+  third-party code. **Exception**: ffmpeg.wasm (`@ffmpeg/ffmpeg` MIT +
+  `@ffmpeg/core` **GPL-2.0-or-later**) is neither bundled nor redistributed — it
+  is fetched at runtime from a public CDN by the visitor's own browser. See the
+  licensing-boundary analysis in §16.3.
 - **The oscilloscope at `/tools/oscope/`** — written from scratch for this site:
   `src/lib/oscope/` (`types.ts`, `capture.ts`, `ring.ts`, `measure.ts`, `fft.ts`,
   `render.ts`, `export.ts`, `recorder.ts`) and `src/pages/tools/oscope.astro`.

@@ -25,16 +25,21 @@ concurrency:
   group: pages
   cancel-in-progress: true
 
+# ubuntu-latest 将于 2026-10-19 迁移到 Ubuntu 26。
+# 两个 job 都锁定 ubuntu-24.04，免得那天起构建环境突变；
+# 确认迁移无问题后可再改回 ubuntu-latest。
+# （注意：runs-on 不读 env 上下文，所以只能直接写死字面量。）
+
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     defaults:
       run:
         working-directory: .
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
@@ -50,17 +55,17 @@ jobs:
         run: npm run build
 
       - name: 上传产物
-        uses: actions/upload-pages-artifact@v4
+        uses: actions/upload-pages-artifact@v5
         with:
           path: dist
 
   deploy:
     needs: build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - name: 部署到 GitHub Pages
         id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5

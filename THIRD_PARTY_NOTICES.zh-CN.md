@@ -397,6 +397,135 @@ translatewiki，采用 **CC BY 3.0**，不在 BSD-3-Clause 覆盖范围内。
 
 ---
 
+## 16. ffmpeg.wasm（音视频工具箱：改格式、裁剪、拼接、压制）⚠️ **GPL，仅运行时加载**
+
+本条与本文件其余各条都不同：**这里没有任何东西随本站分发**。二进制文件由
+访客自己的浏览器按其请求，直接从公共 CDN 取回，既没有打包进本仓库、没有提交、
+没有进 `dist/`，也不是由本站服务器提供。请务必读完下面的「许可边界」一节 ——
+整个架构设计就是为了它。
+
+### 16.1 @ffmpeg/ffmpeg（JavaScript 胶水层）
+
+- **位置**：无 —— 运行时加载，缓存在访客的 IndexedDB 里
+- **上游**：<https://github.com/ffmpegwasm/ffmpeg.wasm>（npm 包 `@ffmpeg/ffmpeg`）
+- **版本**：0.12.10
+- **许可证**：**MIT**，Copyright (c) 2022 ffmpeg.wasm contributors
+- **文件**：`dist/umd/ffmpeg.js`（4 KB）、`dist/umd/814.ffmpeg.js`（2.6 KB）
+- **用途**：在 `/tools/media/` 中提供 `FFmpeg` 类、web worker，以及页面与
+  ffmpeg 之间的 postMessage 通信。
+- **本站改动**：UMD 构建在**加载时被改写**。它的 worker 入口被替换成指向本地
+  缓存的 blob URL，而不是跨域的 CDN 路径 —— 浏览器禁止从跨域脚本构造 `Worker`。
+  改写由 `src/lib/media-loader.ts` 里一条结构化正则完成，除此之外未改动上游
+  文件的任何字节。
+
+### 16.2 @ffmpeg/core（真正干活的 ffmpeg 构建）
+
+- **位置**：无 —— 运行时加载，缓存在访客的 IndexedDB 里
+- **上游**：<https://github.com/ffmpegwasm/ffmpeg.wasm>（npm 包 `@ffmpeg/core`），
+  即把 FFmpeg 编译成 WebAssembly 的产物
+- **版本**：0.12.10
+- **许可证**：**GPL-2.0-or-later**
+- **文件**：`dist/umd/ffmpeg-core.js`（112 KB）、
+  `dist/umd/ffmpeg-core.wasm`（**32.2 MB**）
+- **用途**：在 `/tools/media/` 中执行全部实际处理 —— 改封装、提取轨道、裁剪、拼接，
+  以及「压制」页签里真正的重新编码。
+- **本站改动**：无，使用 CDN 提供的未经修改的上游构建。
+- **商标**：「FFmpeg」是 FFmpeg 项目的商标。本项目与其无隶属或背书关系。
+
+### 16.3 许可边界 —— 为什么这不会改变本站的许可证
+
+本仓库根目录的 [LICENSE](LICENSE) 是 MIT，这是有意为之。`@ffmpeg/core`
+**没有**被 vendored 进来，正是出于下面这套推理：
+
+1. `@ffmpeg/core` 是 GPL-2.0-or-later。GPL 的著佐权义务附着于**分发**行为。
+   把这 32 MB 的 `.wasm` 放进本仓库就构成分发，会要求整站以 GPL 发布。
+2. 改为 `/tools/media/` 在**运行时**由访客浏览器从公共 CDN 取得。访客的浏览器
+   直接联系 CDN；这些字节从不经过本站发布的任何内容。
+3. 任何 `@ffmpeg/*` 包都**没有**出现在 `package.json`、`public/vendor/`、`dist/`
+   或任何提交里。只有这一个页面用到它，其余页面不会触发任何加载。
+4. 因为 (3)，本站对 ffmpeg 二进制属于**传递（convey）**而非**分发（distribute）**，
+   分发所附着的 GPL 义务在此未被触发。
+
+这是一个经过权衡的工程决策，不构成法律意见。写在这里是为了让推理可被复核。
+如果本站将来改为 vendored 该 core（例如为了去掉运行时下载、或支持离线使用），
+那一改动将使整站落入 GPL-2.0-or-later，本节**必须**重写，根目录 `LICENSE`
+也必须相应修改。
+
+### 16.4 由此带来的实际限制
+
+- **首次使用需要联网**访问 CDN。那 32 MB 的 core 之后会缓存在访客的
+  IndexedDB 里，再次访问不再下载。
+- **`@ffmpeg/core-mt` 无法使用**。多线程构建需要 `SharedArrayBuffer`，
+  而那要求响应头带 `Cross-Origin-Opener-Policy` 与
+  `Cross-Origin-Embedder-Policy`。GitHub Pages 不允许自定义响应头，
+  因此本部署环境只能用单线程构建。
+- **没有硬件加速**。全部工作在 WebAssembly 里纯软件完成，且是单线程
+  （见 §16.5）。
+- **压制能用，但慢且有损**。「压制」页签是真的在跑编码器，而不是复制数据。
+  耗时与像素数成正比，1080p 大约是同样素材 360p 的九倍。页面直接给出实测
+  数字，而不是含糊地说一句「可能比较慢」。
+
+### 16.5 编码器到底有哪些（实测，不是推测）
+
+有哪些编码器取决于上游维护者当年**怎么编译**这个 wasm core，与 FFmpeg 本身
+无关。0.12.10 会把自己的构建配置打印出来，而这份配置值得一读：
+
+```
+--disable-pthreads --enable-gpl --enable-libx264 --enable-libx265
+--enable-libvpx --enable-libmp3lame --enable-libtheora --enable-libvorbis
+--enable-libopus
+```
+
+这份清单是权威的，而且会随版本变化，所以页面在**运行时解析
+`ffmpeg -encoders`**（`src/lib/media-ops.ts` 里的 `parseEncoderList()`），
+把当前 core 不提供的选项直接置灰，而不是让用户点了才吃到
+「Unknown encoder」。代码里的候选表只是个起点。
+
+有三项能力在真实浏览器里对着这个 core 测过之后**故意没有提供** ——
+给一个必然失败的一键选项，比不给更糟：
+
+| 想提供 | 为什么不提供 |
+| --- | --- |
+| **H.265 / HEVC**（`libx265`） | 构建里带了，但**会永久卡死**。编码器初始化完成（`Thread pool created using 1 threads`）之后不再吐出任何进度；实测 361 秒的墙上时间里一行 `frame=` 都没有。加 `pools=1:frame-threads=1` 也无效。`--disable-pthreads` 与 x265 内部线程池相处不来。 |
+| **VP9**（`libvpx-vp9`） | 恰好编完**一帧**就以 `RuntimeError: memory access out of bounds` 死掉。恒定质量与码率两种模式都试过，各分辨率都试过。用本站自己的「命令」页签手写同样的参数也能复现，所以问题出在 core，而不是本站的命令拼装。 |
+| **AV1**（`libaom-av1`、`libsvtav1`） | 压根没编进来 —— 上面那行配置里没有 `--enable-libaom` 也没有 `--enable-libsvtav1`。这里只能解 AV1，不能编。这是本页参照的那个工具箱里唯一无法对齐的能力。 |
+
+有一点需要说明白：**WebM 仍然能产出**（走 VP8，实测可用），只是现代高效的
+VP9 这条路走不通。
+
+在 640×360、6 秒素材上实测通过的编码器：
+
+| 编码器 | 结果 | 速度 |
+| --- | --- | --- |
+| `libx264`（H.264） | 203.6 KB → 215.0 KB | 3–6× 实时 |
+| `mpeg4`（MPEG-4 Part 2） | → 387.1 KB | 6× 实时 |
+| `libvpx`（VP8） | → 258.2 KB | 3× 实时，但波动到过 1/8× |
+| `libtheora`（Theora） | → 108.6 KB | 28× 实时 |
+| `aac`、`libmp3lame`、`libopus`、`flac` | 仅音频 | 14–64× 实时 |
+
+Theora 只能装 OGG 与 MKV：WebM 规范只允许 VP8/VP9/AV1 视频，ffmpeg 会直接
+拒绝这个组合。
+
+用了编码器就带来一个副作用：**ffmpeg 现在可能失败**，而复制数据时不会。
+ffmpeg.wasm 的 `exec()` 只在 worker 本身死掉时才 reject；ffmpeg 自己报错时
+它**照常 resolve**，把非零退出码放进返回值。忽略这个返回值的后果实测过：
+用户会拿到一个 264 字节的坏文件，页面还显示「完成」。因此页面现在会检查
+退出码（`src/pages/tools/media.astro` 里的 `execChecked()`），并把 ffmpeg 最后
+几行日志原样带出来。另外，崩掉的实例会被丢弃并重新加载 —— 堆失败之后，
+同一个实例会永远返回 `memory access out of bounds`。
+
+### 16.6 评估过的其他方案
+
+| 方案 | 未采用的原因 |
+| --- | --- |
+| 把 `@ffmpeg/core` vendored 进 `public/vendor/` | 构成分发 → 整站被迫 GPL；且给 `dist/` 与 `.git`（现分别 31 MB / 31 MB）各加 32 MB |
+| `mupdf.js`（此前因同类原因否决） | AGPL-3.0，另有网络使用著佐权条款 |
+| WebCodecs API + `mp4box.js` | 不涉及 GPL、不需下 32 MB —— 但仅 Chromium 可用、不能转码，且容器处理要自己写。保留为将来放弃 CDN 方案时的退路 |
+| 用 Emscripten 自建 LGPL 版 ffmpeg | 需要砍掉 GPL 组件（x264、libvpx 等），会丢掉大部分格式支持；构建复杂度不值得 |
+| 自建带 AV1 与可用 `libx265` 的 `@ffmpeg/core` | 能补上 §16.5 的三个缺口，但自建 core 是个分叉，上游一动就得跟着重建、重审；而且它仍然是 GPL，§16.3 的边界要重新论证而不是放松 |
+
+---
+
 ## 站点自研部分
 
 以下内容为本站原创，采用根目录 [LICENSE](LICENSE) 中的 MIT 许可：
@@ -419,6 +548,13 @@ translatewiki，采用 **CC BY 3.0**，不在 BSD-3-Clause 覆盖范围内。
   与 `src/pages/tools/pdf.astro`，以及 Node 回归测试 `scripts/pdf-test.mjs`。
   不含任何第三方代码，pdf-lib / pdf.js / fflate / fontkit 均以未经修改的
   上游构建引入（见 §11–§14）。
+- **`/tools/media/` 音视频工具箱** —— 本站从零自研：`src/lib/media-ops.ts`
+  （参数校验、ffmpeg 命令拼装与运行时编码器能力解析，零浏览器依赖，可在 Node 里测）、
+  `src/lib/media-loader.ts`（CDN 多源探测、IndexedDB 缓存、worker 入口改写）
+  与 `src/pages/tools/media.astro`，以及 Node 回归测试 `scripts/media-test.mjs`。
+  不含任何第三方代码。**例外**：ffmpeg.wasm（`@ffmpeg/ffmpeg` MIT +
+  `@ffmpeg/core` **GPL-2.0-or-later**）不在此列 —— 它既不打包也不分发，
+  由访客浏览器运行时从公共 CDN 直接取得，详见 §16.3 的许可边界说明。
 - **`/tools/oscope/` 示波器** —— 本站从零自研：`src/lib/oscope/`
   （`types.ts`、`capture.ts`、`ring.ts`、`measure.ts`、`fft.ts`、`render.ts`、
   `export.ts`、`recorder.ts`）与 `src/pages/tools/oscope.astro`。

@@ -12,7 +12,8 @@
     "check": "astro check",
     "astro": "astro",
     "test:eval": "node scripts/eval-test.mjs",
-    "test:pdf": "node scripts/pdf-test.mjs"
+    "test:pdf": "node scripts/pdf-test.mjs",
+    "test:media": "node scripts/media-test.mjs"
   },
   "dependencies": {
     "@astrojs/mdx": "^8.0.2",

@@ -1,0 +1,2628 @@
+---
+import Page from '../../layouts/Page.astro';
+---
+
+<Page
+	title="音视频处理"
+	description="在浏览器里改容器格式、提取音视频、裁剪拼接，以及真正重新编码的压制。首次使用需下载约 32 MB 的 ffmpeg 核心，文件不上传。"
+	active="tools"
+>
+	<div class="tool-head head-split">
+		<div class="head-title">
+			<h1>音视频处理</h1>
+			<p class="lede">
+				改容器、提取音轨、裁剪、拼接。全部在浏览器本地完成，文件不会上传到任何服务器。
+			</p>
+		</div>
+		<div class="head-tools">
+			<mdui-chip variant="tonal">
+				<mdui-icon-lock></mdui-icon-lock>
+				本地处理
+			</mdui-chip>
+		</div>
+	</div>
+
+	{/*
+		与 PDF 页同一套进度面板：库加载 → 文件探测 → 处理 → 完成，
+		每一步都往这里写。ffmpeg 的 wasm 编译阶段没有百分比，退化成不确定态。
+	*/}
+	<section class="panel-lg media-stack media-progress" id="progressPanel" hidden>
+		<div class="row-between media-progress-head">
+			<span class="text-sm" id="progressText" role="status">准备中…</span>
+			<span class="text-xs faint" id="progressPercent"></span>
+		</div>
+		<mdui-linear-progress id="progressBar" value="0" max="1"></mdui-linear-progress>
+	</section>
+
+	{/*
+		ffmpeg 核心首次要下 32 MB，用一次性的告知块说明清楚，别让用户误以为卡死。
+		已缓存 / 已就绪时整块隐藏（isCoreCached + ensureFfmpeg），不占版面。
+	*/}
+	<section class="panel-lg media-stack media-notice" id="coreNotice">
+		<div class="row media-notice-row">
+			<mdui-icon-warning></mdui-icon-warning>
+			<div class="media-notice-body">
+				<p class="text-sm">
+					<strong>首次使用需要下载约 32 MB 的 ffmpeg 核心</strong>（WebAssembly 模块，
+					由浏览器从公共 CDN 直取，已缓存到本地，之后不再下载）。
+				</p>
+				<p class="text-xs faint" id="coreNoticeDetail">
+					除「压制」外的处理都是「不重新编码」：只搬运已有的音视频数据，因此很快。
+					<strong>压制</strong>页签可以真正重新编码（换编码格式、缩分辨率、改码率），
+					但纯软件单线程，速度是视频时长的数倍到数十倍。
+				</p>
+			</div>
+		</div>
+		<div class="row media-notice-actions">
+			<mdui-button variant="filled" id="preloadBtn">
+				<mdui-icon-download slot="icon"></mdui-icon-download>
+				提前下载
+			</mdui-button>
+			<mdui-button variant="text" id="clearCacheBtn">清除本地缓存</mdui-button>
+		</div>
+	</section>
+
+	<mdui-tabs value="remux" id="mediaTabs" class="media-tabs media-stack">
+		<mdui-tab value="remux">改格式</mdui-tab>
+		<mdui-tab value="transcode">压制</mdui-tab>
+		<mdui-tab value="extract">提取</mdui-tab>
+		<mdui-tab value="trim">裁剪</mdui-tab>
+		<mdui-tab value="split">剪切</mdui-tab>
+		<mdui-tab value="mergeav">合并音视频</mdui-tab>
+		<mdui-tab value="subtitle">字幕</mdui-tab>
+		<mdui-tab value="concat">拼接</mdui-tab>
+		<mdui-tab value="command">命令</mdui-tab>
+		<mdui-tab value="info">文件信息</mdui-tab>
+
+	{/* ------------------------------------------------------------ 改格式 */}
+	<mdui-tab-panel slot="panel" value="remux">
+		<section class="media-tab-body">
+			<div class="media-picker">
+				<div class="media-drop" id="remuxDrop">
+					<mdui-button variant="outlined" id="remuxPick">
+						<mdui-icon-upload slot="icon"></mdui-icon-upload>
+						选择视频或音频
+					</mdui-button>
+					<span class="text-xs faint" id="remuxInfo">还没有选择文件</span>
+				</div>
+			</div>
+
+			<div class="media-form">
+				<mdui-select id="remuxContainer" variant="outlined" label="目标格式" value="mp4"></mdui-select>
+				<mdui-select id="remuxQuality" variant="outlined" label="兼容性处理" value="auto">
+					<mdui-menu-item value="auto">按需自动</mdui-menu-item>
+					<mdui-menu-item value="hevc">HEVC 补 hvc1 标签</mdui-menu-item>
+					<mdui-menu-item value="faststart">MP4 索引前置（可边下边播）</mdui-menu-item>
+					<mdui-menu-item value="both">两者都做</mdui-menu-item>
+				</mdui-select>
+			</div>
+
+			<p class="text-xs faint media-hint" id="remuxHint"></p>
+
+			<div class="row media-actions">
+				<mdui-button variant="filled" id="remuxRun">
+					<mdui-icon-play slot="icon"></mdui-icon-play>
+					开始处理
+				</mdui-button>
+				<span class="text-xs faint" id="remuxSummary"></span>
+			</div>
+		</section>
+	</mdui-tab-panel>
+
+	{/* ------------------------------------------------------------ 压制 */}
+	<mdui-tab-panel slot="panel" value="transcode">
+		<section class="media-tab-body">
+			<p class="media-lede">
+				真正重新编码：把视频压成 H.264 / H.265 / VP9，或把音频压成 AAC / MP3 / Opus，
+				也能缩分辨率、改码率。这是本页唯一一个「不搬运字节、而是重新算一遍」的功能。
+			</p>
+
+			{/*
+			 * 速度警告常驻，不做成折叠：这个页签最容易让人误以为是卡死。
+			 * 措辞与 media-ops.ts 的 GRID_NOTE 同源，改一处要改两处。
+			 */}
+			<section class="panel-lg media-notice media-notice-warn">
+				<div class="row media-notice-row">
+					<mdui-icon-warning></mdui-icon-warning>
+					<div class="media-notice-body">
+						<p class="text-sm"><strong>压制会非常慢，请先确认再点开始</strong></p>
+						<p class="text-xs faint" id="transcodeWarn"></p>
+					</div>
+				</div>
+			</section>
+
+			<div class="media-picker">
+				<div class="media-drop" id="transcodeDrop">
+					<mdui-button variant="outlined" id="transcodePick">
+						<mdui-icon-upload slot="icon"></mdui-icon-upload>
+						选择文件
+					</mdui-button>
+					<span class="text-xs faint" id="transcodeInfo">还没有选择文件</span>
+				</div>
+			</div>
+
+			<div class="media-form">
+				<mdui-select id="transcodeVideo" variant="outlined" label="视频编码" value="x264"></mdui-select>
+				<mdui-select id="transcodeAudio" variant="outlined" label="音频处理" value="aac"></mdui-select>
+				<mdui-select id="transcodeContainer" variant="outlined" label="输出容器"></mdui-select>
+				<mdui-select id="transcodeMode" variant="outlined" label="质量控制" value="crf">
+					<mdui-menu-item value="crf">恒定质量（推荐）</mdui-menu-item>
+					<mdui-menu-item value="bitrate">目标码率</mdui-menu-item>
+				</mdui-select>
+				<mdui-select id="transcodePreset" variant="outlined" label="编码速度"></mdui-select>
+				<mdui-select id="transcodeScale" variant="outlined" label="分辨率" value="source"></mdui-select>
+			</div>
+
+			<div class="media-form">
+				<mdui-text-field
+					id="transcodeCrf"
+					variant="outlined"
+					label="质量值"
+					type="number"
+					min="0"
+					max="51"
+					value="23"
+				></mdui-text-field>
+				<mdui-text-field
+					id="transcodeVBitrate"
+					variant="outlined"
+					label="视频码率 kbps"
+					type="number"
+					min="1"
+					placeholder="如 2000"
+					hidden
+				></mdui-text-field>
+				<mdui-select
+					id="transcodeABitrate"
+					variant="outlined"
+					label="音频码率"
+					hidden
+				></mdui-select>
+				<mdui-text-field
+					id="transcodeWidth"
+					variant="outlined"
+					label="宽度 px"
+					type="number"
+					min="16"
+					placeholder="1280"
+					hidden
+				></mdui-text-field>
+				<mdui-text-field
+					id="transcodeHeight"
+					variant="outlined"
+					label="高度 px"
+					type="number"
+					min="16"
+					placeholder="720"
+					hidden
+				></mdui-text-field>
+			</div>
+
+			<p class="text-xs faint media-hint" id="transcodeHint"></p>
+
+			<div class="row media-actions">
+				<mdui-button variant="filled" id="transcodeRun">
+					<mdui-icon-play slot="icon"></mdui-icon-play>
+					开始压制
+				</mdui-button>
+				<mdui-button variant="text" id="transcodeProbe">检测可用编码器</mdui-button>
+				<span class="text-xs faint" id="transcodeSummary"></span>
+			</div>
+		</section>
+	</mdui-tab-panel>
+
+	{/* ------------------------------------------------------------ 提取 */}
+	<mdui-tab-panel slot="panel" value="extract">
+		<section class="media-tab-body">
+			<div class="media-picker">
+				<div class="media-drop" id="extractDrop">
+					<mdui-button variant="outlined" id="extractPick">
+						<mdui-icon-upload slot="icon"></mdui-icon-upload>
+						选择文件
+					</mdui-button>
+					<span class="text-xs faint" id="extractInfo">还没有选择文件</span>
+				</div>
+			</div>
+
+			<div class="media-form">
+				<mdui-select id="extractMode" variant="outlined" label="提取内容" value="audio">
+					<mdui-menu-item value="audio">音轨（存为 M4A）</mdui-menu-item>
+					<mdui-menu-item value="video">视频轨（去掉声音）</mdui-menu-item>
+					<mdui-menu-item value="cover">封面帧（单张图片）</mdui-menu-item>
+				</mdui-select>
+				<mdui-text-field
+					id="extractFrame"
+					variant="outlined"
+					label="第几帧（仅封面）"
+					value="1"
+					inputmode="numeric"
+				></mdui-text-field>
+				<mdui-select id="extractFormat" variant="outlined" label="图片格式（仅封面）" value="jpg">
+					<mdui-menu-item value="jpg">JPG</mdui-menu-item>
+					<mdui-menu-item value="png">PNG</mdui-menu-item>
+				</mdui-select>
+			</div>
+
+			<p class="text-xs faint media-hint">
+				音轨与视频轨是直接复制原有数据，不会重新编码；容器必须容得下原编码
+				（AAC → M4A、Opus → WebM）。若报「codec not supported in container」，
+				请改用「改格式」标签页选择合适的音频容器。
+			</p>
+
+			<div class="row media-actions">
+				<mdui-button variant="filled" id="extractRun">
+					<mdui-icon-play slot="icon"></mdui-icon-play>
+					开始提取
+				</mdui-button>
+				<span class="text-xs faint" id="extractSummary"></span>
+			</div>
+		</section>
+	</mdui-tab-panel>
+
+	{/* ------------------------------------------------------------ 裁剪 */}
+	<mdui-tab-panel slot="panel" value="trim">
+		<section class="media-tab-body">
+			<div class="media-picker">
+				<div class="media-drop" id="trimDrop">
+					<mdui-button variant="outlined" id="trimPick">
+						<mdui-icon-upload slot="icon"></mdui-icon-upload>
+						选择文件
+					</mdui-button>
+					<span class="text-xs faint" id="trimInfo">还没有选择文件</span>
+				</div>
+			</div>
+
+			<div class="media-form">
+				<mdui-text-field
+					id="trimStart"
+					variant="outlined"
+					label="起始（秒，或 1:30）"
+					placeholder="留空 = 从头"
+				></mdui-text-field>
+				<mdui-text-field
+					id="trimEnd"
+					variant="outlined"
+					label="结束（秒，或 1:30）"
+					placeholder="留空 = 到结尾"
+				></mdui-text-field>
+			</div>
+
+			<p class="text-xs faint media-hint">
+				不重新编码，所以起点只能落在关键帧上，实际切片可能比填写的早零点几秒。
+				需要逐帧精确请自行用其他工具重编码。
+			</p>
+
+			<div class="row media-actions">
+				<mdui-button variant="filled" id="trimRun">
+					<mdui-icon-play slot="icon"></mdui-icon-play>
+					开始裁剪
+				</mdui-button>
+				<span class="text-xs faint" id="trimSummary"></span>
+			</div>
+		</section>
+	</mdui-tab-panel>
+
+	{/* ------------------------------------------------------------ 剪切 */}
+	<mdui-tab-panel slot="panel" value="split">
+		<section class="media-tab-body">
+			<p class="media-lede">在指定时间点把一个文件切成前后两段，输出两个文件。</p>
+
+			<div class="media-picker">
+				<div class="media-drop" id="splitDrop">
+					<mdui-button variant="outlined" id="splitPick">
+						<mdui-icon-upload slot="icon"></mdui-icon-upload>
+						选择文件
+					</mdui-button>
+					<span class="text-xs faint" id="splitInfo">还没有选择文件</span>
+				</div>
+			</div>
+
+			<div class="media-form">
+				<mdui-text-field
+					id="splitAt"
+					variant="outlined"
+					label="切割点（秒，或 1:30）"
+					value="30"
+					inputmode="numeric"
+					helper="从这里一分为二，输出「-前段」与「-后段」两个文件"
+				></mdui-text-field>
+			</div>
+
+			<div class="row media-actions">
+				<mdui-button variant="filled" id="splitRun">
+					<mdui-icon-play slot="icon"></mdui-icon-play>
+					开始剪切
+				</mdui-button>
+				<span class="text-xs faint" id="splitSummary"></span>
+			</div>
+		</section>
+	</mdui-tab-panel>
+
+	{/* ------------------------------------------------------ 合并音视频 */}
+	<mdui-tab-panel slot="panel" value="mergeav">
+		<section class="media-tab-body">
+			<p class="media-lede">
+				把<strong>只有画面</strong>的文件和<strong>只有声音</strong>的文件合成一个。
+				常用于「录了像但没声音」或「字幕文件转语音轨」这类场景。
+			</p>
+
+			<div class="media-picker">
+				<div class="media-drop" id="mergeVideoDrop">
+					<mdui-button variant="outlined" id="mergeVideoPick">
+						<mdui-icon-video-file slot="icon"></mdui-icon-video-file>
+						选择视频（无音轨）
+					</mdui-button>
+					<span class="text-xs faint" id="mergeVideoInfo">还没有选择</span>
+				</div>
+				<div class="media-drop" id="mergeAudioDrop">
+					<mdui-button variant="outlined" id="mergeAudioPick">
+						<mdui-icon-audio-file slot="icon"></mdui-icon-audio-file>
+						选择音频（无画面）
+					</mdui-button>
+					<span class="text-xs faint" id="mergeAudioInfo">还没有选择</span>
+				</div>
+			</div>
+
+			<div class="media-form">
+				<mdui-text-field
+					id="mergeOutput"
+					variant="outlined"
+					label="输出文件名"
+					placeholder="留空 = 用视频文件名"
+				></mdui-text-field>
+			</div>
+
+			<p class="text-xs faint media-hint">
+				视频轨直接复制，音频若不是 AAC 会转成 AAC（这一步是重新编码，
+				但纯音频很快）。两边长度不一致时按较短的一条截断。
+			</p>
+
+			<div class="row media-actions">
+				<mdui-button variant="filled" id="mergeRun">
+					<mdui-icon-play slot="icon"></mdui-icon-play>
+					开始合并
+				</mdui-button>
+				<span class="text-xs faint" id="mergeSummary"></span>
+			</div>
+		</section>
+	</mdui-tab-panel>
+
+	{/* ------------------------------------------------------------ 字幕 */}
+	<mdui-tab-panel slot="panel" value="subtitle">
+		<section class="media-tab-body">
+			<div class="media-picker">
+				<div class="media-drop" id="subtitleDrop">
+					<mdui-button variant="outlined" id="subtitlePick">
+						<mdui-icon-upload slot="icon"></mdui-icon-upload>
+						选择视频
+					</mdui-button>
+					<span class="text-xs faint" id="subtitleInfo">还没有选择文件</span>
+				</div>
+			</div>
+
+			<div class="media-form">
+				<mdui-select id="subtitleMode" variant="outlined" label="操作" value="extract">
+					<mdui-menu-item value="extract">提取内嵌字幕为 SRT</mdui-menu-item>
+					<mdui-menu-item value="mux">封装外挂字幕</mdui-menu-item>
+				</mdui-select>
+			</div>
+
+			<div class="media-picker media-picker-sub" id="subtitleFileRow" hidden>
+				<div class="media-drop" id="subtitleFileDrop">
+					<mdui-button variant="outlined" id="subtitleFilePick">
+						<mdui-icon-upload slot="icon"></mdui-icon-upload>
+						选择字幕文件
+					</mdui-button>
+					<span class="text-xs faint" id="subtitleFileInfo">还没有选择</span>
+				</div>
+			</div>
+
+			<p class="text-xs faint media-hint">
+				字幕不重新编码。MP4 的字幕格式是 mov_text，与 WebVTT（.vtt）不兼容，
+				封装 .vtt 时会自动先转成 SRT。封装后能否显示还取决于播放器与平台。
+			</p>
+
+			<div class="row media-actions">
+				<mdui-button variant="filled" id="subtitleRun">
+					<mdui-icon-play slot="icon"></mdui-icon-play>
+					开始处理
+				</mdui-button>
+				<span class="text-xs faint" id="subtitleSummary"></span>
+			</div>
+		</section>
+	</mdui-tab-panel>
+
+	{/* ------------------------------------------------------------ 拼接 */}
+	<mdui-tab-panel slot="panel" value="concat">
+		<section class="media-tab-body">
+			<div class="media-picker">
+				<div class="media-drop" id="concatDrop">
+					<mdui-button variant="outlined" id="concatPick">
+						<mdui-icon-upload slot="icon"></mdui-icon-upload>
+						选择多个文件
+					</mdui-button>
+					<span class="text-xs faint">也可以把文件直接拖到这里，顺序可拖动调整</span>
+				</div>
+			</div>
+
+			<ul class="media-list" id="concatList"></ul>
+
+			<div class="media-form">
+				<mdui-select id="concatMode" variant="outlined" label="拼接方式" value="auto">
+					<mdui-menu-item value="auto">自动判断</mdui-menu-item>
+					<mdui-menu-item value="ts">TS / MPEG-TS</mdui-menu-item>
+					<mdui-menu-item value="concat">通用（concat 清单）</mdui-menu-item>
+				</mdui-select>
+				<mdui-text-field
+					id="concatOutput"
+					variant="outlined"
+					label="输出文件名"
+					value="合并.mkv"
+				></mdui-text-field>
+			</div>
+
+			<p class="text-xs faint media-hint">
+				各片段必须<strong>编码参数完全一致</strong>（同分辨率、同编码、同码率），
+				否则拼接后会花屏或音画不同步。TS 流因为切分规则简单，最容易拼接成功。
+			</p>
+
+			<div class="row media-actions">
+				<mdui-button variant="filled" id="concatRun">
+					<mdui-icon-play slot="icon"></mdui-icon-play>
+					开始拼接
+				</mdui-button>
+				<mdui-button variant="text" id="concatClear">清空列表</mdui-button>
+				<span class="text-xs faint" id="concatSummary"></span>
+			</div>
+		</section>
+	</mdui-tab-panel>
+
+	{/* ------------------------------------------------------------ 命令 */}
+	<mdui-tab-panel slot="panel" value="command">
+		<section class="media-tab-body">
+			<p class="media-lede">
+				直接写 ffmpeg 参数。文件在下方挂载区里，命令里用
+				<strong>文件名</strong>（不要自己加路径）即可，本工具会自动补上挂载点。
+			</p>
+
+			<div class="media-picker">
+				<div class="media-drop" id="commandDrop">
+					<mdui-button variant="outlined" id="commandPick">
+						<mdui-icon-upload slot="icon"></mdui-icon-upload>
+						添加输入文件
+					</mdui-button>
+					<span class="text-xs faint" id="commandInfo">还没有添加文件</span>
+				</div>
+			</div>
+
+			<ul class="media-list" id="commandFiles"></ul>
+
+			<div class="media-form media-form-command">
+				<mdui-select id="commandPreset" variant="outlined" label="常用命令模板" value="">
+					<mdui-menu-item value="">（自己写）</mdui-menu-item>
+					<mdui-menu-item value="remux">转封装 / 修正播放</mdui-menu-item>
+					<mdui-menu-item value="hevc">HEVC 补 hvc1 标签</mdui-menu-item>
+					<mdui-menu-item value="faststart">MP4 索引前置</mdui-menu-item>
+					<mdui-menu-item value="audio">提取音轨为 AAC</mdui-menu-item>
+					<mdui-menu-item value="mute">删除音轨</mdui-menu-item>
+					<mdui-menu-item value="decrypt">解密受保护媒体</mdui-menu-item>
+					<mdui-menu-item value="scale">缩放到 720p（需重编码）</mdui-menu-item>
+					<mdui-menu-item value="fps">改帧率（需重编码）</mdui-menu-item>
+					<mdui-menu-item value="fpsprobe">查看帧率 / 帧数</mdui-menu-item>
+					<mdui-menu-item value="thumbnail">导出每 10 秒一帧</mdui-menu-item>
+					<mdui-menu-item value="waveform">生成波形图</mdui-menu-item>
+				</mdui-select>
+				<mdui-button variant="outlined" id="commandFill">填入命令</mdui-button>
+			</div>
+
+			<mdui-text-field
+				id="commandInput"
+				variant="outlined"
+				label="ffmpeg 参数"
+				placeholder='例如：-i "movie.mp4" -c copy -movflags +faststart out.mp4'
+				helper="可带 ffmpeg 前缀；文件名含空格时用引号包起来"
+			></mdui-text-field>
+
+			<div class="media-preview" id="commandPreview" hidden>
+				<p class="text-xs faint" id="commandPreviewText"></p>
+			</div>
+
+			<div class="row media-actions">
+				<mdui-button variant="filled" id="commandRun">
+					<mdui-icon-play slot="icon"></mdui-icon-play>
+					运行命令
+				</mdui-button>
+				<span class="text-xs faint" id="commandSummary"></span>
+			</div>
+		</section>
+	</mdui-tab-panel>
+
+	{/* ------------------------------------------------------------ 文件信息 */}
+	<mdui-tab-panel slot="panel" value="info">
+		<section class="media-tab-body">
+			<p class="media-lede">
+				读取容器的轨道列表与元数据。这些信息全部来自 ffmpeg 自己解析文件的结果。
+			</p>
+
+			<div class="media-picker">
+				<div class="media-drop" id="infoDrop">
+					<mdui-button variant="outlined" id="infoPick">
+						<mdui-icon-upload slot="icon"></mdui-icon-upload>
+						选择文件
+					</mdui-button>
+					<span class="text-xs faint" id="infoInfo">还没有选择文件</span>
+				</div>
+			</div>
+
+			<div class="row media-actions">
+				<mdui-button variant="filled" id="infoRun">
+					<mdui-icon-info slot="icon"></mdui-icon-info>
+					读取信息
+				</mdui-button>
+				<mdui-button variant="text" id="infoCopy" disabled>复制全部</mdui-button>
+				<mdui-button variant="text" id="infoRawToggle" disabled>显示原始输出</mdui-button>
+				<span class="text-xs faint" id="infoSummary"></span>
+			</div>
+
+			<div class="media-info" id="infoOut"></div>
+
+			<pre class="media-log media-log-raw" id="infoRaw" spellcheck="false" hidden></pre>
+		</section>
+	</mdui-tab-panel>
+	</mdui-tabs>
+
+	{/*
+		全局停止按钮放在 tabs 外：任意标签页跑到一半都能停。
+		ffmpeg 一旦 exec 进去就只能 terminate 整个 worker 再重新 load，
+		所以「停止」会真的丢掉本次会话的进度（约十几秒），这点在提示里说明。
+	*/}
+	<section class="panel-lg media-stack media-stopbar" id="stopBar" hidden>
+		<mdui-button variant="outlined" id="stopRun">
+			<mdui-icon-stop slot="icon"></mdui-icon-stop>
+			停止处理
+		</mdui-button>
+		<span class="text-xs faint">停止会终止 ffmpeg 并重新初始化，下次运行需再等十几秒。</span>
+	</section>
+
+	{/*
+		把支持范围摆在明面上。这份白名单只影响原生文件对话框的过滤，
+		拖进来一律照收（由 ffmpeg 自己判断），所以更需要让用户看得见。
+	*/}
+	<details class="panel-lg media-stack media-formats">
+		<summary class="text-sm">支持哪些文件格式？</summary>
+		<div class="media-formats-body" id="formatList"></div>
+		<p class="text-xs faint">
+			对话框里按这些扩展名过滤；<strong>把文件拖进来不受此限制</strong>，
+			ffmpeg 能认出来就会处理，认不出会直接报错。清单随 ffmpeg 版本可能略有出入。
+		</p>
+	</details>
+
+	<section class="panel-lg media-stack media-console">
+		<div class="row-between media-console-head">
+			<span class="text-sm">处理日志</span>
+			<mdui-button variant="text" id="logClear">清空</mdui-button>
+		</div>
+		<div class="media-log" id="log"></div>
+	</section>
+
+	<p class="footnote">
+		本页通过 <code class="mono">@ffmpeg/ffmpeg</code>（MIT）与
+		<code class="mono">@ffmpeg/core</code>（<strong>GPL-2.0-or-later</strong>）在浏览器内运行 ffmpeg。
+		两者均由浏览器<strong>运行时从公共 CDN 直接获取，本站不随页面分发</strong>，
+		因此不构成本站的许可来源；仅在本工具页使用，其余页面无此依赖。
+		详细说明见仓库内 <code class="mono">THIRD_PARTY_NOTICES.md</code> §16。
+		除「压制」外的操作都只<strong>搬运</strong>已有数据，很快；
+		「压制」会真正重新编码，实测小分辨率下可比播放还快，高分辨率长视频则很慢。
+		单文件建议不超过 1.8 GB。
+	</p>
+</Page>
+
+<style is:global>
+/*
+ * 顶层块之间的纵向节奏。
+ *
+ * .panel-lg 自身没有任何外边距，而 .page 是普通块容器、也不提供 gap，
+ * 于是这几个面板会直接贴在一起 —— 实测「支持哪些文件格式」与「处理日志」
+ * 之间 gap = 0，深色下两块圆角矩形连成一片，看着像粘住了。
+ * 统一挂 .media-stack 由这一条给节奏，别再给单个面板写 margin-top。
+ * （margin 会与相邻兄弟的 margin-bottom 折叠，所以这里只会变松不会叠加。）
+ */
+.media-stack {
+	margin-top: 1.5rem;
+}
+
+/*
+ * 三个栅格都必须写 align-items: start —— 与 PDF 页同一个坑：
+ * mdui-text-field 影子 DOM 里 .container 是 height:100%，栅格默认 stretch
+ * 会把它撑满整行，helper 文本被挤出宿主盒子、压到下一行标签上。
+ */
+/*
+ * 九个标签放不下整行。窄屏必须**横向滚动**，否则标签里的中文会被逐字竖排
+ * （实测 420px 下「改格式」变成 改/格/式 三行，「合并音视频」竖成一长条）。
+ * 这套写法与 pdf 页的 .pdf-tabs 同源，两边都别单独删。
+ */
+.media-tabs {
+	overflow-x: auto;
+	scrollbar-width: thin;
+}
+
+.media-tabs mdui-tab {
+	white-space: nowrap;
+}
+
+/*
+ * 每个标签页内容留出内边距。不加的话元素会贴着内容区边缘「顶格」，
+ * 深色下尤其明显（与 pdf 页 .pdf-tab-body 同一理由）。
+ */
+.media-tab-body {
+	display: flex;
+	flex-direction: column;
+	gap: 0.25rem;
+	padding: 1.15rem;
+}
+
+.media-tab-body > * + * {
+	margin-top: 0;
+}
+
+.media-tab-body .media-list {
+	margin-top: 0;
+}
+
+/*
+ * 纵向节奏：选择区 / 表单栅格 / 说明 / 按钮四段之间各留 1.5rem。
+ * 原来只有 1.1rem，且 .media-picker 只有 0.35rem 上边距，
+ * 在 768/420 两档下「虚线框紧贴下面的输入框」，看着挤。
+ */
+.media-form {
+	display: grid;
+	gap: 0.85rem;
+	align-items: start;
+	margin-top: 1.5rem;
+	grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+}
+
+.media-picker {
+	margin-top: 0.35rem;
+}
+
+/* 面板内的导语，说明这个标签页是干什么的 */
+.media-lede {
+	margin-top: 0.35rem;
+	color: rgb(var(--mdui-color-on-surface-variant));
+	font-size: var(--mdui-typescale-body-medium-size);
+	line-height: 1.65;
+}
+
+/* 命令输入框独占一行，不参与栅格 */
+.media-form-command {
+	align-items: end;
+}
+
+/* 命令输入框下方的「将执行 N 个参数」实时预览 */
+.media-preview {
+	margin-top: 1rem;
+}
+
+.media-preview[hidden],
+.media-picker-sub[hidden] {
+	display: none;
+}
+
+/* 文件选择区：虚线框 + 按钮，沿用 PDF 页的 .pdf-drop 观感 */
+.media-drop {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 0.85rem;
+	padding: 1.1rem 1.25rem;
+	border: 1px dashed rgb(var(--mdui-color-outline-variant));
+	border-radius: var(--mdui-shape-corner-medium);
+	transition: background-color var(--mdui-motion-duration-short4) var(--mdui-motion-easing-standard);
+}
+
+/* 合并音视频是两个选择框，上下叠放时留出间距 */
+.media-picker .media-drop + .media-drop {
+	margin-top: 0.85rem;
+}
+
+.media-drop.is-over {
+	background-color: rgb(var(--mdui-color-primary-container) / 45%);
+	border-color: rgb(var(--mdui-color-primary));
+}
+
+/* ffmpeg 核心下载告知块 */
+.media-notice {
+	border-left: 0.1875rem solid rgb(var(--mdui-color-primary));
+}
+
+/*
+ * 压制页的减速警告。与 .media-notice 同结构，只把强调色换成 error，
+ * 让「这里很慢」在视觉上就和其他说明性提示区分开。
+ */
+.media-notice-warn {
+	border-left-color: rgb(var(--mdui-color-error));
+}
+
+.media-notice-warn mdui-icon-warning {
+	color: rgb(var(--mdui-color-error));
+}
+
+.media-notice-row {
+	align-items: flex-start;
+	gap: 0.75rem;
+}
+
+.media-notice-row mdui-icon-warning {
+	flex: 0 0 auto;
+	margin-top: 0.1rem;
+	color: rgb(var(--mdui-color-primary));
+}
+
+.media-notice-body {
+	flex: 1 1 18rem;
+}
+
+.media-notice-body p + p {
+	margin-top: 0.35rem;
+}
+
+.media-notice-actions {
+	gap: 0.5rem;
+	margin-top: 0.85rem;
+}
+
+/* 进度面板：贴住进度条的头部，label 与百分比分列两端 */
+.media-progress-head {
+	margin-bottom: 0.45rem;
+}
+
+.media-hint {
+	margin-top: 1.35rem;
+	color: rgb(var(--mdui-color-on-surface-variant));
+	line-height: 1.7;
+}
+
+.media-actions {
+	gap: 0.75rem;
+	margin-top: 1.5rem;
+}
+
+/*
+ * 全局停止条：只有正在跑的时候才出现。
+ *
+ * ⚠️ 必须显式写 [hidden] { display: none }：`hidden` 属性靠 UA 样式表的
+ * `display: none` 生效，而下面这条 `display: flex` 是作者级声明，优先级更高，
+ * 会把 hidden 顶掉 —— 结果空闲时停止条也一直显示。
+ * 这个坑与 PDF 页 tab-panel 的那同源。
+ */
+.media-stopbar {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 0.85rem;
+	margin-top: 1.1rem;
+}
+
+.media-stopbar[hidden] {
+	display: none;
+}
+
+/* 拼接列表：可拖动排序的卡片行 */
+.media-list {
+	display: grid;
+	gap: 0.5rem;
+	margin: 1.35rem 0 0;
+	padding: 0;
+	list-style: none;
+}
+
+.media-list:empty {
+	display: none;
+}
+
+.media-item {
+	display: flex;
+	align-items: center;
+	gap: 0.6rem;
+	padding: 0.5rem 0.75rem;
+	border: 1px solid rgb(var(--mdui-color-outline-variant));
+	border-radius: var(--mdui-shape-corner-small);
+	font-size: var(--mdui-typescale-body-medium-size);
+}
+
+.media-item.is-dragging {
+	opacity: 0.5;
+}
+
+.media-item-name {
+	flex: 1 1 auto;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.media-item-size {
+	flex: 0 0 auto;
+	color: rgb(var(--mdui-color-on-surface-variant));
+	font-size: var(--mdui-typescale-body-small-size);
+	font-variant-numeric: tabular-nums;
+}
+
+.media-item-order {
+	flex: 0 0 auto;
+	min-width: 1.5rem;
+	color: rgb(var(--mdui-color-on-surface-variant));
+	font-variant-numeric: tabular-nums;
+}
+
+.media-item mdui-button-icon {
+	width: 1.9rem;
+	height: 1.9rem;
+}
+
+/* 支持格式的折叠清单 */
+.media-formats {
+	padding: 0.9rem 1.15rem;
+}
+
+.media-formats > summary {
+	cursor: pointer;
+	color: rgb(var(--mdui-color-primary));
+	font-weight: var(--mdui-typescale-title-small-weight);
+	list-style-position: inside;
+}
+
+.media-formats[open] > summary {
+	margin-bottom: 0.85rem;
+}
+
+.media-formats-body {
+	display: grid;
+	gap: 0.85rem;
+}
+
+.media-formats-group {
+	display: grid;
+	gap: 0.25rem;
+}
+
+.media-formats-label {
+	color: rgb(var(--mdui-color-on-surface-variant));
+	font-size: var(--mdui-typescale-body-small-size);
+	font-weight: var(--mdui-typescale-title-small-weight);
+}
+
+.media-formats-exts {
+	color: rgb(var(--mdui-color-on-surface));
+	font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+	font-size: var(--mdui-typescale-body-small-size);
+	line-height: 1.75;
+	overflow-wrap: anywhere;
+}
+
+.media-formats > p {
+	margin-top: 0.85rem;
+	line-height: 1.7;
+}
+
+/* 文件信息：容器 / 每条轨道各一张卡片，键值两列对齐 */
+.media-info {
+	display: grid;
+	gap: 1rem;
+	margin-top: 1.35rem;
+}
+
+.media-info:empty {
+	display: none;
+}
+
+.media-info-card {
+	padding: 1rem 1.15rem;
+	border: 1px solid rgb(var(--mdui-color-outline-variant));
+	border-radius: var(--mdui-shape-corner-medium);
+	background-color: rgb(var(--mdui-color-surface-container-lowest));
+}
+
+.media-info-title {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 0.5rem;
+	margin: 0 0 0.65rem;
+	color: rgb(var(--mdui-color-primary));
+	font-size: var(--mdui-typescale-title-small-size);
+	font-weight: var(--mdui-typescale-title-small-weight);
+	letter-spacing: var(--mdui-typescale-title-small-tracking);
+}
+
+.media-info-badge {
+	padding: 0.1rem 0.5rem;
+	border-radius: var(--mdui-shape-corner-full);
+	background-color: rgb(var(--mdui-color-secondary-container));
+	color: rgb(var(--mdui-color-on-secondary-container));
+	font-size: var(--mdui-typescale-label-small-size);
+	font-weight: var(--mdui-typescale-label-medium-weight);
+}
+
+.media-info-row {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.35rem 0.85rem;
+	padding: 0.2rem 0;
+	font-size: var(--mdui-typescale-body-small-size);
+	line-height: 1.6;
+}
+
+.media-info-key {
+	flex: 0 0 6.5rem;
+	color: rgb(var(--mdui-color-on-surface-variant));
+}
+
+.media-info-val {
+	flex: 1 1 12rem;
+	min-width: 0;
+	overflow-wrap: anywhere;
+	font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+/* 窄屏时键值不再两列，改成上下堆叠，避免值被挤成一列窄条 */
+@media (max-width: 599.98px) {
+	.media-info-key {
+		flex-basis: 100%;
+	}
+
+	.media-info-val {
+		flex-basis: 100%;
+		padding-left: 0.75rem;
+	}
+}
+
+.media-log-raw {
+	max-height: 26rem;
+}
+
+.media-log-raw[hidden] {
+	display: none;
+}
+
+/* 日志区：等宽、不换行、纵向滚动 */
+.media-log {
+	max-height: 20rem;
+	margin-top: 0.85rem;
+	padding: 0.85rem;
+	overflow: auto;
+	border: 1px solid rgb(var(--mdui-color-outline-variant));
+	border-radius: var(--mdui-shape-corner-medium);
+	background-color: rgb(var(--mdui-color-surface-container-lowest));
+	font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+	font-size: var(--mdui-typescale-body-small-size);
+	line-height: 1.55;
+	white-space: pre-wrap;
+	word-break: break-word;
+}
+
+.media-log:empty {
+	display: none;
+}
+
+.media-console-head mdui-button {
+	flex: 0 0 auto;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.media-drop {
+		transition: none;
+	}
+}
+</style>
+
+<script>
+	import * as ops from '../../lib/media-ops';
+	import {
+		CORE_WASM_BYTES,
+		clearMediaCache,
+		isCoreCached,
+		loadFfmpeg,
+		mediaLoadInfo,
+		type FfmpegInstance,
+	} from '../../lib/media-loader';
+
+	const $ =<T extends HTMLElement = HTMLElement>(id: string): T => {
+		const el = document.getElementById(id);
+		if (!el) throw new Error(`缺少元素 #${id}`);
+		return el as T;
+	};
+	type TextField = HTMLInputElement & { value: string };
+	type SelectEl = HTMLElement & { value: string };
+
+	/* ------------------------------------------------------------ 进度条 */
+
+	const panel = $('progressPanel');
+	const bar = $('progressBar') as HTMLElement & { value: number };
+	const text = $('progressText');
+	const percent = $('progressPercent');
+
+	function showProgress(): void {
+		panel.removeAttribute('hidden');
+	}
+	function hideProgress(): void {
+		panel.setAttribute('hidden', '');
+	}
+	function setProgress(loaded: number, total: number, label: string): void {
+		showProgress();
+		text.textContent = label;
+		if (total > 0) {
+			// 钳一下：CDN 的 content-length 是压缩后大小，可能小于实际读到的字节
+			const ratio = Math.max(0, Math.min(1, loaded / total));
+			bar.value = ratio;
+			percent.textContent = `${Math.round(ratio * 100)}%`;
+			bar.removeAttribute('indeterminate');
+		} else {
+			// 拿不到 Content-Length 或 wasm 编译阶段：退化成不确定进度
+			bar.value = 0;
+			bar.setAttribute('indeterminate', '');
+			percent.textContent = '';
+		}
+	}
+	function fromLoader(loaded: number, total: number, label: string): void {
+		setProgress(loaded, total, label);
+	}
+
+	/* ------------------------------------------------------------ 日志 */
+
+	const logBox = $('log');
+
+	/** 短暂提示，用 mdui 的 snackbar（与 pdf 页同一套写法） */
+	function toast(message: string): void {
+		const mdui = (window as unknown as { mdui?: { snackbar?: (o: { message: string }) => void } }).mdui;
+		mdui?.snackbar?.({ message });
+	}
+
+	function log(text: string, level: 'info' | 'warn' | 'error' = 'info'): void {
+		const line = document.createElement('div');
+		if (level !== 'info') line.className = `media-log-${level}`;
+		line.textContent = text;
+		logBox.appendChild(line);
+		logBox.scrollTop = logBox.scrollHeight;
+	}
+
+	/* ------------------------------------------------------------ 文件 */
+
+	let remuxFile: File | null = null;
+	let extractFile: File | null = null;
+	let trimFile: File | null = null;
+	let splitFile: File | null = null;
+	let mergeVideoFile: File | null = null;
+	let mergeAudioFile: File | null = null;
+	let subtitleFile: File | null = null;
+	let subtitleSidecar: File | null = null;
+	let infoFile: File | null = null;
+	let concatFiles: File[] = [];
+	let commandFiles: File[] = [];
+
+	const mountedName = (file: File) => ops.sanitizeName(file.name);
+
+	function describe(file: File): string {
+		const kind = ops.sniffMediaKind(file.name);
+		if (kind === 'unknown') {
+			// 不拦，但要说一句，否则用户看到「未知类型」却不知道下一步做什么
+			return `${file.name} · ${ops.unknownKindHint(file.name)} · ${ops.formatBytes(file.size)}`;
+		}
+		const label = kind === 'video' ? '视频' : kind === 'audio' ? '音频' : '图片';
+		return `${file.name} · ${label} · ${ops.formatBytes(file.size)}`;
+	}
+
+	/**
+	 * 文件选择器：按钮 + 虚线拖放区。
+	 * 不用 <mdui-text-field type="file"> —— 它在 change 里把 value 置空，
+	 * 且内部原生控件与 outlined 标签叠在一起（PDF 页踩过，见 AGENT.md）。
+	 *
+	 * accept 只影响原生对话框。拖放与程序注入一律照收：
+	 * 白名单只是「可见性」不是「准入」，漏一个扩展名的代价是用户在对话框里
+	 * 根本找不到那个文件，而 ffmpeg 其实支持（.m4s 就吃过这个亏）。
+	 */
+	function wirePicker(opts: {
+		buttonId: string;
+		dropId: string;
+		multiple: boolean;
+		accept?: string;
+		/** 只接受这一类文件（如字幕页的外挂字幕）；不匹配时给出提示但不拦 */
+		only?: (file: File) => boolean;
+		onlyLabel?: string;
+		onFiles: (files: File[]) => void;
+	}): void {
+		const drop = $(opts.dropId);
+		const input = document.createElement('input');
+		input.type = 'file';
+		input.multiple = opts.multiple;
+		input.accept = opts.accept ?? ops.MEDIA_ACCEPT;
+		input.style.display = 'none';
+		input.dataset.picker = opts.dropId;
+		document.body.appendChild(input);
+
+		const accept = (files: File[]): File[] => {
+			if (!opts.only) return files;
+			const ok = files.filter(opts.only);
+			const bad = files.filter((f) => !opts.only?.(f));
+			if (bad.length) {
+				toast(`已跳过 ${bad.map((f) => f.name).join('、')}：这里只接受${opts.onlyLabel ?? '该类文件'}`);
+			}
+			return ok;
+		};
+
+		$(opts.buttonId).addEventListener('click', () => input.click());
+		input.addEventListener('change', () => {
+			const files = accept(Array.from(input.files ?? []));
+			input.value = '';
+			if (files.length) opts.onFiles(files);
+		});
+
+		for (const type of ['dragenter', 'dragover']) {
+			drop.addEventListener(type, (event) => {
+				event.preventDefault();
+				drop.classList.add('is-over');
+			});
+		}
+		for (const type of ['dragleave', 'dragend']) {
+			drop.addEventListener(type, () => drop.classList.remove('is-over'));
+		}
+		drop.addEventListener('drop', (event) => {
+			event.preventDefault();
+			drop.classList.remove('is-over');
+			const files = accept(Array.from(event.dataTransfer?.files ?? []));
+			if (files.length) opts.onFiles(files);
+		});
+	}
+
+	/** 界面上列出支持范围，让用户不用猜 */
+	function renderFormatList(): void {
+		const host = $('formatList');
+		host.textContent = '';
+		for (const group of ops.SUPPORTED_FORMATS) {
+			const block = document.createElement('div');
+			block.className = 'media-formats-group';
+			const title = document.createElement('div');
+			title.className = 'media-formats-label';
+			title.textContent = `${group.label}（${group.exts.length}）`;
+			const list = document.createElement('div');
+			list.className = 'media-formats-exts';
+			list.textContent = group.exts.map((ext) => '.' + ext).join('  ');
+			block.append(title, list);
+			host.appendChild(block);
+		}
+	}
+
+	/* ------------------------------------------------------------ ffmpeg */
+
+	let ffmpeg: FfmpegInstance | null = null;
+	let infoBuffer = '';
+	let infoText = '';
+	let busy = false;
+
+	function describeError(error: unknown): string {
+		const message = String((error as Error)?.message ?? error);
+		if (message.includes('codec not currently supported in container')) {
+			return '目标容器容不下这个编码格式。请换一个容器，或用「提取」标签页只取需要的轨道。';
+		}
+		if (message.includes('Invalid data found')) return '无法识别的媒体文件，可能已损坏或格式不受支持。';
+		if (message.includes('No such file')) return '文件读取失败，请重新选择。';
+		if (message.includes('out of memory') || message.includes('OOM')) {
+			return '内存不足，请处理更小的文件或先裁短。';
+		}
+		return message;
+	}
+
+	/**
+	 * 标记当前实例已废，下一次调用会重新加载。
+	 *
+	 * wasm 实例一旦踩到 OOM 或崩在编码器里（实测 x265 就会），
+	 * 它的线性内存就处于不确定状态，之后每次 exec 都抛
+	 * "memory access out of bounds"。不丢掉它的话，用户刷新之前
+	 * 这个工具就彻底废了 —— 而且报错信息完全指不到真正原因。
+	 * 丢掉重下一次（核心走 IndexedDB 缓存，不会重新下载 32 MB）就好了。
+	 */
+	function markInstanceBroken(): void {
+		if (ffmpeg?.loaded) log('ffmpeg 实例已损坏，将重新加载后再试一次。', 'warn');
+		ffmpeg = null;
+	}
+
+	async function ensureFfmpeg(): Promise<FfmpegInstance> {
+		if (ffmpeg?.loaded) return ffmpeg;
+		setProgress(0, 0, '正在准备 ffmpeg…');
+		ffmpeg = await loadFfmpeg(fromLoader);
+		const info = mediaLoadInfo();
+		log(
+			info.cached
+				? `ffmpeg 已就绪（使用本地缓存，来源 ${info.base}）`
+				: `ffmpeg 已就绪（本次从 ${info.base} 下载了约 32 MB，已缓存）`,
+		);
+		// 32 MB 告知块到此为止没用了，收起来把版面让给工具本身
+		$('coreNotice').setAttribute('hidden', '');
+		setDisabled('preloadBtn', true);
+		return ffmpeg;
+	}
+
+	/** 跑长任务时显示停止条；空闲时收起 */
+	function setBusy(value: boolean): void {
+		busy = value;
+		$('stopBar').toggleAttribute('hidden', !value);
+		setDisabled('stopRun', !value);
+	}
+
+	function setDisabled(id: string, disabled: boolean): void {
+		($(id) as HTMLElement & { disabled: boolean }).disabled = disabled;
+	}
+
+	/*
+	 * 把命令里的裸文件名换成挂载点路径。
+	 * 纯函数，media-ops 拼的是裸名（便于测试与日志可读），
+	 * 真正 exec 前统一在这里加 /in/ 前缀。
+	 */
+	function qualify(args: string[], names: Set<string>): string[] {
+		return args.map((arg) => {
+			if (arg === ops.CONCAT_LIST) return ops.CONCAT_LIST;
+			if (arg.startsWith('concat:')) {
+				const parts = arg.slice(7).split('|');
+				return `concat:${parts.map((p) => `/in/${names.has(p) ? p : ops.sanitizeName(p)}`).join('|')}`;
+			}
+			if (names.has(arg)) return `/in/${arg}`;
+			return arg;
+		});
+	}
+
+	/**
+	 * 执行一条 ffmpeg 命令，非零退出码当作失败抛出来。
+	 *
+	 * ffmpeg.wasm 的 exec() 只在「完全跑不起来」时 reject。ffmpeg 自己报错
+	 * （编码器不存在、容器容不下、编码中途失败）时它**照常 resolve**，
+	 * 只把退出码放进返回值 —— 之前所有调用点都忽略了这个返回值。
+	 *
+	 * 实测过的后果：Theora 装进 WebM 时 ffmpeg 打了 "Conversion failed!"
+	 * 并以非 0 退出，页面却把写了一半的 264 字节空壳当成成品下载给了用户，
+	 * 还显示「完成」。所以退出码必须查。
+	 *
+	 * 注意有两处**故意**期待非零退出，不要走这个包装：
+	 * 「文件信息」页的 -i（读完 banner 就报错退出）和压制页的 -encoders。
+	 */
+	async function execChecked(
+		instance: FfmpegInstance,
+		args: string[],
+		label: string,
+	): Promise<void> {
+		const code = await instance.exec(args);
+		if (code === 0) return;
+		// 日志尾部一般就是 ffmpeg 真正的报错，取最后几行带上
+		const tail = infoBuffer
+			.split('\n')
+			.map((line) => line.trim())
+			.filter(Boolean)
+			.slice(-3)
+			.join(' / ');
+		markInstanceBroken();
+		throw new Error(`${label}失败（ffmpeg 退出码 ${code}）${tail ? '：' + tail : ''}`);
+	}
+
+	/**
+	 * 挂载文件并跑一条命令，返回产出的字节。
+	 *
+	 * 用 WORKERFS 而非 writeFile：WORKERFS 是零拷贝代理，文件字节不进
+	 * wasm 的虚拟内存，否则大文件直接 OOM。
+	 *
+	 * beforeRun 用于在 exec 前往内存 FS 写文件（如 concat 清单）。
+	 */
+	/**
+	 * 挂载并执行，返回 { output, bytes }。
+	 *
+	 * output 是「期望的名字」，实际可能因为重名被改（见下面 safeOutputName），
+	 * 所以**必须用返回的 output 去下载**，不要用传进来的那个。
+	 */
+	async function runPlan(
+		files: File[],
+		args: string[],
+		output: string,
+		label: string,
+		beforeRun?: (instance: FfmpegInstance) => Promise<void>,
+	): Promise<{ output: string; bytes: Uint8Array }> {
+		const instance = await ensureFfmpeg();
+		ops.assertSizeOk(files);
+		setProgress(0, 0, `${label}…`);
+		infoBuffer = '';
+
+		/*
+		 * WORKERFS 是**只读**挂载，输出名撞上输入名会让 Emscripten 抛
+		 * `ErrnoError: FS error`。而「输入去扩展名 + 目标扩展名」这个默认输出名
+		 * 在同容器转换时必然撞车（`sample.mp4` 转 mp4 → `sample.mp4`），
+		 * 偏偏「转 mp4 / 修正视频」是最常用的操作。所以这里统一兜住。
+		 */
+		const names = new Set(files.map(mountedName));
+		const finalOutput = ops.safeOutputName(output, [...names]);
+		if (finalOutput !== output) {
+			const lastIndex = args.length - 1;
+			if (args[lastIndex] === output) args[lastIndex] = finalOutput;
+			log(`输出名与输入文件重名，已改为 ${finalOutput}`);
+		}
+
+		instance.on('log', ({ message }) => {
+			infoBuffer += message + '\n';
+			log(message, /error|Error|Invalid/.test(message) ? 'error' : 'info');
+			// ffmpeg 的进度行含 frame= 与 time=，用它做不确定态进度
+			if (/frame=|time=/.test(message)) {
+				setProgress(0, 0, `${label}… ${message.trim()}`);
+			}
+		});
+
+		await instance.createDir('/in').catch(() => undefined);
+		await instance.mount('WORKERFS', { files }, '/in');
+		try {
+			await beforeRun?.(instance);
+			try {
+				await execChecked(instance, qualify(args, names), label);
+			} catch (error) {
+				// wasm 崩了（RuntimeError: memory access out of bounds）时 exec 是 reject 而非 resolve，
+				// 这条路径不会经过 execChecked 里的 markInstanceBroken，所以在这里兜住。
+				// 按 name 判而不是 instanceof：RuntimeError 不是 TS 认识的全局名。
+				if ((error as Error)?.name === 'RuntimeError') markInstanceBroken();
+				throw error;
+			}
+			setProgress(0, 0, `${label}完成，正在读回结果…`);
+			const data = await instance.readFile(finalOutput);
+			if (!(data instanceof Uint8Array) || data.length === 0) {
+				throw new Error('ffmpeg 没有产出文件，请查看日志。');
+			}
+			return { output: finalOutput, bytes: data };
+		} finally {
+			await instance.unmount('/in').catch(() => undefined);
+			// concat 清单写在内存 FS 的根目录，卸载后仍要清掉
+			await instance.deleteFile(ops.CONCAT_LIST).catch(() => undefined);
+		}
+	}
+
+	/**
+	 * 跑多条命令（共享一次挂载），返回每条的产物。
+	 * 剪切（切两段）用的是这条路径。
+	 */
+	async function runSteps(
+		files: File[],
+		steps: { args: string[]; output: string }[],
+		label: string,
+	): Promise<{ output: string; bytes: Uint8Array }[]> {
+		const instance = await ensureFfmpeg();
+		ops.assertSizeOk(files);
+		setProgress(0, 0, `${label}…`);
+		infoBuffer = '';
+		instance.on('log', ({ message }) => {
+			infoBuffer += message + '\n';
+			log(message, /error|Error|Invalid/.test(message) ? 'error' : 'info');
+			if (/frame=|time=/.test(message)) setProgress(0, 0, `${label}… ${message.trim()}`);
+		});
+
+		const names = new Set(files.map(mountedName));
+		await instance.createDir('/in').catch(() => undefined);
+		await instance.mount('WORKERFS', { files }, '/in');
+		const results: { output: string; bytes: Uint8Array }[] = [];
+		try {
+			for (const [index, step] of steps.entries()) {
+				setProgress(index, steps.length, `${label}（第 ${index + 1} / ${steps.length} 步）`);
+				// 同样要避开与输入重名的输出名（只读挂载）
+				const finalOutput = ops.safeOutputName(step.output, [...names, ...results.map((r) => r.output)]);
+				if (finalOutput !== step.output) {
+					const lastIndex = step.args.length - 1;
+					if (step.args[lastIndex] === step.output) step.args[lastIndex] = finalOutput;
+				}
+				try {
+					await execChecked(instance, qualify(step.args, names), label);
+				} catch (error) {
+					if ((error as Error)?.name === 'RuntimeError') markInstanceBroken();
+					throw error;
+				}
+				const bytes = await instance.readFile(finalOutput);
+				if (!(bytes instanceof Uint8Array) || bytes.length === 0) {
+					throw new Error(`ffmpeg 没有产出 ${finalOutput}，请查看日志。`);
+				}
+				results.push({ output: finalOutput, bytes });
+			}
+		} finally {
+			await instance.unmount('/in').catch(() => undefined);
+		}
+		return results;
+	}
+
+	/* ------------------------------------------------------------ 改格式 */
+
+	function fillContainers(): void {
+		const select = $('remuxContainer') as SelectEl;
+		for (const key of Object.keys(ops.CONTAINERS) as ops.RemuxContainer[]) {
+			const spec = ops.CONTAINERS[key];
+			const item = document.createElement('mdui-menu-item');
+			item.setAttribute('value', key);
+			item.textContent = `${spec.label} — ${spec.hint}`;
+			select.appendChild(item);
+		}
+	}
+
+	function updateRemuxHint(): void {
+		const container = ($('remuxContainer') as SelectEl).value as ops.RemuxContainer;
+		const spec = ops.CONTAINERS[container];
+		const quality = ($('remuxQuality') as SelectEl).value;
+		const notes: string[] = [];
+		notes.push(`输出 ${spec?.ext ?? '?'}，只换封装不动编码。`);
+		if (quality === 'hevc' || quality === 'both') notes.push('HEVC 会补上 hvc1 标签以便 Apple 生态播放。');
+		if (quality === 'faststart' || quality === 'both') notes.push('MP4 索引前置后可边下边播。');
+		if (container === 'mp3' || container === 'wav' || container === 'flac') {
+			notes.push('MP3 / WAV / FLAC 与常见视频里的 AAC、Vorbis 编码不同，直接复制会失败，请改用 M4A 或 OGG。');
+		}
+		$('remuxHint').textContent = notes.join(' ');
+	}
+
+	wirePicker({
+		buttonId: 'remuxPick',
+		dropId: 'remuxDrop',
+		multiple: false,
+		onFiles: (files) => {
+			remuxFile = files[0];
+			$('remuxInfo').textContent = describe(remuxFile);
+			setDisabled('remuxRun', false);
+		},
+	});
+
+	async function onRemuxRun(): Promise<void> {
+		if (!remuxFile || busy) return;
+		setBusy(true);
+		setDisabled('remuxRun', true);
+		try {
+			const quality = ($('remuxQuality') as SelectEl).value;
+			const plan = ops.planRemux(mountedName(remuxFile), {
+				container: ($('remuxContainer') as SelectEl).value as ops.RemuxContainer,
+				fixHevcTag: quality === 'hevc' || quality === 'both',
+				fastStart: quality === 'faststart' || quality === 'both',
+			});
+			const { output, bytes } = await runPlan([remuxFile], plan.args, plan.output, '改格式');
+			download(bytes, output);
+			$('remuxSummary').textContent = `完成，${ops.formatBytes(bytes.length)}`;
+			hideProgress();
+		} catch (error) {
+			log(describeError(error), 'error');
+			$('remuxSummary').textContent = describeError(error);
+		} finally {
+			setBusy(false);
+			setDisabled('remuxRun', false);
+		}
+	}
+
+	/* ------------------------------------------------------------ 压制 */
+
+	let transcodeFile: File | null = null;
+	/** 运行时探测到的编码器清单；null 表示还没探测过 */
+	let encoderSet: Set<string> | null = null;
+
+	/** 用一组 {value,label,disabled} 重填 mdui-select */
+	function fillSelect(id: string, items: { value: string; label: string; disabled?: boolean }[], keep?: string): void {
+		const select = $(id) as SelectEl;
+		select.textContent = '';
+		for (const item of items) {
+			const node = document.createElement('mdui-menu-item');
+			node.setAttribute('value', item.value);
+			if (item.disabled) node.setAttribute('disabled', '');
+			node.textContent = item.label;
+			select.appendChild(node);
+		}
+		if (keep && items.some((item) => item.value === keep)) select.value = keep;
+	}
+
+	function scaleValue(): ops.ResolutionPreset {
+		return ($('transcodeScale') as SelectEl).value as ops.ResolutionPreset;
+	}
+
+	function videoSpec(): ops.VideoCodecSpec {
+		const id = ($('transcodeVideo') as SelectEl).value as ops.VideoCodecId;
+		return ops.VIDEO_CODECS.find((c) => c.id === id) ?? ops.VIDEO_CODECS[0];
+	}
+
+	function audioSpec(): ops.AudioCodecSpec {
+		const id = ($('transcodeAudio') as SelectEl).value as ops.AudioCodecId;
+		return ops.AUDIO_CODECS.find((c) => c.id === id) ?? ops.AUDIO_CODECS[0];
+	}
+
+	/** 探测过之后，把核心里没有的编码器标成不可选 */
+	function disabledByProbe(id: string): boolean {
+		if (!encoderSet) return false;
+		return id === 'copy' || id === 'none' ? false : !encoderSet.has(id);
+	}
+
+	function initTranscodeForm(): void {
+		$('transcodeWarn').textContent = ops.GRID_NOTE;
+
+		fillSelect(
+			'transcodeVideo',
+			ops.VIDEO_CODECS.map((spec) => ({
+				value: spec.id,
+				label: spec.label,
+				disabled: disabledByProbe(spec.encoder),
+			})),
+			'x264',
+		);
+		fillSelect(
+			'transcodeAudio',
+			ops.AUDIO_CODECS.map((spec) => ({
+				value: spec.id,
+				label: spec.label,
+				disabled: disabledByProbe(spec.encoder),
+			})),
+			'aac',
+		);
+		fillSelect(
+			'transcodeScale',
+			(Object.keys(ops.RESOLUTION_LABELS) as ops.ResolutionPreset[]).map((key) => ({
+				value: key,
+				label: ops.RESOLUTION_LABELS[key],
+			})),
+			'source',
+		);
+		syncTranscodeForm();
+	}
+
+	/**
+	 * 三个下拉互相牵制，逻辑集中在这里：
+	 * 换编码 → 重建容器候选、速度档位、质量值区间、音轨码率；
+	 * 换模式 → 质量值与目标码率二选一；换分辨率 → 自定义宽高只在 custom 时出现。
+	 */
+	function syncTranscodeForm(): void {
+		const video = videoSpec();
+		const audio = audioSpec();
+
+		// 容器：只留装得下当前组合的，并尽量保住用户已经选的那个
+		const current = ($('transcodeContainer') as SelectEl).value;
+		const containers = ops.containersFor(video.id, audio.id);
+		fillSelect(
+			'transcodeContainer',
+			containers.map((key) => ({ value: key, label: ops.CONTAINERS[key].label })),
+			containers.includes(current as ops.RemuxContainer) ? current : undefined,
+		);
+
+		// 速度档位跟着视频编码走（x264 是 -preset，VP9 是 -deadline，Theora 没有）
+		const speedValue = ($('transcodePreset') as SelectEl).value;
+		fillSelect(
+			'transcodePreset',
+			video.presets.map((preset) => ({ value: preset.id, label: preset.label })),
+			video.presets.some((p) => p.id === speedValue) ? speedValue : video.presetDefault,
+		);
+
+		// 质量值区间随编码器变，写进 input 的 min/max 让浏览器先拦一道
+		const mode = ($('transcodeMode') as SelectEl).value as ops.RateMode;
+		const crfField = $('transcodeCrf') as unknown as TextField;
+		$('transcodeVBitrate').toggleAttribute('hidden', mode !== 'bitrate');
+		$('transcodeCrf').toggleAttribute('hidden', mode !== 'crf');
+		// 码率模式预填一个跟分辨率匹配的默认值，别丢给用户一个空框
+		const bitrateField = $('transcodeVBitrate') as unknown as TextField;
+		if (!bitrateField.value) {
+			bitrateField.value = String(ops.defaultVideoBitrate(scaleValue()));
+		}
+		if (video.id === 'copy') {
+			// 不重编码视频时质量/码率/速度都没有意义，藏起来免得误导
+			$('transcodeCrf').toggleAttribute('hidden', true);
+			$('transcodeVBitrate').toggleAttribute('hidden', true);
+			$('transcodePreset').toggleAttribute('hidden', true);
+		} else {
+			$('transcodePreset').toggleAttribute('hidden', false);
+		}
+		if (mode === 'crf' && video.id !== 'copy') {
+			crfField.min = String(video.crf[0]);
+			crfField.max = String(video.crf[1]);
+			const label = video.id === 'theora' ? '质量值（-qscale，越小越好）' : '质量值（CRF，越小越好）';
+			crfField.setAttribute('label', label);
+			if (!crfField.value || !video.crf.includes(Number(crfField.value))) {
+				crfField.value = String(video.crfDefault);
+			}
+		}
+
+		// 音轨码率：每个编码器的合法档位不同，用下拉而不是自由输入，从源头避免非法值
+		const bitrates = audio.bitrates ?? [];
+		$('transcodeABitrate').toggleAttribute('hidden', !bitrates.length);
+		if (bitrates.length) {
+			const prev = ($('transcodeABitrate') as SelectEl).value;
+			fillSelect(
+				'transcodeABitrate',
+				bitrates.map((kbps) => ({ value: String(kbps), label: `${kbps} kbps` })),
+				bitrates.includes(Number(prev)) ? prev : undefined,
+			);
+			($('transcodeABitrate') as SelectEl).value = String(audio.bitrateDefault ?? bitrates[0]);
+		}
+
+		// 自定义宽高只在选 custom 时出现
+		const custom = scaleValue() === 'custom';
+		$('transcodeWidth').toggleAttribute('hidden', !custom);
+		$('transcodeHeight').toggleAttribute('hidden', !custom);
+		// 「不压缩」的视频不能再缩放，否则命令会自相矛盾
+		const scaleField = $('transcodeScale');
+		const blocked = video.id === 'copy';
+		if (blocked && scaleField.getAttribute('data-blocked') !== '1') {
+			($('transcodeScale') as SelectEl).value = 'source';
+			scaleField.setAttribute('data-blocked', '1');
+		} else if (!blocked) {
+			scaleField.removeAttribute('data-blocked');
+		}
+
+		updateTranscodeHint();
+	}
+
+	function updateTranscodeHint(): void {
+		const video = videoSpec();
+		const audio = audioSpec();
+		const container = ($('transcodeContainer') as SelectEl).value as ops.RemuxContainer;
+		const notes: string[] = [];
+
+		if (video.id === 'copy') {
+			notes.push('视频直接复制，不重新编码 —— 这一步其实和「改格式」一样快。');
+		} else {
+			notes.push(video.note);
+			const mode = ($('transcodeMode') as SelectEl).value as ops.RateMode;
+			if (mode === 'crf' && video.crfHint) notes.push(video.crfHint);
+		}
+		notes.push(audio.note);
+		if (video.id !== 'copy' && video.presets.some((p) => p.id === 'uf')) {
+			notes.push('越靠「慢」的档位压出来体积越小、速度越慢；应急就用默认的中。');
+		}
+		const spec = ops.CONTAINERS[container];
+		if (spec) notes.push(`输出 ${spec.label}：${spec.hint}。`);
+
+		const missing = [video, audio].filter(
+			(spec2) => spec2.id !== 'copy' && spec2.id !== 'none' && disabledByProbe(spec2.encoder),
+		);
+		if (missing.length) {
+			notes.push(`⚠️ 当前 ffmpeg 核心缺少 ${missing.map((m) => m.label).join('、')}，请换一个。`);
+		}
+		$('transcodeHint').textContent = notes.join(' ');
+	}
+
+	/**
+	 * 探测当前核心到底有哪些编码器。
+	 *
+	 * 不在进页面时自动跑：那意味着为了填个下拉框先下载 32 MB。
+	 * 所以做成一个显式按钮 —— 想确认的人点一下，不想的人不受这个开销。
+	 */
+	async function onTranscodeProbe(): Promise<void> {
+		if (busy) return;
+		setBusy(true);
+		setDisabled('transcodeProbe', true);
+		try {
+			const instance = await ensureFfmpeg();
+			setProgress(0, 0, '正在读取 ffmpeg 的编码器清单…');
+			infoBuffer = '';
+			instance.on('log', ({ message }) => {
+				infoBuffer += message + '\n';
+			});
+			// 同「文件信息」页：只查询不给输出，ffmpeg 会打印清单后自行退出
+			await instance.exec(['-encoders']);
+			encoderSet = ops.parseEncoderList(infoBuffer);
+			const missing = [
+				...ops.videoAvailability(encoderSet),
+				...ops.audioAvailability(encoderSet),
+			].filter((item) => !item.available);
+			initTranscodeForm();
+			$('transcodeSummary').textContent = missing.length
+				? `核心提供 ${encoderSet.size} 个编码器，其中 ${missing.length} 个本工具用不到`
+				: `核心提供 ${encoderSet.size} 个编码器，本工具列出的都可用`;
+			log(`编码器探测完成：可用 ${encoderSet.size} 个`);
+			hideProgress();
+		} catch (error) {
+			log(describeError(error), 'error');
+			$('transcodeSummary').textContent = describeError(error);
+		} finally {
+			setBusy(false);
+			setDisabled('transcodeProbe', false);
+		}
+	}
+
+	function readTranscodeOptions(): ops.TranscodeOptions {
+		const video = videoSpec();
+		const audio = audioSpec();
+		const mode = ($('transcodeMode') as SelectEl).value as ops.RateMode;
+		const scale = ($('transcodeScale') as SelectEl).value as ops.ResolutionPreset;
+		return {
+			videoCodec: video.id,
+			audioCodec: audio.id,
+			container: ($('transcodeContainer') as SelectEl).value as ops.RemuxContainer,
+			rateMode: mode,
+			crf: Number(($('transcodeCrf') as unknown as TextField).value),
+			videoBitrate: Number(($('transcodeVBitrate') as unknown as TextField).value) || undefined,
+			audioBitrate: Number(($('transcodeABitrate') as SelectEl).value) || undefined,
+			presetId: ($('transcodePreset') as SelectEl).value,
+			resolution: scale,
+			customWidth: Number(($('transcodeWidth') as unknown as TextField).value) || undefined,
+			customHeight: Number(($('transcodeHeight') as unknown as TextField).value) || undefined,
+		};
+	}
+
+	async function onTranscodeRun(): Promise<void> {
+		if (!transcodeFile || busy) return;
+		setBusy(true);
+		setDisabled('transcodeRun', true);
+		try {
+			const options = readTranscodeOptions();
+			const plan = ops.planTranscode(mountedName(transcodeFile), options);
+			const started = performance.now();
+			const { output, bytes } = await runPlan([transcodeFile], plan.args, plan.output, '压制');
+			const elapsed = performance.now() - started;
+
+			download(bytes, output);
+			const source = ops.formatBytes(transcodeFile.size);
+			let summary = `完成：${source} → ${ops.formatBytes(bytes.length)}`;
+			// infoBuffer 里还留着这次压制开头的输入 banner，能拿到真实时长
+			const duration = ops.parseFfmpegDuration(infoBuffer);
+			const speed = duration ? ops.describeSpeed(duration, elapsed) : '';
+			if (speed) summary += ` · ${speed}`;
+			$('transcodeSummary').textContent = summary;
+			log(summary);
+			hideProgress();
+		} catch (error) {
+			log(describeError(error), 'error');
+			$('transcodeSummary').textContent = describeError(error);
+		} finally {
+			setBusy(false);
+			setDisabled('transcodeRun', false);
+		}
+	}
+
+	wirePicker({
+		buttonId: 'transcodePick',
+		dropId: 'transcodeDrop',
+		multiple: false,
+		onFiles: (files) => {
+			transcodeFile = files[0];
+			$('transcodeInfo').textContent = describe(transcodeFile);
+			setDisabled('transcodeRun', false);
+		},
+	});
+
+	/* ------------------------------------------------------------ 提取 */
+
+	wirePicker({
+		buttonId: 'extractPick',
+		dropId: 'extractDrop',
+		multiple: false,
+		onFiles: (files) => {
+			extractFile = files[0];
+			$('extractInfo').textContent = describe(extractFile);
+			setDisabled('extractRun', false);
+		},
+	});
+
+	async function onExtractRun(): Promise<void> {
+		if (!extractFile || busy) return;
+		setBusy(true);
+		setDisabled('extractRun', true);
+		try {
+			const mode = ($('extractMode') as SelectEl).value as ops.ExtractMode;
+			const plan = ops.planExtract(mountedName(extractFile), {
+				mode,
+				frameIndex: Number(($('extractFrame') as unknown as TextField).value) || 1,
+				format: ($('extractFormat') as SelectEl).value as 'jpg' | 'png',
+			});
+			const { output, bytes } = await runPlan([extractFile], plan.args, plan.output, '提取');
+			const mime = output.endsWith('.png') ? 'image/png' : 'image/jpeg';
+			download(bytes, output, output.includes('封面') ? mime : 'application/octet-stream');
+			$('extractSummary').textContent = `完成，${ops.formatBytes(bytes.length)}`;
+			hideProgress();
+		} catch (error) {
+			log(describeError(error), 'error');
+			$('extractSummary').textContent = describeError(error);
+		} finally {
+			setBusy(false);
+			setDisabled('extractRun', false);
+		}
+	}
+
+	/* ------------------------------------------------------------ 裁剪 */
+
+	wirePicker({
+		buttonId: 'trimPick',
+		dropId: 'trimDrop',
+		multiple: false,
+		onFiles: (files) => {
+			trimFile = files[0];
+			$('trimInfo').textContent = describe(trimFile);
+			setDisabled('trimRun', false);
+		},
+	});
+
+	async function onTrimRun(): Promise<void> {
+		if (!trimFile || busy) return;
+		setBusy(true);
+		setDisabled('trimRun', true);
+		try {
+			const plan = ops.planTrim(mountedName(trimFile), {
+				start: ($('trimStart') as unknown as TextField).value || undefined,
+				end: ($('trimEnd') as unknown as TextField).value || undefined,
+			});
+			const { output, bytes } = await runPlan([trimFile], plan.args, plan.output, '裁剪');
+			download(bytes, output);
+			$('trimSummary').textContent = `完成，${ops.formatBytes(bytes.length)}`;
+			hideProgress();
+		} catch (error) {
+			log(describeError(error), 'error');
+			$('trimSummary').textContent = describeError(error);
+		} finally {
+			setBusy(false);
+			setDisabled('trimRun', false);
+		}
+	}
+
+	/* ------------------------------------------------------------ 剪切 */
+
+	wirePicker({
+		buttonId: 'splitPick',
+		dropId: 'splitDrop',
+		multiple: false,
+		onFiles: (files) => {
+			splitFile = files[0];
+			$('splitInfo').textContent = describe(splitFile);
+			setDisabled('splitRun', false);
+		},
+	});
+
+	async function onSplitRun(): Promise<void> {
+		if (!splitFile || busy) return;
+		setBusy(true);
+		setDisabled('splitRun', true);
+		try {
+			const at = ops.parseTimecode(($('splitAt') as unknown as TextField).value || '0');
+			const plan = ops.planSplit(mountedName(splitFile), at);
+			const parts = await runSteps([splitFile], plan.steps, '剪切');
+			for (const part of parts) download(part.bytes, part.output);
+			$('splitSummary').textContent =
+				`已切成 ${parts.length} 段：` +
+				parts.map((p) => `${p.output}（${ops.formatBytes(p.bytes.length)}）`).join('、');
+			hideProgress();
+		} catch (error) {
+			log(describeError(error), 'error');
+			$('splitSummary').textContent = describeError(error);
+		} finally {
+			setBusy(false);
+			setDisabled('splitRun', false);
+		}
+	}
+
+	/* ------------------------------------------------------ 合并音视频 */
+
+	wirePicker({
+		buttonId: 'mergeVideoPick',
+		dropId: 'mergeVideoDrop',
+		multiple: false,
+		onFiles: (files) => {
+			mergeVideoFile = files[0];
+			$('mergeVideoInfo').textContent = describe(mergeVideoFile);
+			updateMergeReady();
+		},
+	});
+
+	wirePicker({
+		buttonId: 'mergeAudioPick',
+		dropId: 'mergeAudioDrop',
+		multiple: false,
+		onFiles: (files) => {
+			mergeAudioFile = files[0];
+			$('mergeAudioInfo').textContent = describe(mergeAudioFile);
+			updateMergeReady();
+		},
+	});
+
+	function updateMergeReady(): void {
+		setDisabled('mergeRun', !(mergeVideoFile && mergeAudioFile));
+	}
+
+	async function onMergeRun(): Promise<void> {
+		if (!mergeVideoFile || !mergeAudioFile || busy) return;
+		setBusy(true);
+		setDisabled('mergeRun', true);
+		try {
+			const plan = ops.planMergeAudioVideo(
+				mountedName(mergeAudioFile),
+				mountedName(mergeVideoFile),
+				($('mergeOutput') as unknown as TextField).value,
+			);
+			const { output, bytes } = await runPlan(
+				[mergeVideoFile, mergeAudioFile],
+				plan.args,
+				plan.output,
+				'合并音视频',
+			);
+			download(bytes, output);
+			$('mergeSummary').textContent = `完成，${ops.formatBytes(bytes.length)}`;
+			hideProgress();
+		} catch (error) {
+			log(describeError(error), 'error');
+			$('mergeSummary').textContent = describeError(error);
+		} finally {
+			setBusy(false);
+			updateMergeReady();
+		}
+	}
+
+	/* ------------------------------------------------------------ 字幕 */
+
+	wirePicker({
+		buttonId: 'subtitlePick',
+		dropId: 'subtitleDrop',
+		multiple: false,
+		onFiles: (files) => {
+			subtitleFile = files[0];
+			$('subtitleInfo').textContent = describe(subtitleFile);
+			setDisabled('subtitleRun', false);
+		},
+	});
+
+	wirePicker({
+		buttonId: 'subtitleFilePick',
+		dropId: 'subtitleFileDrop',
+		multiple: false,
+		accept: ops.SUBTITLE_ACCEPT,
+		only: (file) => ops.isSubtitleFile(file.name),
+		onlyLabel: '字幕文件（srt / ass / vtt 等）',
+		onFiles: (files) => {
+			subtitleSidecar = files[0];
+			$('subtitleFileInfo').textContent = `${subtitleSidecar.name} · ${ops.formatBytes(subtitleSidecar.size)}`;
+			setDisabled('subtitleRun', false);
+		},
+	});
+
+	async function onSubtitleRun(): Promise<void> {
+		if (!subtitleFile || busy) return;
+		setBusy(true);
+		setDisabled('subtitleRun', true);
+		try {
+			const mode = ($('subtitleMode') as SelectEl).value as ops.SubtitleMode;
+			const plan = ops.planSubtitle(mountedName(subtitleFile), {
+				mode,
+				subtitleFile: subtitleSidecar ? mountedName(subtitleSidecar) : undefined,
+			});
+			const files = subtitleSidecar ? [subtitleFile, subtitleSidecar] : [subtitleFile];
+			const { output, bytes } = await runPlan(files, plan.args, plan.output, '字幕');
+			// .srt 是纯文本，用 text/plain 下载，浏览器不会当二进制弹窗
+			download(bytes, output, output.endsWith('.srt') ? 'text/plain' : 'application/octet-stream');
+			$('subtitleSummary').textContent = `完成，${ops.formatBytes(bytes.length)}`;
+			hideProgress();
+		} catch (error) {
+			log(describeError(error), 'error');
+			$('subtitleSummary').textContent = describeError(error);
+		} finally {
+			setBusy(false);
+			setDisabled('subtitleRun', false);
+		}
+	}
+
+	/* ------------------------------------------------------------ 拼接 */
+
+	function renderConcat(): void {
+		const list = $('concatList');
+		list.textContent = '';
+		concatFiles.forEach((file, index) => {
+			const item = document.createElement('li');
+			item.className = 'media-item';
+			item.draggable = true;
+
+			const order = document.createElement('span');
+			order.className = 'media-item-order';
+			order.textContent = `${index + 1}.`;
+
+			const name = document.createElement('span');
+			name.className = 'media-item-name';
+			name.textContent = file.name;
+
+			const size = document.createElement('span');
+			size.className = 'media-item-size';
+			size.textContent = ops.formatBytes(file.size);
+
+			/*
+			 * 图标按钮要**塞子元素** <mdui-icon-xxx>，不能写 icon="xxx" 属性。
+			 * mdui-button-icon 的 icon 是 property，lit 组件不把同名 attribute
+			 * 映射回 property，结果属性名本身被当成文字渲染出来（显示成 "clo"）。
+			 */
+			const remove = document.createElement('mdui-button-icon');
+			remove.setAttribute('variant', 'standard');
+			remove.setAttribute('aria-label', `移除 ${file.name}`);
+			remove.title = '移除';
+			remove.appendChild(document.createElement('mdui-icon-close'));
+			remove.addEventListener('click', () => {
+				concatFiles.splice(index, 1);
+				renderConcat();
+			});
+
+			item.append(order, name, size, remove);
+
+			/*
+			 * 拖动排序：原生 HTML5 drag。dragstart 给拖起的行加 .is-dragging，
+			 * drop 时按 DOM 位置算出源与目标索引，再改数组顺序后重绘。
+			 * 重绘会销毁所有行，所以必须靠 class 找回拖起的是哪一个 ——
+			 * 不能提前把索引存到 item.dataset 上，drop 时那个节点已经不在了。
+			 */
+			item.addEventListener('dragstart', () => item.classList.add('is-dragging'));
+			item.addEventListener('dragend', () => item.classList.remove('is-dragging'));
+			item.addEventListener('dragover', (event) => event.preventDefault());
+			item.addEventListener('drop', (event) => {
+				event.preventDefault();
+				const dragging = list.querySelector('.is-dragging');
+				if (!dragging || dragging === item) return;
+				const items = Array.from(list.children);
+				const from = items.indexOf(dragging);
+				const to = items.indexOf(item);
+				if (from < 0 || to < 0) return;
+				const [moved] = concatFiles.splice(from, 1);
+				concatFiles.splice(to, 0, moved);
+				renderConcat();
+			});
+
+			list.appendChild(item);
+		});
+		setDisabled('concatRun', concatFiles.length < 2);
+	}
+
+	wirePicker({
+		buttonId: 'concatPick',
+		dropId: 'concatDrop',
+		multiple: true,
+		onFiles: (files) => {
+			// 同名文件先加序号，否则挂载后互相覆盖
+			for (const file of files) {
+				let candidate = file;
+				let n = 2;
+				while (concatFiles.some((f) => f.name === candidate.name)) {
+					const dot = file.name.lastIndexOf('.');
+					const renamed =
+						dot > 0
+							? `${file.name.slice(0, dot)}-${n++}${file.name.slice(dot)}`
+							: `${file.name}-${n++}`;
+					candidate = new File([file], renamed, { type: file.type });
+				}
+				concatFiles.push(candidate);
+			}
+			renderConcat();
+		},
+	});
+
+	/** 只跑 -i 读一遍 banner，拿流信息；ffmpeg 会以「缺输出文件」退出，这是预期的 */
+	async function probeOne(instance: FfmpegInstance, name: string): Promise<ops.ProbeResult> {
+		let buffer = '';
+		const handler = ({ message }: { message: string }) => {
+			buffer += message + '\n';
+		};
+		instance.on('log', handler);
+		try {
+			await instance.exec(['-i', name]);
+		} finally {
+			instance.off('log', handler);
+		}
+		return ops.parseProbeLog(buffer);
+	}
+
+	async function onConcatRun(): Promise<void> {
+		if (concatFiles.length < 2 || busy) return;
+		setBusy(true);
+		setDisabled('concatRun', true);
+		try {
+			const instance = await ensureFfmpeg();
+			ops.assertSizeOk(concatFiles);
+
+			let mode = ($('concatMode') as SelectEl).value as 'auto' | 'ts' | 'concat';
+			if (mode === 'auto') {
+				const allTs = concatFiles.every((f) => ['ts', 'mts', 'm2ts'].includes(ops.extOf(f.name)));
+				mode = allTs ? 'ts' : 'concat';
+				log(`自动判断拼接方式为 ${mode === 'ts' ? 'TS concat 协议' : 'concat 清单'}`);
+			}
+
+			const inputNames = concatFiles.map(mountedName);
+			const plan = ops.planConcat(inputNames, {
+				mode,
+				outputName: ($('concatOutput') as unknown as TextField).value,
+			});
+
+			/*
+			 * 先逐个探测轨道布局再拼。
+			 * concat demuxer 遇到结构不一致的输入**不报错**，而是产出时长错乱的
+			 * 文件（实测 3 秒 + 只有音轨的片段 → 20.7 秒），所以必须自己拦。
+			 */
+			setProgress(0, 0, `检查 ${concatFiles.length} 个片段的编码…`);
+			await instance.createDir('/in').catch(() => undefined);
+			await instance.mount('WORKERFS', { files: concatFiles }, '/in');
+			let infos: ops.ProbeResult[];
+			try {
+				infos = [];
+				for (const name of inputNames) {
+					setProgress(0, 0, `检查 ${name} 的编码…`);
+					infos.push(await probeOne(instance, `/in/${name}`));
+				}
+			} finally {
+				await instance.unmount('/in').catch(() => undefined);
+			}
+			ops.assertConcatCompatible(infos);
+			log(`各片段编码一致：${infos.map((i) => ops.describeProbe(i)).join(' / ')}`);
+
+			/*
+			 * concat demuxer 的清单文件必须写到内存 FS 的根目录：
+			 * WORKERFS 是只读挂载，写不进去。
+			 *
+			 * 清单里的路径按**清单文件所在目录**解析。清单在根目录、
+			 * 影片挂在 /in，所以必须写绝对路径 /in/xxx，
+			 * 并靠 `-safe 0`（planConcat 已加）允许绝对路径。
+			 * 写裸文件名会让 ffmpeg 去根目录找，报 FS error。
+			 */
+			await instance.deleteFile(ops.CONCAT_LIST).catch(() => undefined);
+			if (mode === 'concat') {
+				const body = inputNames.map((name) => `file '/in/${name}'`).join('\n');
+				await instance.writeFile(ops.CONCAT_LIST, new TextEncoder().encode(body));
+			}
+
+			const { output, bytes } = await runPlan(concatFiles, plan.args, plan.output, '拼接');
+			download(bytes, output);
+			$('concatSummary').textContent = `完成，${ops.formatBytes(bytes.length)}`;
+			hideProgress();
+		} catch (error) {
+			log(describeError(error), 'error');
+			$('concatSummary').textContent = describeError(error);
+		} finally {
+			setBusy(false);
+			renderConcat();
+		}
+	}
+
+	/* ------------------------------------------------------------ 命令 */
+
+	/*
+	 * 常用命令模板。$0 会被替换成挂载区里第一个文件的实际名字。
+	 * 模板里 $0 外面**不带引号** —— 替换时统一加引号，否则会出现 -i ""x.mp4""
+	 * 这种双层引号（虽然 parseCommandLine 能凑巧解析对，但日志里很难看）。
+	 */
+	const COMMAND_PRESETS: Record<string, string> = {
+		remux: '-i $0 -c copy output.mp4',
+		hevc: '-i $0 -c copy -tag:v hvc1 output.mp4',
+		faststart: '-i $0 -c copy -movflags +faststart output.mp4',
+		audio: '-i $0 -vn -c:a copy output.m4a',
+		mute: '-i $0 -an -c:v copy output.mp4',
+		decrypt: '-decryption_key "" -i $0 -c copy output.mp4',
+		scale: '-i $0 -vf scale=-2:720 -c:v libx264 -crf 23 -preset veryfast -c:a copy output.mp4',
+		fps: '-i $0 -r 25 -c:v libx264 -crf 23 -preset veryfast -c:a copy output.mp4',
+		fpsprobe: '-i $0 -f null -',
+		thumbnail: '-i $0 -vf fps=1/10 -q:v 3 frame%03d.jpg',
+		waveform: '-i $0 -filter_complex showwavespic=s=1200x240 -frames:v 1 waveform.png',
+	};
+
+	function renderCommandFiles(): void {
+		const list = $('commandFiles');
+		list.textContent = '';
+		commandFiles.forEach((file, index) => {
+			const item = document.createElement('li');
+			item.className = 'media-item';
+			const name = document.createElement('span');
+			name.className = 'media-item-name';
+			name.textContent = file.name;
+			const size = document.createElement('span');
+			size.className = 'media-item-size';
+			size.textContent = ops.formatBytes(file.size);
+			const remove = document.createElement('mdui-button-icon');
+			remove.setAttribute('variant', 'standard');
+			remove.setAttribute('aria-label', `移除 ${file.name}`);
+			remove.title = '移除';
+			remove.appendChild(document.createElement('mdui-icon-close'));
+			remove.addEventListener('click', () => {
+				commandFiles.splice(index, 1);
+				renderCommandFiles();
+			});
+			item.append(name, size, remove);
+			list.appendChild(item);
+		});
+		$('commandInfo').textContent = commandFiles.length
+			? `${commandFiles.length} 个文件可用：${commandFiles.map(mountedName).join('、')}`
+			: '还没有添加文件';
+		setDisabled('commandRun', commandFiles.length === 0);
+	}
+
+	wirePicker({
+		buttonId: 'commandPick',
+		dropId: 'commandDrop',
+		multiple: true,
+		onFiles: (files) => {
+			commandFiles.push(...files);
+			renderCommandFiles();
+		},
+	});
+
+	function fillPreset(): void {
+		const key = ($('commandPreset') as SelectEl).value;
+		if (!key) return;
+		const preset = COMMAND_PRESETS[key];
+		if (!preset) return;
+		if (!commandFiles.length) {
+			toast('请先添加至少一个输入文件');
+			return;
+		}
+		($('commandInput') as unknown as TextField).value = preset.replace(
+			'$0',
+			`"${mountedName(commandFiles[0])}"`,
+		);
+		log(`已填入模板：${key}`);
+		previewCommand();
+	}
+
+	/** 实时把输入框解析成 argv，给用户看最终会怎么执行 */
+	function previewCommand(): void {
+		const box = $('commandPreview');
+		const text = ($('commandInput') as unknown as TextField).value.trim();
+		if (!text) {
+			box.setAttribute('hidden', '');
+			return;
+		}
+		const args = ops.stripFfmpegPrefix(ops.parseCommandLine(text));
+		box.removeAttribute('hidden');
+		$('commandPreviewText').textContent =
+			`将执行 ${args.length} 个参数：${args.map((a) => (a.includes(' ') ? `"${a}"` : a)).join(' ')}`;
+	}
+
+	async function onCommandRun(): Promise<void> {
+		if (!commandFiles.length || busy) return;
+		setBusy(true);
+		setDisabled('commandRun', true);
+		try {
+			const text = ($('commandInput') as unknown as TextField).value.trim();
+			const args = ops.stripFfmpegPrefix(ops.parseCommandLine(text));
+			const output = ops.validateCustomArgs(args);
+
+			/*
+			 * `-f null -` 是 ffmpeg 的「丢弃输出」约定，用来只看统计信息。
+			 * 这时没有文件可读，跳过下载，统计都在日志里。
+			 */
+			if (output === '-') {
+				const instance = await ensureFfmpeg();
+				ops.assertSizeOk(commandFiles);
+				setProgress(0, 0, '运行命令…');
+				await instance.createDir('/in').catch(() => undefined);
+				await instance.mount('WORKERFS', { files: commandFiles }, '/in');
+				try {
+					await execChecked(instance, qualify(args, new Set(commandFiles.map(mountedName))), '自定义命令');
+				} finally {
+					await instance.unmount('/in').catch(() => undefined);
+				}
+				$('commandSummary').textContent = '已执行，该命令不产出文件，结果见日志。';
+				hideProgress();
+				return;
+			}
+
+			const { output: finalName, bytes } = await runPlan(commandFiles, args, output, '运行命令');
+			download(bytes, finalName);
+			$('commandSummary').textContent = `完成，${ops.formatBytes(bytes.length)}`;
+			hideProgress();
+		} catch (error) {
+			log(describeError(error), 'error');
+			$('commandSummary').textContent = describeError(error);
+		} finally {
+			setBusy(false);
+			renderCommandFiles();
+		}
+	}
+
+	/* ------------------------------------------------------------ 文件信息 */
+
+	wirePicker({
+		buttonId: 'infoPick',
+		dropId: 'infoDrop',
+		multiple: false,
+		onFiles: (files) => {
+			infoFile = files[0];
+			$('infoInfo').textContent = describe(infoFile);
+			setDisabled('infoRun', false);
+		},
+	});
+
+	/** 一行「标签 : 值」 */
+	function infoRow(label: string, value: string | number | undefined): HTMLElement | null {
+		if (value === undefined || value === '' || value === 'N/A') return null;
+		const row = document.createElement('div');
+		row.className = 'media-info-row';
+		const key = document.createElement('span');
+		key.className = 'media-info-key';
+		key.textContent = label;
+		const val = document.createElement('span');
+		val.className = 'media-info-val';
+		val.textContent = String(value);
+		row.append(key, val);
+		return row;
+	}
+
+	function infoSection(
+		title: string,
+		rows: (HTMLElement | null)[],
+		...badges: (string | undefined)[]
+	): HTMLElement | null {
+		const kept = rows.filter((row): row is HTMLElement => row !== null);
+		if (!kept.length) return null;
+		const section = document.createElement('section');
+		section.className = 'media-info-card';
+		const head = document.createElement('h3');
+		head.className = 'media-info-title';
+		const titleText = document.createElement('span');
+		titleText.textContent = title;
+		head.appendChild(titleText);
+		for (const badge of badges) {
+			if (!badge) continue;
+			const chip = document.createElement('span');
+			chip.className = 'media-info-badge';
+			chip.textContent = badge;
+			head.appendChild(chip);
+		}
+		section.append(head, ...kept);
+		return section;
+	}
+
+	const STREAM_LABELS: Record<ops.StreamType, string> = {
+		video: '视频',
+		audio: '音频',
+		subtitle: '字幕',
+		data: '数据',
+		attachment: '附件',
+		unknown: '未知',
+	};
+
+	/** 把结构化信息渲染成分组的卡片 */
+	function renderMediaInfo(info: ops.MediaInfo): string {
+		const host = $('infoOut');
+		host.textContent = '';
+		const container = info.container;
+
+		const head = infoSection(
+			'容器',
+			[
+				infoRow('格式', ops.formatLabel(info)),
+				infoRow('ffmpeg 识别到的格式名', container.formatName),
+				infoRow('时长', container.duration),
+				infoRow('起始偏移', container.startTime),
+				infoRow('总码率', container.bitrate),
+				infoRow('轨道数', container.nbStreams ?? (info.streams.length || undefined)),
+				// banner 里是挂载点路径 /in/xxx，展示时去掉前缀，只留用户认得的名字
+				infoRow('文件名', container.fileName?.replace(/^\/in\//, '')),
+				infoRow('ffmpeg', info.version),
+			],
+		);
+		if (head) host.appendChild(head);
+
+		// 容器元数据合成一张卡片，不要一个键一张（四个键就是四张卡，太碎）
+		const containerTagRows: (HTMLElement | null)[] = [];
+		for (const tagKey of Object.keys(container.tags)) {
+			containerTagRows.push(infoRow(tagKey, container.tags[tagKey]));
+		}
+		const containerTagCard = infoSection('容器元数据', containerTagRows);
+		if (containerTagCard) host.appendChild(containerTagCard);
+
+		for (const stream of info.streams) {
+			const rows: (HTMLElement | null)[] = [];
+			if (stream.type === 'video') {
+				rows.push(
+					infoRow('编码', stream.codec),
+					infoRow('档次', stream.profile),
+					infoRow('级别', stream.level),
+					infoRow('容器标签', stream.tag),
+					infoRow('分辨率', stream.width && stream.height ? `${stream.width}×${stream.height}` : undefined),
+					infoRow('像素格式', stream.pixelFormat),
+					infoRow('帧率', stream.fps),
+					infoRow('扫描方式', stream.fieldOrder),
+					infoRow('显示宽高比', stream.dar),
+					infoRow('采样宽高比', stream.sar),
+					infoRow('色域范围', stream.colorRange),
+					infoRow('色彩空间', stream.colorSpace),
+					infoRow('色度 primaries', stream.colorPrimaries),
+					infoRow('传输特性', stream.colorTransfer),
+					infoRow('码率', stream.bitrate),
+					infoRow('真实帧率', stream.tbr),
+					infoRow('时基', stream.tbn),
+				);
+			} else if (stream.type === 'audio') {
+				rows.push(
+					infoRow('编码', stream.codec),
+					infoRow('档次', stream.profile),
+					infoRow('容器标签', stream.tag),
+					infoRow('采样率', stream.sampleRate ? `${stream.sampleRate} Hz` : undefined),
+					infoRow('声道', stream.channels),
+					infoRow('声道布局', stream.channelLayout),
+					infoRow('采样格式', stream.sampleFormat),
+					infoRow('码率', stream.bitrate),
+				);
+			} else {
+				rows.push(infoRow('编码', stream.codec), infoRow('容器标签', stream.tag), infoRow('码率', stream.bitrate));
+			}
+			rows.push(
+				infoRow('轨道编号', stream.id),
+				infoRow('内部 ID', stream.hexId),
+				infoRow('语言', stream.language),
+				infoRow('默认/标志', stream.disposition?.join('、')),
+			);
+			for (const tagKey of Object.keys(stream.tags)) {
+				rows.push(infoRow(tagKey, stream.tags[tagKey]));
+			}
+			const card = infoSection(`轨道 ${stream.id}`, rows, STREAM_LABELS[stream.type], stream.codec);
+			if (card) host.appendChild(card);
+		}
+
+		if (!host.children.length) {
+			host.textContent = 'ffmpeg 没有输出可解析的信息，文件可能已损坏或格式不受支持。';
+		}
+
+		// 复制用纯文本，键值对齐
+		return [...host.querySelectorAll('.media-info-card')]
+			.map((card) => {
+				const title = card.querySelector('.media-info-title')?.textContent ?? '';
+				const lines = [...card.querySelectorAll('.media-info-row')].map((row) => {
+					const key = row.querySelector('.media-info-key')?.textContent ?? '';
+					const val = row.querySelector('.media-info-val')?.textContent ?? '';
+					return `  ${key.padEnd(10, '　')} ${val}`;
+				});
+				return [title, ...lines].join('\n');
+			})
+			.join('\n\n');
+	}
+
+	async function onInfoRun(): Promise<void> {
+		if (!infoFile || busy) return;
+		setBusy(true);
+		setDisabled('infoRun', true);
+		try {
+			const instance = await ensureFfmpeg();
+			ops.assertSizeOk([infoFile]);
+			setProgress(0, 0, '读取文件信息…');
+			infoBuffer = '';
+			instance.on('log', ({ message }) => {
+				infoBuffer += message + '\n';
+			});
+
+			await instance.createDir('/in').catch(() => undefined);
+			await instance.mount('WORKERFS', { files: [infoFile] }, '/in');
+			try {
+				/*
+				 * 只给 -i 不给输出：ffmpeg 读完输入的 banner 后会以
+				 * "At least one output file must be specified" 退出（返回码非 0），
+				 * 这正是我们要的 —— 它已经把流信息全打在日志里了。
+				 */
+				await instance.exec(['-i', `/in/${mountedName(infoFile)}`]);
+			} finally {
+				await instance.unmount('/in').catch(() => undefined);
+			}
+
+			const parsed = ops.parseMediaInfo(infoBuffer);
+			infoText = renderMediaInfo(parsed);
+			$('infoRaw').textContent = infoBuffer.trim();
+			setDisabled('infoCopy', false);
+			setDisabled('infoRawToggle', false);
+			$('infoSummary').textContent = ops.describeMediaInfo(parsed);
+			log(`读取完成：${ops.describeMediaInfo(parsed)}（${parsed.streams.length} 条轨道）`);
+			hideProgress();
+		} catch (error) {
+			log(describeError(error), 'error');
+			$('infoSummary').textContent = describeError(error);
+		} finally {
+			setBusy(false);
+			setDisabled('infoRun', false);
+		}
+	}
+
+	/* ------------------------------------------------------------ 杂项 */
+
+	function download(bytes: Uint8Array, filename: string, type = 'application/octet-stream'): void {
+		const blob = new Blob([bytes as BlobPart], { type });
+		const url = URL.createObjectURL(blob);
+		const a = document.createElement('a');
+		a.href = url;
+		a.download = filename;
+		document.body.appendChild(a);
+		a.click();
+		a.remove();
+		setTimeout(() => URL.revokeObjectURL(url), 4000);
+	}
+
+	// 初始化
+	fillContainers();
+	initTranscodeForm();
+	updateRemuxHint();
+	renderConcat();
+	renderCommandFiles();
+	renderFormatList();
+
+	for (const id of [
+		'remuxRun', 'extractRun', 'trimRun', 'splitRun',
+		'mergeRun', 'subtitleRun', 'concatRun', 'commandRun', 'infoRun',
+		'transcodeRun',
+	]) setDisabled(id, true);
+
+	// 字幕模式切换时才显示外挂字幕的选择行
+	function syncSubtitleRow(): void {
+		const mux = ($('subtitleMode') as SelectEl).value === 'mux';
+		$('subtitleFileRow').toggleAttribute('hidden', !mux);
+	}
+	syncSubtitleRow();
+	$('subtitleMode').addEventListener('change', syncSubtitleRow);
+
+	$('remuxContainer').addEventListener('change', updateRemuxHint);
+	for (const id of ['transcodeVideo', 'transcodeAudio', 'transcodeMode', 'transcodeScale']) {
+		$(id).addEventListener('change', syncTranscodeForm);
+	}
+	$('transcodeRun').addEventListener('click', () => void onTranscodeRun());
+	$('transcodeProbe').addEventListener('click', () => void onTranscodeProbe());
+	$('remuxRun').addEventListener('click', () => void onRemuxRun());
+	$('extractRun').addEventListener('click', () => void onExtractRun());
+	$('trimRun').addEventListener('click', () => void onTrimRun());
+	$('splitRun').addEventListener('click', () => void onSplitRun());
+	$('mergeRun').addEventListener('click', () => void onMergeRun());
+	$('subtitleRun').addEventListener('click', () => void onSubtitleRun());
+	$('concatRun').addEventListener('click', () => void onConcatRun());
+	$('commandRun').addEventListener('click', () => void onCommandRun());
+	$('infoRun').addEventListener('click', () => void onInfoRun());
+	$('concatClear').addEventListener('click', () => {
+		concatFiles = [];
+		renderConcat();
+	});
+	$('infoCopy').addEventListener('click', async () => {
+		if (!infoText) return;
+		await navigator.clipboard.writeText(infoText);
+		toast('信息已复制到剪贴板');
+	});
+	$('infoRawToggle').addEventListener('click', () => {
+		const raw = $('infoRaw');
+		const willShow = raw.hasAttribute('hidden');
+		raw.toggleAttribute('hidden', !willShow);
+		$('infoRawToggle').textContent = willShow ? '隐藏原始输出' : '显示原始输出';
+	});
+	$('commandFill').addEventListener('click', fillPreset);
+	$('commandInput').addEventListener('input', previewCommand);
+	$('logClear').addEventListener('click', () => {
+		logBox.textContent = '';
+	});
+
+	/*
+	 * 停止：ffmpeg 跑进 wasm 后没有可中断的单条命令，只能 terminate 整个
+	 * worker 再 load 一次（要重新编译 wasm，约十几秒）。
+	 * terminate 会把挂载也一起清掉，所以这里只置 busy=false 让 UI 恢复，
+	 * 具体的重新加载交给下一次 ensureFfmpeg()（它判 loaded 为 false 会重来）。
+	 */
+	$('stopRun').addEventListener('click', async () => {
+		if (!busy) return;
+		setDisabled('stopRun', true);
+		log('已请求停止，正在终止 ffmpeg…', 'warn');
+		try {
+			ffmpeg?.terminate();
+			ffmpeg = null;
+			log('ffmpeg 已终止，下次运行会重新初始化（约十几秒）。', 'warn');
+		} catch (error) {
+			log(describeError(error), 'error');
+		} finally {
+			setBusy(false);
+			hideProgress();
+		}
+	});
+
+	$('preloadBtn').addEventListener('click', async () => {
+		setDisabled('preloadBtn', true);
+		try {
+			await ensureFfmpeg();
+			setProgress(1, 1, `ffmpeg 已就绪（约 ${Math.round(CORE_WASM_BYTES / 1024 / 1024)} MB 已缓存）`);
+		} catch (error) {
+			log(describeError(error), 'error');
+			setDisabled('preloadBtn', false);
+		}
+	});
+	$('clearCacheBtn').addEventListener('click', async () => {
+		await clearMediaCache();
+		log('已清除 ffmpeg 本地缓存，下次使用会重新下载约 32 MB。', 'warn');
+		// 缓存没了，把「首次需下载」的告知块放回来
+		$('coreNotice').removeAttribute('hidden');
+		setDisabled('preloadBtn', false);
+	});
+
+	/*
+	 * 缓存已经热了就把 32 MB 告知块收起来。
+	 * isCoreCached() 只读 IndexedDB 的两个 key，不碰 blob 本体，毫秒级返回。
+	 * 注意要在 mdui 组件定义完成后再改 hidden，否则属性会被组件重置。
+	 */
+	void isCoreCached().then((cached) => {
+		if (cached) {
+			$('coreNotice').setAttribute('hidden', '');
+			log('检测到本地已有 ffmpeg 核心缓存，无需重新下载。');
+		}
+	});
+</script>
