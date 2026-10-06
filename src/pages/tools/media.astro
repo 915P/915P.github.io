@@ -15,7 +15,7 @@ import Page from '../../layouts/Page.astro';
 			</p>
 		</div>
 		<div class="head-tools">
-			<mdui-chip variant="tonal">
+			<mdui-chip variant="assist">
 				<mdui-icon-lock></mdui-icon-lock>
 				本地处理
 			</mdui-chip>
@@ -43,8 +43,11 @@ import Page from '../../layouts/Page.astro';
 			<mdui-icon-warning></mdui-icon-warning>
 			<div class="media-notice-body">
 				<p class="text-sm">
-					<strong>首次使用需要下载约 32 MB 的 ffmpeg 核心</strong>（WebAssembly 模块，
+					<strong>首次使用需要下载 ffmpeg 核心</strong>（WebAssembly 模块，
 					由浏览器从公共 CDN 直取，已缓存到本地，之后不再下载）。
+					进度条上的 32.2 MB 是模块<strong>解压后</strong>的大小；
+					CDN 开着 gzip，实际传输量只有它的三分之一左右，
+					所以在开发者工具里看到「传输 9 MB / 大小 32 MB」是正常的。
 				</p>
 				<p class="text-xs faint" id="coreNoticeDetail">
 					除「压制」外的处理都是「不重新编码」：只搬运已有的音视频数据，因此很快。
@@ -101,7 +104,7 @@ import Page from '../../layouts/Page.astro';
 
 			<div class="row media-actions">
 				<mdui-button variant="filled" id="remuxRun">
-					<mdui-icon-play slot="icon"></mdui-icon-play>
+					<mdui-icon-play-arrow slot="icon"></mdui-icon-play-arrow>
 					开始处理
 				</mdui-button>
 				<span class="text-xs faint" id="remuxSummary"></span>
@@ -198,12 +201,25 @@ import Page from '../../layouts/Page.astro';
 				></mdui-text-field>
 			</div>
 
+			<div class="media-check" id="transcodeCheck" hidden></div>
+
 			<p class="text-xs faint media-hint" id="transcodeHint"></p>
+
+			<p class="text-xs faint media-hint">
+				压制必须能<strong>读出画面</strong>，所以输入视频的编码也得在这个核心的解码器清单里。
+				AV1 实测不行（<code class="mono">Not yet implemented in FFmpeg</code>）——
+				B 站、爱奇艺、YouTube 的 AV1 片源只能改格式或提取音轨，压不了。
+				但那些文件用<strong>改格式 / 提取音轨 / 裁剪 / 拼接</strong>都正常，因为它们不碰解码器。
+			</p>
 
 			<div class="row media-actions">
 				<mdui-button variant="filled" id="transcodeRun">
-					<mdui-icon-play slot="icon"></mdui-icon-play>
+					<mdui-icon-play-arrow slot="icon"></mdui-icon-play-arrow>
 					开始压制
+				</mdui-button>
+				<mdui-button variant="text" id="transcodeCheckBtn" disabled>
+					<mdui-icon-info slot="icon"></mdui-icon-info>
+					先检查
 				</mdui-button>
 				<mdui-button variant="text" id="transcodeProbe">检测可用编码器</mdui-button>
 				<span class="text-xs faint" id="transcodeSummary"></span>
@@ -251,7 +267,7 @@ import Page from '../../layouts/Page.astro';
 
 			<div class="row media-actions">
 				<mdui-button variant="filled" id="extractRun">
-					<mdui-icon-play slot="icon"></mdui-icon-play>
+					<mdui-icon-play-arrow slot="icon"></mdui-icon-play-arrow>
 					开始提取
 				</mdui-button>
 				<span class="text-xs faint" id="extractSummary"></span>
@@ -294,7 +310,7 @@ import Page from '../../layouts/Page.astro';
 
 			<div class="row media-actions">
 				<mdui-button variant="filled" id="trimRun">
-					<mdui-icon-play slot="icon"></mdui-icon-play>
+					<mdui-icon-play-arrow slot="icon"></mdui-icon-play-arrow>
 					开始裁剪
 				</mdui-button>
 				<span class="text-xs faint" id="trimSummary"></span>
@@ -330,7 +346,7 @@ import Page from '../../layouts/Page.astro';
 
 			<div class="row media-actions">
 				<mdui-button variant="filled" id="splitRun">
-					<mdui-icon-play slot="icon"></mdui-icon-play>
+					<mdui-icon-play-arrow slot="icon"></mdui-icon-play-arrow>
 					开始剪切
 				</mdui-button>
 				<span class="text-xs faint" id="splitSummary"></span>
@@ -379,7 +395,7 @@ import Page from '../../layouts/Page.astro';
 
 			<div class="row media-actions">
 				<mdui-button variant="filled" id="mergeRun">
-					<mdui-icon-play slot="icon"></mdui-icon-play>
+					<mdui-icon-play-arrow slot="icon"></mdui-icon-play-arrow>
 					开始合并
 				</mdui-button>
 				<span class="text-xs faint" id="mergeSummary"></span>
@@ -424,7 +440,7 @@ import Page from '../../layouts/Page.astro';
 
 			<div class="row media-actions">
 				<mdui-button variant="filled" id="subtitleRun">
-					<mdui-icon-play slot="icon"></mdui-icon-play>
+					<mdui-icon-play-arrow slot="icon"></mdui-icon-play-arrow>
 					开始处理
 				</mdui-button>
 				<span class="text-xs faint" id="subtitleSummary"></span>
@@ -468,7 +484,7 @@ import Page from '../../layouts/Page.astro';
 
 			<div class="row media-actions">
 				<mdui-button variant="filled" id="concatRun">
-					<mdui-icon-play slot="icon"></mdui-icon-play>
+					<mdui-icon-play-arrow slot="icon"></mdui-icon-play-arrow>
 					开始拼接
 				</mdui-button>
 				<mdui-button variant="text" id="concatClear">清空列表</mdui-button>
@@ -529,7 +545,7 @@ import Page from '../../layouts/Page.astro';
 
 			<div class="row media-actions">
 				<mdui-button variant="filled" id="commandRun">
-					<mdui-icon-play slot="icon"></mdui-icon-play>
+					<mdui-icon-play-arrow slot="icon"></mdui-icon-play-arrow>
 					运行命令
 				</mdui-button>
 				<span class="text-xs faint" id="commandSummary"></span>
@@ -588,14 +604,18 @@ import Page from '../../layouts/Page.astro';
 		把支持范围摆在明面上。这份白名单只影响原生文件对话框的过滤，
 		拖进来一律照收（由 ffmpeg 自己判断），所以更需要让用户看得见。
 	*/}
-	<details class="panel-lg media-stack media-formats">
-		<summary class="text-sm">支持哪些文件格式？</summary>
-		<div class="media-formats-body" id="formatList"></div>
-		<p class="text-xs faint">
-			对话框里按这些扩展名过滤；<strong>把文件拖进来不受此限制</strong>，
-			ffmpeg 能认出来就会处理，认不出会直接报错。清单随 ffmpeg 版本可能略有出入。
-		</p>
-	</details>
+	<section class="panel-lg media-stack media-formats">
+		<!-- 典型的 FAQ 折叠场景，用 mdui-collapse 替掉手写 <details> -->
+		<mdui-collapse>
+			<mdui-collapse-item header="支持哪些文件格式？">
+				<div class="media-formats-body" id="formatList"></div>
+				<p class="text-xs faint">
+					对话框里按这些扩展名过滤；<strong>把文件拖进来不受此限制</strong>，
+					ffmpeg 能认出来就会处理，认不出会直接报错。清单随 ffmpeg 版本可能略有出入。
+				</p>
+			</mdui-collapse-item>
+		</mdui-collapse>
+	</section>
 
 	<section class="panel-lg media-stack media-console">
 		<div class="row-between media-console-head">
@@ -740,6 +760,35 @@ import Page from '../../layouts/Page.astro';
  * 压制页的减速警告。与 .media-notice 同结构，只把强调色换成 error，
  * 让「这里很慢」在视觉上就和其他说明性提示区分开。
  */
+/* 压制前的检查结果：几行「结论」，比一整段文字更容易扫 */
+.media-check {
+	display: grid;
+	gap: 0.35rem;
+	margin-top: 1.35rem;
+	padding: 0.85rem 1rem;
+	border-radius: var(--mdui-shape-corner-medium);
+	background: rgb(var(--mdui-color-surface-container-high));
+	line-height: 1.7;
+}
+
+.media-check[hidden] {
+	display: none;
+}
+
+.media-check-ok {
+	color: rgb(var(--mdui-color-on-surface));
+}
+
+.media-check-warn {
+	color: rgb(var(--mdui-color-on-surface-variant));
+	font-size: var(--mdui-typescale-body-small-size);
+}
+
+.media-check-bad {
+	color: rgb(var(--mdui-color-error));
+	font-weight: var(--mdui-typescale-title-small-weight);
+}
+
 .media-notice-warn {
 	border-left-color: rgb(var(--mdui-color-error));
 }
@@ -864,18 +913,13 @@ import Page from '../../layouts/Page.astro';
 
 /* 支持格式的折叠清单 */
 .media-formats {
-	padding: 0.9rem 1.15rem;
+	padding: 0.4rem 0.75rem;
 }
 
-.media-formats > summary {
-	cursor: pointer;
+/* 折叠标题：沿用原来 summary 的强调色与字重 */
+.media-formats mdui-collapse-item::part(header) {
 	color: rgb(var(--mdui-color-primary));
 	font-weight: var(--mdui-typescale-title-small-weight);
-	list-style-position: inside;
-}
-
-.media-formats[open] > summary {
-	margin-bottom: 0.85rem;
 }
 
 .media-formats-body {
@@ -902,7 +946,7 @@ import Page from '../../layouts/Page.astro';
 	overflow-wrap: anywhere;
 }
 
-.media-formats > p {
+.media-formats p {
 	margin-top: 0.85rem;
 	line-height: 1.7;
 }
@@ -1021,7 +1065,6 @@ import Page from '../../layouts/Page.astro';
 <script>
 	import * as ops from '../../lib/media-ops';
 	import {
-		CORE_WASM_BYTES,
 		clearMediaCache,
 		isCoreCached,
 		loadFfmpeg,
@@ -1054,15 +1097,18 @@ import Page from '../../layouts/Page.astro';
 		showProgress();
 		text.textContent = label;
 		if (total > 0) {
-			// 钳一下：CDN 的 content-length 是压缩后大小，可能小于实际读到的字节
 			const ratio = Math.max(0, Math.min(1, loaded / total));
 			bar.value = ratio;
 			percent.textContent = `${Math.round(ratio * 100)}%`;
-			bar.removeAttribute('indeterminate');
 		} else {
-			// 拿不到 Content-Length 或 wasm 编译阶段：退化成不确定进度
-			bar.value = 0;
-			bar.setAttribute('indeterminate', '');
+			/*
+			 * 拿不到 Content-Length 或 wasm 编译阶段：退化成不确定态。
+			 * mdui-linear-progress **没有** indeterminate 属性 —— 它靠 value 是否为空
+			 * 来判断（pdf 页的 removeAttribute('value') 才是对的）。早先这里写的是
+			 * `bar.value = 0` + 一个不存在的 indeterminate 属性，等于永远走确定态，
+			 * 于是 ffmpeg 编译那十几秒进度条一直卡在 0% 不动。
+			 */
+			bar.removeAttribute('value');
 			percent.textContent = '';
 		}
 	}
@@ -1081,9 +1127,24 @@ import Page from '../../layouts/Page.astro';
 	}
 
 	function log(text: string, level: 'info' | 'warn' | 'error' = 'info'): void {
+		/*
+		 * 连续重复的行折叠成一行 + 计数。
+		 * ffmpeg 遇到解不了的流会狂刷同一条报错（实测一条 AV1 日志里
+		 * "Last message repeated 41 times" 前后刷了 80 多行），
+		 * 不折叠的话真正的报错会被埋在中间，也把日志框撑得没法看。
+		 */
+		const last = logBox.lastElementChild as HTMLElement | null;
+		if (last?.dataset.repeat !== undefined && last.textContent?.startsWith(text)) {
+			const count = Number(last.dataset.repeat) + 1;
+			last.dataset.repeat = String(count);
+			last.textContent = `${text}（重复 ${count} 次）`;
+			logBox.scrollTop = logBox.scrollHeight;
+			return;
+		}
 		const line = document.createElement('div');
 		if (level !== 'info') line.className = `media-log-${level}`;
 		line.textContent = text;
+		line.dataset.repeat = '1';
 		logBox.appendChild(line);
 		logBox.scrollTop = logBox.scrollHeight;
 	}
@@ -1203,13 +1264,30 @@ import Page from '../../layouts/Page.astro';
 
 	function describeError(error: unknown): string {
 		const message = String((error as Error)?.message ?? error);
+		/*
+		 * 缺解码器这一类要放在最前面，且信息取自日志而不是 message ——
+		 * execChecked 组装 message 时会把几行拼在一起，容易被别的词抢先匹配。
+		 */
+		const undecodable = ops.explainUndecodable(infoBuffer);
+		if (undecodable) return undecodable;
 		if (message.includes('codec not currently supported in container')) {
 			return '目标容器容不下这个编码格式。请换一个容器，或用「提取」标签页只取需要的轨道。';
+		}
+		if (message.includes('Only VP8 or VP9 or AV1')) {
+			return 'WebM 只允许 VP8 / VP9 / AV1 视频。这套 ffmpeg 的 VP9 用不了，请改用 MKV 或 OGG。';
 		}
 		if (message.includes('Invalid data found')) return '无法识别的媒体文件，可能已损坏或格式不受支持。';
 		if (message.includes('No such file')) return '文件读取失败，请重新选择。';
 		if (message.includes('out of memory') || message.includes('OOM')) {
 			return '内存不足，请处理更小的文件或先裁短。';
+		}
+		/*
+		 * 到这里说明 ffmpeg 报了错，但我们没认出是什么。挑几行有信息量的日志给用户，
+		 * 总比只丢一句「Conversion failed!」强。注意 infoBuffer 在报错时仍留着本次的日志。
+		 */
+		const detail = ops.pickErrorLines(infoBuffer);
+		if (detail.length && !message.includes('Conversion failed')) {
+			return message.replace(/：[^：]*$/, '') + '：' + detail.join('；');
 		}
 		return message;
 	}
@@ -1236,7 +1314,9 @@ import Page from '../../layouts/Page.astro';
 		log(
 			info.cached
 				? `ffmpeg 已就绪（使用本地缓存，来源 ${info.base}）`
-				: `ffmpeg 已就绪（本次从 ${info.base} 下载了约 32 MB，已缓存）`,
+				: // 写实测字节数而不是「约 32 MB」：用户能在开发者工具里对上账
+					`ffmpeg 已就绪（本次从 ${info.base} 下载了 ` +
+						`${(info.downloadedBytes / 1e6).toFixed(1)} MB 解压后大小，已缓存）`,
 		);
 		// 32 MB 告知块到此为止没用了，收起来把版面让给工具本身
 		$('coreNotice').setAttribute('hidden', '');
@@ -1293,15 +1373,14 @@ import Page from '../../layouts/Page.astro';
 	): Promise<void> {
 		const code = await instance.exec(args);
 		if (code === 0) return;
-		// 日志尾部一般就是 ffmpeg 真正的报错，取最后几行带上
-		const tail = infoBuffer
-			.split('\n')
-			.map((line) => line.trim())
-			.filter(Boolean)
-			.slice(-3)
-			.join(' / ');
-		markInstanceBroken();
-		throw new Error(`${label}失败（ffmpeg 退出码 ${code}）${tail ? '：' + tail : ''}`);
+		const detail = ops.pickErrorLines(infoBuffer);
+		/*
+		 * 这里**不要**调 markInstanceBroken()。
+		 * ffmpeg 失败绝大多数是普通错误（容器装不下、编码器缺失、解码器没有），
+		 * 实例本身好好的；只有 wasm 真的崩了（RuntimeError，下面两处 runPlan /
+		 * runSteps 才判）才需要丢弃重载。否则用户每撞一次参数错误就要白等一次重载。
+		 */
+		throw new Error(`${label}失败（ffmpeg 退出码 ${code}）${detail ? '：' + detail.join('；') : ''}`);
 	}
 
 	/**
@@ -1493,11 +1572,29 @@ import Page from '../../layouts/Page.astro';
 
 	/* ------------------------------------------------------------ 压制 */
 
+	interface TranscodeCheck {
+		ok: boolean;
+		facts: ops.InputFacts;
+		/** 预计耗时（秒）；信息不足或不需要编码时为 null */
+		estimate: number | null;
+		/** 没通过时的原因（人话） */
+		reason: string;
+	}
+
 	let transcodeFile: File | null = null;
 	/** 运行时探测到的编码器清单；null 表示还没探测过 */
 	let encoderSet: Set<string> | null = null;
 
 	/** 用一组 {value,label,disabled} 重填 mdui-select */
+	/**
+	 * 用一组选项重填 mdui-select。
+	 *
+	 * 重建选项后**必须显式给一个 value**：mdui-select 不会因为有了子项就自动选中
+	 * 第一项，`<select>` 标签上没写 value 时它的 value 会一直是空字符串。
+	 * 早先只在「保得住旧值」时才赋值，于是「输出容器」下拉一直是空的 ——
+	 * 用户什么都不改直接点压制，会得到「H.264 不能装进 」（空容器名）。
+	 * 所以保不住就落到第一项，绝不留空。
+	 */
 	function fillSelect(id: string, items: { value: string; label: string; disabled?: boolean }[], keep?: string): void {
 		const select = $(id) as SelectEl;
 		select.textContent = '';
@@ -1508,7 +1605,26 @@ import Page from '../../layouts/Page.astro';
 			node.textContent = item.label;
 			select.appendChild(node);
 		}
-		if (keep && items.some((item) => item.value === keep)) select.value = keep;
+		if (!items.length) return;
+		const fallback = items.find((item) => item.value === keep && !item.disabled)?.value
+			?? items.find((item) => !item.disabled)?.value;
+		if (fallback === undefined) return;
+		select.value = fallback;
+		select.setAttribute('value', fallback);
+		/*
+		 * mdui-select 在观察到子项被换掉之后会**异步**重算一次自己的 value，
+		 * 把上面同步设的值清成空串（实测：dispatch change 后同步读是 "mkv"，
+		 * 一个微任务后就变成 ""）。所以补一次微任务把它设回去。
+		 *
+		 * 这个坑的表现很有迷惑性：选项列表看着完全正常，只有 value 是空的，
+		 * 而所有读 value 的代码都读到空串 —— 用户不改任何设置直接点压制，
+		 * 就会得到「H.264 不能装进 」（后面那个容器名是空的）。
+		 */
+		const reapply = (): void => {
+			if (select.value !== fallback) select.value = fallback;
+		};
+		queueMicrotask(reapply);
+		setTimeout(reapply, 0);
 	}
 
 	function scaleValue(): ops.ResolutionPreset {
@@ -1621,13 +1737,23 @@ import Page from '../../layouts/Page.astro';
 		const bitrates = audio.bitrates ?? [];
 		$('transcodeABitrate').toggleAttribute('hidden', !bitrates.length);
 		if (bitrates.length) {
+			/*
+			 * 默认档位要通过 fillSelect 的 keep 传进去，不能在调用之后再单独赋值 ——
+			 * 那行同步赋值会被 mdui-select 随后的异步重算清掉，结果 AAC 落在
+			 * 第一档 96 而不是我们定的 192。同一类坑，见 fillSelect 里的注释。
+			 */
 			const prev = ($('transcodeABitrate') as SelectEl).value;
+			const wanted = String(audio.bitrateDefault ?? bitrates[0]);
+			const keep = bitrates.includes(Number(prev))
+				? prev
+				: bitrates.map(String).includes(wanted)
+					? wanted
+					: undefined;
 			fillSelect(
 				'transcodeABitrate',
 				bitrates.map((kbps) => ({ value: String(kbps), label: `${kbps} kbps` })),
-				bitrates.includes(Number(prev)) ? prev : undefined,
+				keep,
 			);
-			($('transcodeABitrate') as SelectEl).value = String(audio.bitrateDefault ?? bitrates[0]);
 		}
 
 		// 自定义宽高只在选 custom 时出现
@@ -1735,12 +1861,148 @@ import Page from '../../layouts/Page.astro';
 		};
 	}
 
+	/**
+	 * 压制前的检查：干跑 0.5 秒 + 估算耗时。
+	 *
+	 * 为什么非要真跑一遍：能不能压制取决于「这个 core 的解码器读不读得出这个文件」
+	 * 和「这个编码器在这个 core 里会不会崩」，这两件事都没法靠配置推断 ——
+	 * 实测同一个 AV1 文件，在压制时报 Not yet implemented，而 libx265 会直接卡死，
+	 * 两者都是跑起来才知道。而真跑可能意味着几小时，所以必须先花 1 秒试一下。
+	 */
+	async function checkTranscode(file: File, options: ops.TranscodeOptions): Promise<TranscodeCheck> {
+		const instance = await ensureFfmpeg();
+		ops.assertSizeOk([file]);
+		const plan = ops.planTranscode(mountedName(file), options);
+		const dry = ops.makeDryRun(plan);
+		const name = mountedName(file);
+		const names = new Set([name]);
+
+		setProgress(0, 0, '正在检查…');
+		infoBuffer = '';
+		const sink = (message: string): void => {
+			infoBuffer += message + '\n';
+			log(message, /error|Error|Invalid|Failed/.test(message) ? 'error' : 'info');
+		};
+		instance.on('log', ({ message }) => sink(message));
+
+		await instance.createDir('/in').catch(() => undefined);
+		await instance.mount('WORKERFS', { files: [file] }, '/in');
+		let code: number;
+		try {
+			// 两次 exec 共用一次挂载：先读 banner（拿时长/分辨率/帧率），再干跑
+			await instance.exec(['-i', `/in/${name}`]).catch(() => 0);
+			const probe = infoBuffer;
+			const facts = ops.readInputFacts(probe);
+			code = await instance.exec(qualify(dry.args, names)).catch((error: unknown) => {
+				throw error;
+			});
+			// 时长取不到时传 undefined，让估时函数自己说「无法估算」而不是当 0
+			const estimate = ops.estimateTranscodeSeconds(
+				{ ...facts.input, durationSeconds: facts.durationSeconds ?? 0 },
+				options,
+			);
+			return {
+				ok: code === 0,
+				facts,
+				estimate,
+				reason: code === 0 ? '' : (ops.explainUndecodable(infoBuffer) ?? ops.pickErrorLines(infoBuffer).join('；')),
+			};
+		} catch (error) {
+			if ((error as Error)?.name === 'RuntimeError') markInstanceBroken();
+			return {
+				ok: false,
+				facts: ops.readInputFacts(infoBuffer),
+				estimate: null,
+				reason: ops.explainUndecodable(infoBuffer) ?? describeError(error),
+			};
+		} finally {
+			await instance.unmount('/in').catch(() => undefined);
+			hideProgress();
+		}
+	}
+
+	/** 把检查结果画出来 */
+	function renderTranscodeCheck(result: TranscodeCheck, options: ops.TranscodeOptions): void {
+		const host = $('transcodeCheck');
+		host.textContent = '';
+		host.removeAttribute('hidden');
+		const line = (text: string, level: 'ok' | 'warn' | 'bad'): void => {
+			const row = document.createElement('div');
+			row.className = `media-check-${level}`;
+			row.textContent = text;
+			host.appendChild(row);
+		};
+
+		const f = result.facts;
+		if (f.input.width && f.input.height) {
+			const size = `${f.input.width}×${f.input.height}`;
+			const rate = f.input.fps ? ` ${Math.round(f.input.fps)} fps` : '';
+			const len = f.durationSeconds ? ` · ${ops.formatClock(f.durationSeconds)}` : '';
+			const codec = f.videoCodec ? ` · ${f.videoCodec.toUpperCase()}` : '';
+			line(`输入 ${size}${rate}${len}${codec}`, 'ok');
+		} else {
+			line('读不出素材的分辨率与时长，无法估算耗时', 'warn');
+		}
+
+		if (!result.ok) {
+			line(`✗ ${result.reason || '这条压制命令跑不通。'}`, 'bad');
+			return;
+		}
+		// 干跑通过才算真能跑；耗时估算只在有编码开销时才有意义
+		if (result.estimate === null) {
+			line('✓ 检查通过', 'ok');
+		} else {
+			line(`✓ 检查通过（干跑 ${ops.DRY_RUN_SECONDS} 秒成功）`, 'ok');
+			line(`预计耗时 ${ops.describeEstimate(result.estimate)}`, result.estimate > 900 ? 'warn' : 'ok');
+		}
+		const spec = ops.VIDEO_CODECS.find((item) => item.id === options.videoCodec);
+		if (spec && spec.id !== 'copy' && result.estimate && result.estimate > 3600) {
+			line('超过 1 小时，建议先裁出需要的片段再压制；关掉页面会中断。', 'warn');
+		}
+	}
+
+	async function runTranscodeCheck(showResult: boolean): Promise<TranscodeCheck | null> {
+		if (!transcodeFile || busy) return null;
+		const options = readTranscodeOptions();
+		setBusy(true);
+		try {
+			const result = await checkTranscode(transcodeFile, options);
+			if (showResult) renderTranscodeCheck(result, options);
+			return result;
+		} catch (error) {
+			const text = describeError(error);
+			log(text, 'error');
+			if (showResult) $('transcodeCheck').textContent = text;
+			return null;
+		} finally {
+			setBusy(false);
+		}
+	}
+
+	async function onTranscodeCheck(): Promise<void> {
+		setDisabled('transcodeCheckBtn', true);
+		await runTranscodeCheck(true);
+		setDisabled('transcodeCheckBtn', false);
+	}
+
 	async function onTranscodeRun(): Promise<void> {
 		if (!transcodeFile || busy) return;
 		setBusy(true);
 		setDisabled('transcodeRun', true);
 		try {
 			const options = readTranscodeOptions();
+			/*
+			 * 先检查再跑。检查失败就直接停 —— 让人对着一个跑不通的命令等上
+			 * 几十分钟是最糟的体验，而检查本身只要一秒。
+			 */
+			const check = await checkTranscode(transcodeFile, options);
+			renderTranscodeCheck(check, options);
+			if (!check.ok) {
+				const text = check.reason || '检查没通过，已放弃这次压制。';
+				log(text, 'error');
+				$('transcodeSummary').textContent = text;
+				return;
+			}
 			const plan = ops.planTranscode(mountedName(transcodeFile), options);
 			const started = performance.now();
 			const { output, bytes } = await runPlan([transcodeFile], plan.args, plan.output, '压制');
@@ -1773,6 +2035,9 @@ import Page from '../../layouts/Page.astro';
 			transcodeFile = files[0];
 			$('transcodeInfo').textContent = describe(transcodeFile);
 			setDisabled('transcodeRun', false);
+			setDisabled('transcodeCheckBtn', false);
+			// 换了素材，上一次的检查结论就作废了
+			$('transcodeCheck').setAttribute('hidden', '');
 		},
 	});
 
@@ -2527,7 +2792,7 @@ import Page from '../../layouts/Page.astro';
 	for (const id of [
 		'remuxRun', 'extractRun', 'trimRun', 'splitRun',
 		'mergeRun', 'subtitleRun', 'concatRun', 'commandRun', 'infoRun',
-		'transcodeRun',
+		'transcodeRun', 'transcodeCheckBtn',
 	]) setDisabled(id, true);
 
 	// 字幕模式切换时才显示外挂字幕的选择行
@@ -2543,6 +2808,7 @@ import Page from '../../layouts/Page.astro';
 		$(id).addEventListener('change', syncTranscodeForm);
 	}
 	$('transcodeRun').addEventListener('click', () => void onTranscodeRun());
+	$('transcodeCheckBtn').addEventListener('click', () => void onTranscodeCheck());
 	$('transcodeProbe').addEventListener('click', () => void onTranscodeProbe());
 	$('remuxRun').addEventListener('click', () => void onRemuxRun());
 	$('extractRun').addEventListener('click', () => void onExtractRun());
@@ -2600,7 +2866,12 @@ import Page from '../../layouts/Page.astro';
 		setDisabled('preloadBtn', true);
 		try {
 			await ensureFfmpeg();
-			setProgress(1, 1, `ffmpeg 已就绪（约 ${Math.round(CORE_WASM_BYTES / 1024 / 1024)} MB 已缓存）`);
+			/*
+			 * 收掉进度条。它停在 100% 上看着像「还在下」，而此时 coreNotice
+			 * 已经隐藏、日志里也写了就绪 —— 其他每条操作路径结束时都会收，
+			 * 这里也不例外。
+			 */
+			hideProgress();
 		} catch (error) {
 			log(describeError(error), 'error');
 			setDisabled('preloadBtn', false);

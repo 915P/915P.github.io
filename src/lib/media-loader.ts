@@ -23,6 +23,11 @@
  * 注意 `@ffmpeg/ffmpeg`（MIT）只是胶水层，真正干活的 `@ffmpeg/core` 是 GPL。
  */
 
+/**
+ * 下载进度。loaded / total 是**比例**（0–1），不是字节数 ——
+ * 分母要用解压后的真实大小，用 content-length 会得到一个提前跑满的假进度。
+ * total 传 0 表示大小未知，此时应显示不确定态。
+ */
 export interface LoadProgress {
 	(loaded: number, total: number, label: string): void;
 }
@@ -31,8 +36,18 @@ export interface LoadProgress {
 export const FFMPEG_VERSION = '0.12.10';
 export const CORE_VERSION = '0.12.10';
 
-/** wasm 大小，用于给个「大概要下多久」的心智预期 */
-export const CORE_WASM_BYTES = 33_800_000;
+/**
+ * wasm 模块**解压后**的真实字节数（对着 0.12.10 的产物量出来的），
+ * 是进度条的分母。不能用响应头里的 content-length —— 见 fetchCached 里的说明。
+ *
+ * 只有这一个文件配了预期大小：另外三个胶水文件加起来不到 120 KB，
+ * 给它们报百分比没有意义，硬报反而会造成「先冲 100% 再跌回 1%」的跳变
+ * （实测过，和「进度条提前跑满」是同一类误导）。它们一律走不确定态。
+ *
+ * 换版本时这个数要一起改。量法：
+ *   curl -sL https://cdn.jsdelivr.net/npm/@ffmpeg/core@<版本>/dist/umd/ffmpeg-core.wasm | wc -c
+ */
+const CORE_WASM_BYTES = 32_232_419;
 
 const WRAPPER_PATH = `/@ffmpeg/ffmpeg@${FFMPEG_VERSION}/dist/umd`;
 const CORE_PATH = `/@ffmpeg/core@${CORE_VERSION}/dist/umd`;
@@ -174,44 +189,76 @@ async function resolveWrapperBase(): Promise<string> {
 
 /* ------------------------------------------------------------------ 下载缓存 */
 
+/**
+ * 下载一个文件并写入 IndexedDB。
+ *
+ * `expected` 是该文件解压后的真实字节数，用来当进度分母。
+ *
+ * 为什么不能用 content-length：CDN 开着 gzip/br，响应头里那个数是**线上传输**
+ * 的大小，而 `reader.read()` 交出来的是**解压后**的字节。两者不是一个量纲 ——
+ * 实测 wasm 模块 content-length 约 9.29 MB，解压后却是 32.23 MB，直接拿
+ * content-length 当分母的话，进度条会在下到约 29% 时就顶到 100%，然后
+ * 「完成」着继续下载剩下 71%，比不做进度条更误导。
+ *
+ * 拿不到真实大小时（expected 省略）宁可退化成不确定态，也不显示一个假的百分比。
+ */
+/**
+ * 本次 loadFfmpeg 真的走网络取回来的字节数（解压后）。
+ *
+ * 用来区分「这次下载了」与「这次命中 IndexedDB」——早先这里写的是
+ * `cached: !isFirefox`，那是个常量而不是测量，于是**首次**下载也会
+ * 报「使用本地缓存」，用户以为自己没下完。
+ */
+let downloadedBytes = 0;
+
 async function fetchCached(
 	key: string,
 	url: string,
 	label: string,
 	onProgress?: LoadProgress,
+	expected?: number,
 ): Promise<Blob> {
 	const hit = await dbGet(key);
 	if (hit && hit.size > 0) {
 		onProgress?.(1, 1, `${label}（已缓存）`);
 		return hit;
 	}
-	onProgress?.(0, 0, label);
+	const total = expected ?? 0;
+	onProgress?.(0, total, label);
 	const response = await fetch(url);
 	if (!response.ok) throw new Error(`${label}下载失败（HTTP ${response.status}）`);
-	const total = Number(response.headers.get('content-length') ?? 0);
 	const reader = response.body?.getReader();
 	if (!reader) {
 		const blob = await response.blob();
+		onProgress?.(1, 1, `${label}完成`);
 		await dbPut(key, blob);
 		return blob;
 	}
 	const chunks: BlobPart[] = [];
 	let loaded = 0;
+	// 只有 total 已知才报百分比；未知时保持不确定态
+	const report = (): void => {
+		if (total > 0) onProgress?.(Math.min(loaded / total, 1), 1, label);
+		else onProgress?.(0, 0, label);
+	};
 	for (;;) {
 		const { done, value } = await reader.read();
 		if (done) break;
 		chunks.push(value as BlobPart);
 		loaded += value.byteLength;
-		/*
-		 * CDN 开着 gzip/br，`content-length` 是**压缩后**的大小，
-		 * 而 reader 交出来的是解压后的字节，所以 loaded 会超过 total，
-		 * 百分比会飙到 170%。钳到 total 即可，进度条本来就该单调到 100%。
-		 */
-		onProgress?.(Math.min(loaded, total || CORE_WASM_BYTES), total || CORE_WASM_BYTES, label);
+		report();
 	}
 	const blob = new Blob(chunks, {
 		type: url.endsWith('.wasm') ? 'application/wasm' : 'text/javascript',
 	});
+	/*
+	 * 对不上就说明钉住的版本产物变了（CDN 换包、或换源后内容不一致）。
+	 * 不当作错误 —— 真文件能不能用由 ffmpeg 自己说了算 —— 但进度条别停在 97%。
+	 */
+	if (total > 0 && loaded !== total) {
+		onProgress?.(1, 1, label);
+	}
+	downloadedBytes += loaded;
 	await dbPut(key, blob);
 	return blob;
 }
@@ -289,11 +336,13 @@ let task: Promise<FfmpegInstance> | null = null;
 export interface LoadInfo {
 	/** 实际使用的下载源，展示给用户以便反馈 */
 	base: string;
-	/** core 是否来自本地缓存（false = 这次真的下了 32 MB） */
+	/** 是否完全命中本地缓存（true = 这次一个字节都没下） */
 	cached: boolean;
+	/** 本次实际下载的字节数（解压后），cached 为 true 时为 0 */
+	downloadedBytes: number;
 }
 
-let lastInfo: LoadInfo = { base: '', cached: false };
+let lastInfo: LoadInfo = { base: '', cached: false, downloadedBytes: 0 };
 
 export function mediaLoadInfo(): LoadInfo {
 	return lastInfo;
@@ -306,6 +355,7 @@ export function mediaLoadInfo(): LoadInfo {
 export async function loadFfmpeg(onProgress?: LoadProgress): Promise<FfmpegInstance> {
 	if (task) return task;
 	const pending = (async () => {
+		downloadedBytes = 0;
 		onProgress?.(0, 0, '正在探测下载源…');
 		const [coreBaseUrl, wrapperBaseUrl] = await Promise.all([
 			resolveCoreBase(),
@@ -327,7 +377,14 @@ export async function loadFfmpeg(onProgress?: LoadProgress): Promise<FfmpegInsta
 				onProgress,
 			);
 			const workerUrl = URL.createObjectURL(workerBlob);
-			const source = await fetch(`${wrapperBaseUrl}/ffmpeg.js`).then((r) => r.text());
+			const source = await (
+				await fetchCached(
+					`ffmpeg@${FFMPEG_VERSION}.js`,
+					`${wrapperBaseUrl}/ffmpeg.js`,
+					'下载 ffmpeg 胶水层',
+					onProgress,
+				)
+			).text();
 			await importPatched(patchWorkerUrl(source, workerUrl));
 			// worker 的 blob URL 要活到 load() 结束，暂不 revoke
 		}
@@ -342,8 +399,9 @@ export async function loadFfmpeg(onProgress?: LoadProgress): Promise<FfmpegInsta
 		const wasmBlob = await fetchCached(
 			`core@${CORE_VERSION}.wasm`,
 			`${coreBaseUrl}/ffmpeg-core.wasm`,
-			'下载 ffmpeg 核心模块（约 32 MB）',
+			'下载 ffmpeg 核心模块（32.2 MB，解压后）',
 			onProgress,
+			CORE_WASM_BYTES,
 		);
 
 		/*
@@ -362,7 +420,15 @@ export async function loadFfmpeg(onProgress?: LoadProgress): Promise<FfmpegInsta
 		const instance = new w.FFmpegWASM.FFmpeg();
 		await instance.load({ coreURL, wasmURL });
 
-		lastInfo = { base: coreBaseUrl, cached: !isFirefox };
+		/*
+		 * Firefox 走的是直接引用 CDN 地址的路径（不经过 blob/IndexedDB），
+		 * 所以每次访问都要重下，这里别把它算成「命中缓存」。
+		 */
+		lastInfo = {
+			base: coreBaseUrl,
+			cached: downloadedBytes === 0,
+			downloadedBytes,
+		};
 		return instance;
 	})();
 	task = pending;

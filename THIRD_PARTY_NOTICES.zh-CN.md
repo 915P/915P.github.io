@@ -488,7 +488,7 @@ translatewiki，采用 **CC BY 3.0**，不在 BSD-3-Clause 覆盖范围内。
 | --- | --- |
 | **H.265 / HEVC**（`libx265`） | 构建里带了，但**会永久卡死**。编码器初始化完成（`Thread pool created using 1 threads`）之后不再吐出任何进度；实测 361 秒的墙上时间里一行 `frame=` 都没有。加 `pools=1:frame-threads=1` 也无效。`--disable-pthreads` 与 x265 内部线程池相处不来。 |
 | **VP9**（`libvpx-vp9`） | 恰好编完**一帧**就以 `RuntimeError: memory access out of bounds` 死掉。恒定质量与码率两种模式都试过，各分辨率都试过。用本站自己的「命令」页签手写同样的参数也能复现，所以问题出在 core，而不是本站的命令拼装。 |
-| **AV1**（`libaom-av1`、`libsvtav1`） | 压根没编进来 —— 上面那行配置里没有 `--enable-libaom` 也没有 `--enable-libsvtav1`。这里只能解 AV1，不能编。这是本页参照的那个工具箱里唯一无法对齐的能力。 |
+| **AV1**（`libaom-av1`、`libsvtav1`、`libdav1d`） | 压根没编进来，**而且是双向都没编** —— 上面那行配置里没有 `--enable-libaom`、也没有 `--enable-libsvtav1`、也没有 `--enable-libdav1d`；FFmpeg 自带的 `av1` 解码器在 5.1 里仍是 experimental。拿一个真实的 4K AV1 文件（B 站，`av01`，3840×2160）实测：ffmpeg 报 `Error while opening decoder for input stream #0:0 : Not yet implemented in FFmpeg, patches welcome`。也就是说这套构建**既不能编也不能解** AV1。`-c copy` 那一类操作（改格式、提取音轨、裁剪、拼接、字幕封装）对 AV1 输入仍然可用，因为它们根本不碰解码器；凡是必须读画面帧的（压制、提取封面帧）则一律不行。这是本页参照的那个工具箱里唯一完全对不齐的能力。 |
 
 有一点需要说明白：**WebM 仍然能产出**（走 VP8，实测可用），只是现代高效的
 VP9 这条路走不通。

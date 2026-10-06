@@ -630,7 +630,8 @@ export function validateCustomArgs(args: string[]): string {
  * 编码器不是写死的清单，而是**运行时探测**：`@ffmpeg/core` 的编解码器集合
  * 由官方构建配置决定，不同版本会变。实测 0.12.10 有 libx264 / libx265 /
  * libvpx / libtheora / mpeg4，但**没有 libsvtav1 与 libaom-av1**
- * （也就是 AV1 压制在这套 wasm 里根本做不到，AV1 只能解不能编）。
+ * （注意 AV1 是**双向都没有**：实测真实 AV1 文件报 "Not yet implemented in FFmpeg"，
+ * 连解码都做不到，所以凡是读画面帧的功能对它都不可用）。
  * 所以下面的表只是「候选」，最终由 parseEncoderList() 与 ffmpeg 自己说话。
  */
 
@@ -1178,6 +1179,305 @@ export function describeSpeed(durationSeconds: number, elapsedMs: number): strin
 		? `${Math.round(elapsedMs / 1000)} 秒`
 		: `${Math.round(elapsedMs / 60000)} 分钟`;
 	return `视频 ${durationSeconds.toFixed(1)} 秒，用了 ${took}（${speed}）`;
+}
+
+/*
+ * ffmpeg 失败时，日志最后几行往往不是原因：
+ *
+ *   Error while opening decoder for input stream #0:0 : Not yet implemented in FFmpeg
+ *   Stream mapping:
+ *     Stream #0:0 -> #0:0 (av1 (native) -> h264 (libx264))
+ *   [aac @ 0xdf1c20] 2 frames left in the queue on closing
+ *   Conversion failed!
+ *   Aborted()
+ *
+ * 「Aborted()」和「Conversion failed!」是收尾套话，真正说明问题的
+ * 「Error while opening decoder … Not yet implemented」被埋在中间。
+ * 早先直接取末尾三行，于是用户看到的是「… / Conversion failed! / Aborted()」，
+ * 既长又没信息量。所以这里按「哪一行真的在讲错误」来挑。
+ */
+
+/** 收尾套话与流映射行，永远不是原因 */
+const LOG_NOISE = [
+	/^Aborted\(\)$/,
+	/^Conversion failed!?$/,
+	/^Stream mapping:$/,
+	/^\s*Stream #\d+:\d+ ->/,
+	/^Output #\d+/,
+];
+
+/** 这些词出现才认为这行在讲错误 */
+const LOG_ERROR_WORDS =
+	/\b(error|failed|failure|invalid|not implemented|not supported|unsupported|unknown|no such|cannot|can't|unable|denied|not found|out of range|overread|truncat)/i;
+
+/**
+ * 从 ffmpeg 日志里挑出真正说明问题的那几行，保持原有顺序。
+ *
+ * 挑不出来时退回末尾几行 —— 总比什么都不显示强。
+ */
+export function pickErrorLines(text: string, limit = 3): string[] {
+	const lines = text
+		.split('\n')
+		.map((line) => line.trim())
+		.filter(Boolean);
+	const meaningful = lines.filter(
+		(line) =>
+			!LOG_NOISE.some((noise) => noise.test(line)) &&
+			LOG_ERROR_WORDS.test(line) &&
+			// 低层 [codec @ 0xaddr] 噪音：除非它本身带错误词，否则丢掉
+			!(/^\[[a-z0-9_]+ @ 0x[0-9a-f]+\]/i.test(line) && !LOG_ERROR_WORDS.test(line)),
+	);
+	if (meaningful.length) return meaningful.slice(-limit);
+	return lines.slice(-limit);
+}
+
+/**
+ * 从日志里认出「这个核心解不了这个视频格式」，翻译成人话。
+ *
+ * 同一个原因在不同文件上会长成完全不同的报错，实测见过两种：
+ *   - B 站 4K AV1（带 extradata）：
+ *     "Failed to read unit 1" / "Failed to read extradata" /
+ *     "Error while opening decoder … Not yet implemented in FFmpeg, patches welcome"
+ *   - libsvtav1 编码的 AV1（没有 extradata）：
+ *     "Your platform doesn't suppport hardware accelerated AV1 decoding." /
+ *     "Failed to get pixel format." / "Function not implemented" /
+ *     "Missing Sequence Header." / "Cannot determine format of input stream 0:0"
+ * 所以按「成组出现的特征」来认，而不是死抠某一句。
+ *
+ * 认不出来就返回 null，交给别的兜底文案 —— 宁可少说，不要说错。
+ */
+const UNDECODABLE_MARKS = [
+	/Not yet implemented in FFmpeg/i,
+	/Error while opening decoder/i,
+	/Error while decoding stream/i,
+	/Missing Sequence Header/i,
+	/Failed to read extradata/i,
+	/Failed to get pixel format/i,
+	/Cannot determine format of input stream/i,
+];
+
+export function explainUndecodable(text: string): string | null {
+	const hits = UNDECODABLE_MARKS.filter((mark) => mark.test(text)).length;
+	// 单独一句可能是杂音，至少两句同时出现才认定为解码器问题
+	if (hits < 2) return null;
+	// 不写死「没法压制」：这条路径也会被提取封面等操作命中，措辞要通用
+	const name = videoCodecName(text);
+	const which = name ? `${name} 的解码器` : '该视频格式的解码器';
+	return `这个 ffmpeg 核心没有 ${which}，读不出画面。` +
+		'只搬运数据、不解码的操作（改格式、提取音轨、裁剪、拼接、字幕）对它仍然可用。';
+}
+
+/** 从 banner 里取出第一个视频轨的编码名，如 av1 / h264 / hevc */
+function videoCodecName(text: string): string | null {
+	try {
+		const stream = parseMediaInfo(text).streams.find((item) => item.type === 'video');
+		return stream?.codec ? stream.codec.toUpperCase() : null;
+	} catch {
+		// 日志被截断时 parseMediaInfo 可能抛异常；拿不到名字就不给名字
+		return null;
+	}
+}
+
+/* ------------------------------------------------------------------ 压制前检查 */
+
+/*
+ * 「先别急着跑」的两件事：
+ *   1. 干跑一遍（dry run）—— 用真命令跑 0.5 秒就丢掉，确认解码器与编码器都真的能用。
+ *      光看构建配置或日志关键字都不可靠（同一个 AV1 失败在不同文件上会长成
+ *      完全不同的报错，见 explainUndecodable）。真跑 0.5 秒最省事也最准。
+ *   2. 估算耗时 —— 压制可能跑几小时，让人开跑前就知道。
+ */
+
+/** dry run 只取这么多。够触发解码器打开与首帧编码，又不至于让人等。 */
+export const DRY_RUN_SECONDS = 0.5;
+
+/**
+ * 把压制命令改成「只跑 DRY_RUN_SECONDS 秒然后丢弃输出」。
+ *
+ * 用 null muxer 而不是写临时文件：不产出文件就不必回读，也不会撞上输出名重名。
+ * 实测这个 core 有 null muxer（`-f null -`）。
+ */
+export function makeDryRun(plan: MediaPlan): MediaPlan {
+	const args = plan.args.slice();
+	const yIndex = args.lastIndexOf('-y');
+	// 掐掉结尾的 `-y <输出名>`，换成丢弃输出
+	const head = yIndex >= 0 ? args.slice(0, yIndex) : args.slice(0, -1);
+	head.push('-t', String(DRY_RUN_SECONDS), '-f', 'null', '-');
+	return { args: head, output: '' };
+}
+
+/*
+ * 编码耗时模型：**每帧固定开销 + 每像素开销**。
+ *
+ * 早先只按「像素数 ÷ 吞吐」估，结果在 4K 上偏了 3 倍（估 55 秒、实测 17 秒）。
+ * 原因是每帧的固定开销（编码器内部初始化、wasm 跨边界调用）在低分辨率下占比很大：
+ *   640×360  @15fps：每帧约 7.3 ms，其中固定开销约 5 ms
+ *   3840×2160 @30fps：每帧约 142 ms，固定开销仍只占约 5 ms
+ * 分辨率越高，「每像素」那一项越主导，所以必须两项分开才拟合得住。
+ *
+ * 系数由实测反解得到（见各项注释）。只有 ultrafast/realtime 是真测过的档位，
+ * 其余是外推；加上 VP8 实测到过慢 25 倍的一次，所以下面一律给区间而不是精确值。
+ */
+const ENCODE_COST: Record<Exclude<VideoCodecId, 'copy'>, { perFrame: number; perPixel: number }> = {
+	// 由 640×360/15fps/6s（150 帧、2.07e7 像素、约 1.1 秒）与
+	// 3840×2160/30fps/4s（120 帧、9.95e8 像素、约 17 秒）两式反解
+	x264: { perFrame: 0.005, perPixel: 1.65e-8 },
+	// 单点测量（640×360、6 秒、约 1.0 秒），perFrame 沿用 x264
+	mpeg4: { perFrame: 0.005, perPixel: 1.2e-8 },
+	// 单点测量（同素材、约 0.21 秒）；Theora 每帧开销明显更低
+	theora: { perFrame: 0.0004, perPixel: 6.5e-9 },
+	// 单点测量（同素材、约 1.9 秒）。另有一次慢 25 倍的实测（内存压力）
+	vp8: { perFrame: 0.005, perPixel: 5.6e-8 },
+};
+
+/** 速度档位对耗时的倍率。只有 ultrafast/realtime 是实测点，其余是外推 */
+const PRESET_FACTOR: Record<string, number> = {
+	ultrafast: 1,
+	// 1280×720/6 秒实测约 7 秒，模型在倍率 1 时算得 1.8 秒 → 约 0.26
+	veryfast: 0.26,
+	fast: 0.18,
+	medium: 0.08,
+	slow: 0.035,
+	veryslow: 0.015,
+	realtime: 1,
+	good: 0.3,
+	best: 0.1,
+	fixed: 1,
+};
+
+/** 输出画面的宽高（像素）。缩放按「保持比例」估算 */
+export function outputDimensions(
+	source: { width?: number; height?: number },
+	options: TranscodeOptions,
+): { width: number; height: number } | null {
+	const width = source.width ?? 0;
+	const height = source.height ?? 0;
+	if (options.resolution === 'custom') {
+		const w = Number(options.customWidth ?? 0);
+		const h = Number(options.customHeight ?? 0);
+		return w > 0 && h > 0 ? { width: w, height: h } : null;
+	}
+	if (options.resolution === 'source') {
+		return width > 0 && height > 0 ? { width, height } : null;
+	}
+	const targetHeight = RESOLUTION_HEIGHTS[options.resolution];
+	if (!targetHeight || !height) return null;
+	// 按源比例换算宽度；比例未知就按 16:9
+	const ratio = width > 0 ? width / height : 16 / 9;
+	return { width: Math.round(targetHeight * ratio), height: targetHeight };
+}
+
+/** `25 fps` / `30000/1001` / `90k` → 25 / 29.97 / 90 */
+export function parseRate(text: string | undefined): number | null {
+	if (!text) return null;
+	const trimmed = text.trim();
+	const fraction = /^(\d+(?:\.\d+)?)\/(\d+(?:\.\d+)?)$/.exec(trimmed);
+	if (fraction) {
+		const divisor = Number(fraction[2]);
+		return divisor ? Number(fraction[1]) / divisor : null;
+	}
+	const scaled = /^([\d.]+)([kKmM]?)$/.exec(trimmed);
+	if (!scaled) return null;
+	const base = Number(scaled[1]);
+	if (!Number.isFinite(base)) return null;
+	if (scaled[2] === 'k' || scaled[2] === 'K') return base * 1000;
+	if (scaled[2] === 'm' || scaled[2] === 'M') return base * 1_000_000;
+	return base;
+}
+
+/**
+ * 估算压制耗时（秒）。信息不足时返回 null。
+ *
+ * 模型：总像素 ÷ 吞吐 = 时长 × 帧率 × 宽 × 高 ÷ 吞吐。
+ * 缩放时用**输出**尺寸算，因为缩放本身还要额外开销，按输出像素算偏保守。
+ */
+export function estimateTranscodeSeconds(
+	input: { durationSeconds: number; width: number; height: number; fps?: number },
+	options: TranscodeOptions,
+): number | null {
+	const spec = VIDEO_CODECS.find((item) => item.id === options.videoCodec);
+	if (!spec) return null;
+	// 不重编码视频时没有编码开销，只剩搬运
+	if (spec.id === 'copy') return input.durationSeconds / 5;
+	if (!(input.durationSeconds > 0)) return null;
+	const dims = outputDimensions(input, options);
+	if (!dims) return null;
+	const cost = ENCODE_COST[spec.id];
+	if (!cost) return null;
+	// 帧率读不出来时按 30 估，而不是当 0（否则估成 0）
+	const fps = input.fps && input.fps > 0 ? input.fps : 30;
+	const frames = input.durationSeconds * fps;
+	const pixels = frames * dims.width * dims.height;
+	const wanted = options.presetId ?? spec.presetDefault;
+	const preset = spec.presets.find((item) => item.id === wanted) ?? spec.presets[0];
+	const factor = PRESET_FACTOR[preset.value] ?? PRESET_FACTOR[preset.id] ?? 1;
+	return (frames * cost.perFrame + pixels * cost.perPixel) / factor;
+}
+
+/** 从 ffmpeg banner 里读出估时需要的几项事实 */
+export interface InputFacts {
+	videoCodec?: string;
+	audioCodec?: string;
+	durationSeconds?: number;
+	input: { width: number; height: number; fps: number };
+}
+
+/**
+ * 解析输入素材的事实信息。拿不到的项留空，不猜。
+ *
+ * 解析器会抛（banner 被截断、日志里混进了别的输出等），所以这里吞掉异常返回
+ * 空结果：检查只是给人参考的，不该因为它自己解析失败而让整次操作崩掉。
+ */
+export function readInputFacts(logText: string): InputFacts {
+	try {
+		const info = parseMediaInfo(logText);
+		const video = info.streams.find((stream) => stream.type === 'video');
+		const audio = info.streams.find((stream) => stream.type === 'audio');
+		return {
+			videoCodec: video?.codec,
+			audioCodec: audio?.codec,
+			durationSeconds: parseFfmpegDuration(logText) ?? undefined,
+			input: {
+				width: video?.width ?? 0,
+				height: video?.height ?? 0,
+				fps: parseRate(video?.fps) ?? 0,
+			},
+		};
+	} catch {
+		return { input: { width: 0, height: 0, fps: 0 } };
+	}
+}
+
+/** 秒数 → 人话（用于估算展示） */
+export function formatSpan(seconds: number): string {
+	if (!Number.isFinite(seconds) || seconds <= 0) return '未知';
+	if (seconds < 90) return `${Math.max(1, Math.round(seconds))} 秒`;
+	if (seconds < 5400) return `${Math.round(seconds / 60)} 分钟`;
+	const hours = seconds / 3600;
+	return hours < 10 ? `${hours.toFixed(1)} 小时` : `${Math.round(hours)} 小时`;
+}
+
+/**
+ * 估时文案，给区间。
+ *
+ * 只有 ultrafast 档是真测过的，medium 之后的档位纯属外推；再叠上实测里
+ * 同一段素材快慢能差 25 倍（VP8）这件事，只给一个精确数字是不诚实的。
+ */
+export function describeEstimate(seconds: number | null): string {
+	if (seconds === null) return '无法估算（缺少时长或分辨率信息）';
+	const low = formatSpan(seconds);
+	// 一两分钟以内给区间是噪音，直接给个数
+	if (seconds < 120) return `约 ${low}`;
+	return `约 ${low} ~ ${formatSpan(seconds * 3)}`;
+}
+
+/** 秒数 → 时:分:秒，用于显示素材本身的长度 */
+export function formatClock(seconds: number): string {
+	const total = Math.max(0, Math.round(seconds));
+	const m = Math.floor(total / 60);
+	const s = total % 60;
+	if (m < 60) return `${m} 分 ${String(s).padStart(2, '0')} 秒`;
+	return `${Math.floor(m / 60)} 时 ${String(m % 60).padStart(2, '0')} 分`;
 }
 
 /* ------------------------------------------------------------------ 日志解析 */

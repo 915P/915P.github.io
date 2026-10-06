@@ -929,6 +929,249 @@ ok('候选表里没有 svtav1', !ops.VIDEO_CODECS.some((c) => /svt/i.test(c.enco
 	eq('缺耗时不报错', ops.describeSpeed(10, 0), '');
 }
 
+// 报错行挑选：末尾几行往往是套话，真因被埋在中间
+{
+	// 用户真实遇到的 AV1 压制失败日志
+	const av1Log = `[av1 @ 0xdeefb0] Failed to read unit 1 (type 5).
+[av1 @ 0xdeefb0] Failed to read extradata.
+Input #0, mov,mp4,m4a,3gp,3g2,mj2, from '/in/1.mp4':
+  Duration: 00:03:39.65, start: 0.000000, bitrate: 10274 kb/s
+  Stream #0:0[0x1](und): Video: av1 (Main) (av01 / 0x31307661), none(tv, bt709), 3840x2160, 10139 kb/s, 30 fps
+  Stream #0:1[0x2](und): Audio: aac (LC) (mp4a / 0x6134704D), 48000 Hz, stereo, fltp, 129 kb/s (default)
+[av1 @ 0xe60c10] Failed to read unit 1 (type 5).
+Stream mapping:
+  Stream #0:0 -> #0:0 (av1 (native) -> h264 (libx264))
+  Stream #0:1 -> #0:1 (copy)
+Error while opening decoder for input stream #0:0 : Not yet implemented in FFmpeg, patches welcome
+Aborted()`;
+	const picked = ops.pickErrorLines(av1Log);
+	ok('挑出了真正的原因', picked.some((l) => l.includes('Not yet implemented')), JSON.stringify(picked));
+	ok('不再显示 Aborted()', !picked.includes('Aborted()'), JSON.stringify(picked));
+	ok('不再显示 Stream mapping', !picked.some((l) => l.includes('Stream mapping')), JSON.stringify(picked));
+	ok('不再显示流映射行', !picked.some((l) => l.includes('-> #0:0')), JSON.stringify(picked));
+	ok('行数受限', picked.length <= 3, JSON.stringify(picked));
+
+	// 用户报的那句摘要不能只剩套话
+	const userSummary = picked.join('；');
+	ok('摘要含关键信息', userSummary.includes('Not yet implemented'), userSummary);
+
+	// 另一个实测样本：末尾三行全是套话
+	const mkvLog = `[aac @ 0xdf1c20] 2 frames left in the queue on closing
+Conversion failed!
+Aborted()`;
+	const picked2 = ops.pickErrorLines(mkvLog);
+	ok('全是套话时也不返回空', picked2.length > 0, JSON.stringify(picked2));
+
+	// 挑不出就退回末尾几行，绝不空手而归
+	ok('无错误词时退回末尾', ops.pickErrorLines('line A\nline B\nline C').length === 3);
+	ok('空日志不炸', ops.pickErrorLines('').length === 0);
+
+	// 低层 [codec @ 0xaddr] 带错误词的行要保留
+	ok('保留带错误词的底层行',
+		ops.pickErrorLines('[av1 @ 0xdeefb0] Failed to read extradata.').some((l) => l.includes('extradata')));
+}
+
+// 「这个核心解不了这个格式」要翻译成人话，并带上编码名
+{
+	const av1Log = `Input #0, mov,mp4,m4a, from '/in/1.mp4':
+  Stream #0:0[0x1](und): Video: av1 (Main) (av01 / 0x31307661), none(tv, bt709), 3840x2160, 30 fps
+  Stream #0:1[0x2](und): Audio: aac (LC) (mp4a / 0x6134704D), 48000 Hz, stereo, 129 kb/s
+Error while opening decoder for input stream #0:0 : Not yet implemented in FFmpeg, patches welcome
+Aborted()`;
+	const why = ops.explainUndecodable(av1Log);
+	ok('认出了解码器缺失', typeof why === 'string', String(why));
+	ok('带上了编码名 AV1', why.includes('AV1'), String(why));
+	ok('说明了还能做什么', why.includes('改格式') && why.includes('提取音轨'), String(why));
+	ok('措辞不写死成「压制」', !why.includes('没法压制'), String(why));
+
+	// 同一个原因在另一种文件上会长成完全不同的报错（实测 libsvtav1 的 AV1）
+	const av1Log2 = `  Stream #0:0[0x1](und): Video: av1 (Main) (av01 / 0x31307661), none(tv, progressive), 320x180, 95 kb/s, 15 fps
+Stream mapping:
+  Stream #0:0 -> #0:0 (av1 (native) -> h264 (libx264))
+[av1 @ 0xdf6a20] Your platform doesn't suppport hardware accelerated AV1 decoding.
+[av1 @ 0xdf6a20] Failed to get pixel format.
+Error while decoding stream #0:0: Function not implemented
+[av1 @ 0xdf6a20] Missing Sequence Header.
+Error while decoding stream #0:0: Invalid data found when processing input
+Cannot determine format of input stream 0:0 after EOF
+Error marking filters as finished
+[aac @ 0xdf1c20] 2 frames left in the queue on closing
+Conversion failed!
+Aborted()`;
+	const why2 = ops.explainUndecodable(av1Log2);
+	ok('认得出第二种 AV1 报错形态', typeof why2 === 'string', String(why2));
+	ok('第二种形态也带编码名 AV1', (why2 ?? '').includes('AV1'), String(why2));
+	ok('第二种形态不再是「文件损坏」', !(why2 ?? '').includes('损坏'), String(why2));
+
+	// 只出现一个特征时不能贸然下结论（避免误判）
+	eq('单个特征不下结论', ops.explainUndecodable('[av1 @ 0x1] Failed to read unit 1 (type 5).'), null);
+
+	// 认不出编码名时也要有兜底文案
+	const noCodec = 'Error while opening decoder for input stream #0:0 : Not yet implemented in FFmpeg\nMissing Sequence Header.';
+	ok('无编码名时仍有文案', (ops.explainUndecodable(noCodec) ?? '').length > 10);
+
+	// 与解码无关的错误不要乱套这个解释
+	eq('普通失败不误判', ops.explainUndecodable('Conversion failed!'), null);
+	eq('空日志不误判', ops.explainUndecodable(''), null);
+	eq('容器不兼容不误判',
+		ops.explainUndecodable("Only VP8 or VP9 or AV1 video and Vorbis or Opus audio are supported for WebM."), null);
+	// 音轨相关失败不要误判成视频解码器问题
+	eq('纯音频失败不误判',
+		ops.explainUndecodable('Error while opening decoder for input stream #0:0 : Invalid argument\nError marking filters as finished'), null);
+}
+
+// 干跑：只跑 0.5 秒并丢弃输出，不落文件
+{
+	const plan = ops.planTranscode('in.mp4', base);
+	const dry = ops.makeDryRun(plan);
+	ok('干跑不产出文件', dry.output === '', JSON.stringify(dry.output));
+	ok('干跑没有 -y', !dry.args.includes('-y'), cmd(dry));
+	ok('干跑掐了时长', dry.args.includes('-t') && dry.args[dry.args.indexOf('-t') + 1] === '0.5', cmd(dry));
+	ok('干跑用 null muxer', dry.args.includes('null') && dry.args.at(-1) === '-', cmd(dry));
+	ok('干跑仍保留输入', dry.args[0] === '-i' && dry.args[1] === 'in.mp4', cmd(dry));
+	ok('干跑仍保留编码器', dry.args.includes('libx264'), cmd(dry));
+	ok('干跑不含原输出名', !dry.args.includes(plan.output), cmd(dry));
+	eq('干跑时长常量', ops.DRY_RUN_SECONDS, 0.5);
+
+	// 干跑不能改动原计划（要跑两遍：一次检查、一次真跑）
+	ok('原计划未被改动', plan.args.includes('in-压制.mp4') && plan.args.includes('-y'), cmd(plan));
+
+	// 无 -y 时也要能兜住（掐掉最后一个参数）
+	const odd = { args: ['-i', 'a.mp4', 'out.mp4'], output: 'out.mp4' };
+	const oddDry = ops.makeDryRun(odd);
+	ok('无 -y 时掐掉末位', !oddDry.args.includes('out.mp4'), cmd(oddDry));
+	ok('无 -y 仍留输入', oddDry.args[0] === '-i', cmd(oddDry));
+}
+
+// 输出尺寸：缩放要按源比例算宽
+{
+	const src = { width: 3840, height: 2160 };
+	eq('保持原分辨率', JSON.stringify(ops.outputDimensions(src, base)), JSON.stringify({ width: 3840, height: 2160 }));
+	eq('缩到 1080p 按 16:9 算宽',
+		JSON.stringify(ops.outputDimensions(src, { ...base, resolution: '1080' })),
+		JSON.stringify({ width: 1920, height: 1080 }));
+	// 4:3 源缩到 720p，宽度应是 960 而不是 1280
+	eq('4:3 源缩 720p 宽度按比例',
+		JSON.stringify(ops.outputDimensions({ width: 1024, height: 768 }, { ...base, resolution: '720' })),
+		JSON.stringify({ width: 960, height: 720 }));
+	eq('自定义宽高直接用',
+		JSON.stringify(ops.outputDimensions(src, { ...base, resolution: 'custom', customWidth: 640, customHeight: 360 })),
+		JSON.stringify({ width: 640, height: 360 }));
+	eq('缺少源尺寸时返回 null', ops.outputDimensions({ width: 0, height: 0 }, { ...base, resolution: '1080' }), null);
+}
+
+// 估时模型：必须能复现实测点，否则说明系数漂了
+//
+// 这里钉住三组真实测量（都是在本仓库里跑出来的，不是从别处抄的）：
+//   640×360 @15fps 6s → 约 1.1 秒
+//   1280×720 @15fps 6s（veryfast）→ 约 7 秒
+//   3840×2160 @30fps 4s → 17 秒
+// 模型一旦改动而不再符合这里，说明它已经不可信了。
+{
+	const uf = { ...base, videoCodec: 'x264', presetId: 'uf' };
+	const near = (actual, expected, ratio = 1.5) => {
+		const r = actual / expected;
+		ok(`估 ${actual.toFixed(1)}s ≈ 实测 ${expected}s`, r > 1 / ratio && r < ratio, String(r));
+	};
+
+	near(
+		ops.estimateTranscodeSeconds({ durationSeconds: 6, width: 640, height: 360, fps: 15 }, uf),
+		1.1,
+	);
+	near(
+		ops.estimateTranscodeSeconds({ durationSeconds: 6, width: 1280, height: 720, fps: 15 }, { ...uf, presetId: 'vf' }),
+		7,
+	);
+	near(
+		ops.estimateTranscodeSeconds({ durationSeconds: 4, width: 3840, height: 2160, fps: 30 }, uf),
+		17,
+	);
+
+	// 关键性质：高分辨率下「每像素」主导，所以每像素效率比低分辨率高。
+	// 早先的单速率模型在这里偏了 3 倍（估 55 秒 / 实测 17 秒）。
+	const smallRate = (() => {
+		const s = ops.estimateTranscodeSeconds({ durationSeconds: 6, width: 640, height: 360, fps: 15 }, uf);
+		return (640 * 360 * 15 * 6) / s;
+	})();
+	const bigRate = (() => {
+		const s = ops.estimateTranscodeSeconds({ durationSeconds: 4, width: 3840, height: 2160, fps: 30 }, uf);
+		return (3840 * 2160 * 30 * 4) / s;
+	})();
+	ok('高分辨率每像素效率更高', bigRate > smallRate * 1.5, `${smallRate} vs ${bigRate}`);
+
+	// 用户那个 4K AV1 文件：若换成 H.264 压制，估十几分钟量级
+	const uhd = { durationSeconds: 219.65, width: 3840, height: 2160, fps: 30 };
+	const big = ops.estimateTranscodeSeconds(uhd, uf);
+	ok('用户那个 4K 文件估出分钟级', big > 300 && big < 3600, `${Math.round(big)} 秒`);
+
+	// 帧率必须参与：漏掉会低估
+	const ufFull = { ...base, videoCodec: 'x264', presetId: 'uf' };
+	const small = { durationSeconds: 6, width: 640, height: 360, fps: 15 };
+	const full = ops.estimateTranscodeSeconds(small, ufFull);
+	ok('帧率缺失不估成 0', ops.estimateTranscodeSeconds({ ...small, fps: undefined }, ufFull) > 0);
+	ok('帧率减半耗时大致减半（低分辨率下固定开销占比大，故放宽）', (() => {
+		const half = ops.estimateTranscodeSeconds({ ...small, fps: 7.5 }, ufFull);
+		return half < full;
+	})());
+	ok('帧率缺失时按 30 估而不是当 0',
+		ops.estimateTranscodeSeconds({ ...small, fps: undefined }, ufFull) > full);
+
+	// 时长与像素数都应线性放大耗时
+	const one = ops.estimateTranscodeSeconds({ durationSeconds: 10, width: 640, height: 360, fps: 30 }, ufFull);
+	const two = ops.estimateTranscodeSeconds({ durationSeconds: 20, width: 640, height: 360, fps: 30 }, ufFull);
+	ok('时长翻倍耗时增加', two > one * 1.5 && two < one * 2.5, `${one} → ${two}`);
+	const wide = ops.estimateTranscodeSeconds({ durationSeconds: 10, width: 1920, height: 1080, fps: 30 }, ufFull);
+	ok('分辨率提高耗时增加', wide > one * 3, `${one} → ${wide}`);
+
+	// 速度档位越慢估得越久
+	const slow = ops.estimateTranscodeSeconds(small, { ...ufFull, presetId: 'vs' });
+	ok('veryslow 比 ultrafast 慢很多', slow > full * 10, `${full} → ${slow}`);
+
+	// 编码器之间：Theora 实测最快
+	ok('theora 比 x264 快',
+		ops.estimateTranscodeSeconds(small, { ...base, videoCodec: 'theora', container: 'ogg' }) < full);
+
+	// 缩放会显著降低估算（编码量按输出算）
+	ok('缩到 360p 估时更短', ops.estimateTranscodeSeconds(uhd, { ...ufFull, resolution: '360' }) < big);
+
+	// 不重编码视频时没有编码开销
+	const copied = ops.estimateTranscodeSeconds(uhd, { ...base, videoCodec: 'copy' });
+	ok('copy 估时很小', copied < 60, `${Math.round(copied)} 秒`);
+
+	// 信息不足时老实说不知道
+	eq('缺时长返回 null', ops.estimateTranscodeSeconds({ durationSeconds: 0, width: 640, height: 360, fps: 15 }, base), null);
+	eq('缺分辨率返回 null', ops.estimateTranscodeSeconds({ durationSeconds: 60, width: 0, height: 0, fps: 30 }, base), null);
+	eq('未知编码返回 null', ops.estimateTranscodeSeconds(small, { ...base, videoCodec: 'av1' }), null);
+}
+
+// 帧率字符串解析
+{
+	eq('25 fps', ops.parseRate('25'), 25);
+	eq('29.97', ops.parseRate('29.97'), 29.97);
+	eq('30000/1001', ops.parseRate('30000/1001'), 30000 / 1001);
+	eq('90k', ops.parseRate('90k'), 90000);
+	eq('1.5M', ops.parseRate('1.5M'), 1500000);
+	eq('缺失返回 null', ops.parseRate(undefined), null);
+	eq('无法识别返回 null', ops.parseRate('N/A'), null);
+}
+
+// 估时文案要给区间，不能给一个假装精确的数字
+{
+	ok('秒级', ops.describeEstimate(45).includes('45 秒'));
+	ok('分钟级', ops.describeEstimate(600).includes('分钟'), ops.describeEstimate(600));
+	ok('小时级', ops.describeEstimate(7200).includes('小时'), ops.describeEstimate(7200));
+	ok('很长用整小时', ops.describeEstimate(3600 * 30).includes('30 小时'), ops.describeEstimate(3600 * 30));
+	ok('无法估算时明说', ops.describeEstimate(null).includes('无法估算'));
+	ok('两分钟内不给区间', !ops.describeEstimate(20).includes('~'), ops.describeEstimate(20));
+	ok('两分钟给区间', ops.describeEstimate(600).includes('~'), ops.describeEstimate(600));
+	ok('慢时给区间', ops.describeEstimate(7200).includes('~'), ops.describeEstimate(7200));
+
+	ok('素材时长 3 分 40 秒', ops.formatClock(220) === '3 分 40 秒', ops.formatClock(220));
+	ok('素材时长 1 时 05 分', ops.formatClock(3900) === '1 时 05 分', ops.formatClock(3900));
+	ok('素材时长不足一分钟', ops.formatClock(9) === '0 分 09 秒', ops.formatClock(9));
+	ok('负数不炸', ops.formatClock(-5) === '0 分 00 秒');
+}
+
 // ---------------------------------------------------------------- 收尾
 
 rmSync(dir, { recursive: true, force: true });
