@@ -28,7 +28,7 @@ const current = links.find((l) => l.key === active);
 	图标通过 slot 传入本地注册的 <mdui-icon-xxx>，不依赖 Google Fonts。
 */}
 <mdui-layout>
-	<mdui-top-app-bar variant="small">
+	<mdui-top-app-bar variant="small" scroll-behavior="elevate">
 		<mdui-top-app-bar-title class="min-w-0">
 			<a href="/" class="brand">
 				<img class="brand-mark" src="/images/logo.svg" alt="" width="28" height="28" />
@@ -55,19 +55,20 @@ const current = links.find((l) => l.key === active);
 		</mdui-button-icon>
 	</mdui-top-app-bar>
 
-	<mdui-navigation-rail value={current?.key} class="site-rail">
+	<!-- divider：文档 §显示分割线。没有它 rail 与内容区视觉上黏在一起 -->
+	<mdui-navigation-rail value={current?.key} class="site-rail" divider>
 		<mdui-navigation-rail-item href="/" value="home" title="首页">
-			<mdui-icon-home slot="icon"></mdui-icon-home>
+			<mdui-icon-home--outlined slot="icon"></mdui-icon-home--outlined>
 			<mdui-icon-home slot="active-icon"></mdui-icon-home>
 			首页
 		</mdui-navigation-rail-item>
 		<mdui-navigation-rail-item href="/blog/" value="blog" title="博客">
-			<mdui-icon-article slot="icon"></mdui-icon-article>
+			<mdui-icon-article--outlined slot="icon"></mdui-icon-article--outlined>
 			<mdui-icon-article slot="active-icon"></mdui-icon-article>
 			博客
 		</mdui-navigation-rail-item>
 		<mdui-navigation-rail-item href="/tools/" value="tools" title="工具与应用">
-			<mdui-icon-apps slot="icon"></mdui-icon-apps>
+			<mdui-icon-apps--outlined slot="icon"></mdui-icon-apps--outlined>
 			<mdui-icon-apps slot="active-icon"></mdui-icon-apps>
 			工具
 		</mdui-navigation-rail-item>
@@ -87,17 +88,17 @@ const current = links.find((l) => l.key === active);
 		scroll-threshold="30"
 	>
 		<mdui-navigation-bar-item href="/" value="home">
-			<mdui-icon-home slot="icon"></mdui-icon-home>
+			<mdui-icon-home--outlined slot="icon"></mdui-icon-home--outlined>
 			<mdui-icon-home slot="active-icon"></mdui-icon-home>
 			首页
 		</mdui-navigation-bar-item>
 		<mdui-navigation-bar-item href="/blog/" value="blog">
-			<mdui-icon-article slot="icon"></mdui-icon-article>
+			<mdui-icon-article--outlined slot="icon"></mdui-icon-article--outlined>
 			<mdui-icon-article slot="active-icon"></mdui-icon-article>
 			博客
 		</mdui-navigation-bar-item>
 		<mdui-navigation-bar-item href="/tools/" value="tools">
-			<mdui-icon-apps slot="icon"></mdui-icon-apps>
+			<mdui-icon-apps--outlined slot="icon"></mdui-icon-apps--outlined>
 			<mdui-icon-apps slot="active-icon"></mdui-icon-apps>
 			工具
 		</mdui-navigation-bar-item>

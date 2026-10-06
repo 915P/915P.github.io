@@ -118,7 +118,7 @@ active="tools"
 </p>
 </div>
 <div class="head-tools">
-<mdui-chip variant="tonal">
+<mdui-chip variant="assist">
 <mdui-icon-check-circle></mdui-icon-check-circle>
 本地渲染
 </mdui-chip>
@@ -152,7 +152,7 @@ active="tools"
 <span class="text-xs faint">示例</span>
 <div class="row example-chips" id="examples">
 {EXAMPLES.map((e) => (
-<mdui-chip class="example-chip" variant="outlined" data-tex={e.tex}>{e.label}</mdui-chip>
+<mdui-chip class="example-chip" variant="suggestion" data-tex={e.tex}>{e.label}</mdui-chip>
 ))}
 </div>
 </div>
@@ -199,26 +199,38 @@ active="tools"
 点击插入到光标处；结构类模板含空花括号时，已有选中内容会填入第一个空花括号。
 </span>
 </div>
-<div class="palette-groups">
-{PALETTE.map((group) => (
-<section class="palette-group">
-<h4 class="palette-title">{group.label}</h4>
+<!--
+	5 组符号原来是全部平铺的，占掉大半屏。改成手风琴（accordion）后
+	同一时刻只展开一组，且 value 由组件管，不用自己记展开的是哪一组。
+-->
+<mdui-collapse class="palette-groups" accordion value="0">
+{PALETTE.map((group, groupIndex) => (
+<mdui-collapse-item header={group.label} value={String(groupIndex)}>
 <div class="palette-grid">
+<!--
+	mdui-tooltip variant="rich"：headline 放符号名，content 放真正插入的 TeX 源码。
+	改之前只有 title={item.label}，而按钮里显示的是渲染后的字形（\varphi 显示成 φ、
+	\varnothing 显示成 ∅），不悬停根本看不出插入的是哪个命令 —— 这一页有近 200 个
+	这样的按钮。aria-label 保留：触屏没有悬停，读屏仍然需要名称。
+	注意：注释必须放在 map 表达式**外面**。写在 `{/* */}` 里会让 Astro 把
+	箭头函数的函数体当成语句块，item 直接「找不到名字」。
+-->
 {group.items.map((item) => (
+<mdui-tooltip variant="rich" headline={item.label} content={item.insert} placement="top">
 <button
 type="button"
 class="palette-btn"
 data-insert={item.insert}
-title={item.label}
 aria-label={item.label}
 >
 <span class="palette-render" data-render={item.show}></span>
 </button>
+</mdui-tooltip>
 ))}
 </div>
-</section>
+</mdui-collapse-item>
 ))}
-</div>
+</mdui-collapse>
 </section>
 </div>
 
@@ -362,39 +374,23 @@ color: #000 !important;
 margin-top: 0;
 }
 
-.palette-groups {
-display: grid;
-gap: 0.85rem;
-grid-template-columns: minmax(0, 1fr);
-}
-
 /*
- * 分组列数按 5 组的实际数量给固定档位，不用 auto-fit：
- * auto-fit 在 1024 / 768 这类宽度下会算出 4 列，把第 5 组甩成孤零零的第二行。
+ * 5 组符号改成手风琴后，这里不再是「5 列并排的卡片网格」，
+ * 而是一条竖直列表。原来那套 grid-template-columns（520/760/1120 三档）
+ * 会把 5 个折叠标题塞进同一行，展开的内容被压在一个格子里 ——
+ * 手风琴必须让 collapse 自己控制纵向排列。
  */
-@media (min-width: 520px) {
 .palette-groups {
-grid-template-columns: repeat(2, minmax(0, 1fr));
-}
+	display: block;
+	border: 1px solid rgb(var(--mdui-color-outline-variant));
+	border-radius: var(--mdui-shape-corner-medium);
+	background-color: rgb(var(--mdui-color-surface-container-lowest));
+	padding: 0.25rem 0.85rem;
 }
 
-@media (min-width: 760px) {
-.palette-groups {
-grid-template-columns: repeat(3, minmax(0, 1fr));
-}
-}
-
-@media (min-width: 1120px) {
-.palette-groups {
-grid-template-columns: repeat(5, minmax(0, 1fr));
-}
-}
-
-.palette-group {
-padding: 0.7rem 0.75rem 0.8rem;
-border: 1px solid rgb(var(--mdui-color-outline-variant));
-border-radius: var(--mdui-shape-corner-medium);
-background-color: rgb(var(--mdui-color-surface-container-lowest));
+.palette-groups mdui-collapse-item::part(header) {
+	font-weight: 500;
+	color: rgb(var(--mdui-color-primary));
 }
 
 .palette-hint {

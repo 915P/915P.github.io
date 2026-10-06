@@ -78,9 +78,9 @@ const codes = Object.entries(TABLE);
 				<span class="text-xs faint">点划直接追加到上方电码串，空格分词</span>
 			</div>
 			<mdui-button variant="outlined" id="dec" class="full-btn">转换</mdui-button>
-			<mdui-checkbox id="asCn" checked style="margin-top: 0.7rem">
+			<mdui-switch id="asCn" checked style="margin-top: 0.7rem">
 				把 4 位数字组按中文电码解释
-			</mdui-checkbox>
+			</mdui-switch>
 		</div>
 	</div>
 
@@ -142,12 +142,14 @@ const codes = Object.entries(TABLE);
 		</div>
 	</div>
 
-	<details class="panel" style="margin-top: 1.5rem">
-		<summary class="block-title" style="cursor: pointer">摩尔斯对照表（{codes.length} 项）</summary>
-		<div class="table-grid" style="margin-top: 1rem">
-			{codes.map(([k, v]) => <div class="table-cell"><span class="mono cell-key">{k}</span><span class="mono faint">{v}</span></div>)}
-		</div>
-	</details>
+	<!-- mdui-collapse 替掉手写 <details>：自带展开动画与无障碍状态 -->
+	<mdui-collapse class="media-collapse">
+		<mdui-collapse-item header={`摩尔斯对照表（${codes.length} 项）`}>
+			<div class="table-grid">
+				{codes.map(([k, v]) => <div class="table-cell"><span class="mono cell-key">{k}</span><span class="mono faint">{v}</span></div>)}
+			</div>
+		</mdui-collapse-item>
+	</mdui-collapse>
 
 	<p class="footnote">
 		中文电码（《标准电码本》的四位商用电码，一字一数）与摩尔斯电码是
@@ -160,6 +162,18 @@ const codes = Object.entries(TABLE);
 </Page>
 
 <style is:global>
+	/* 折叠块：页面级 margin 交给 media-collapse（几个页面共用，见 global.css） */
+	.media-collapse {
+		margin-top: 1.5rem;
+		background: rgb(var(--mdui-color-surface-container));
+		border-radius: var(--mdui-shape-corner-large);
+		padding: 0.25rem 1.15rem;
+	}
+
+	.media-collapse mdui-collapse-item::part(header) {
+		font-weight: var(--mdui-typescale-title-small-weight);
+	}
+
 	.full-btn {
 		margin-top: 0.9rem;
 		width: 100%;

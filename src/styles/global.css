@@ -394,20 +394,6 @@ input[type='checkbox'] {
 	height: 1.05rem;
 }
 
-.options {
-	display: flex;
-	flex-wrap: wrap;
-	gap: 0.5rem 1.1rem;
-	font-size: var(--mdui-typescale-body-medium-size);
-}
-
-.options label {
-	display: inline-flex;
-	align-items: center;
-	gap: 0.4rem;
-	cursor: pointer;
-}
-
 .panel {
 	background-color: rgb(var(--mdui-color-surface-container-low));
 	border-radius: var(--mdui-shape-corner-medium);
@@ -690,20 +676,6 @@ justify-content: space-between;
 }
 
 /* 文本按钮 */
-.link-btn {
-	cursor: pointer;
-	border: 0;
-	background: none;
-	padding: 0;
-	font: inherit;
-	font-size: var(--mdui-typescale-body-medium-size);
-	color: rgb(var(--mdui-color-primary));
-}
-
-.link-btn:hover {
-	text-decoration: underline;
-}
-
 /* 结果数值 */
 .result-value {
 	font-size: var(--mdui-typescale-headline-large-size);
@@ -798,12 +770,6 @@ justify-content: space-between;
 }
 
 /* 分隔线 */
-.hr {
-	border: none;
-	border-top: 1px solid rgb(var(--mdui-color-outline-variant));
-	margin-block: 2.5rem;
-}
-
 /* 说明脚注 */
 .footnote {
 	margin-top: 1.5rem;
@@ -872,19 +838,6 @@ mdui-layout-main.site-main {
 }
 
 /* 字体测试页 */
-.tab {
-	cursor: pointer;
-	padding: 0.4rem 0.9rem;
-	border-radius: var(--mdui-shape-corner-small);
-	border: 1px solid rgb(var(--mdui-color-outline-variant));
-	background-color: transparent;
-	color: rgb(var(--mdui-color-on-surface-variant));
-	font-size: var(--mdui-typescale-body-medium-size);
-	transition:
-		background-color var(--mdui-motion-duration-short2),
-		color var(--mdui-motion-duration-short2);
-}
-
 .sample-row {
 	display: flex;
 	align-items: baseline;
@@ -931,12 +884,6 @@ mdui-layout-main.site-main {
 	line-height: 1.8;
 	letter-spacing: 0.03em;
 	word-break: break-all;
-}
-
-.tab[aria-selected='true'] {
-	background-color: rgb(var(--mdui-color-secondary-container));
-	color: rgb(var(--mdui-color-on-secondary-container));
-	border-color: transparent;
 }
 
 /* 顶栏内元素 */

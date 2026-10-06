@@ -16,13 +16,18 @@ const fmt = (d: Date) =>
 
 <Page title="915P的小站" active="home">
 	<section class="hero">
-		<img
+		<!--
+			mdui-avatar 替掉手写的 <img> + border-radius:50%：
+			尺寸、fit、alt 都交给组件，另外自带 label 供读屏使用。
+			fit="cover" 对应原来的 object-fit，logo.svg 本身是圆形，
+			所以圆形外观由组件的 shape 决定，不靠外层 CSS 圆角。
+		-->
+		<mdui-avatar
 			src="/images/logo.svg"
 			alt="915P的小站标志"
-			width="72"
-			height="72"
+			label="915P的小站标志"
 			class="hero-avatar"
-		/>
+		></mdui-avatar>
 		<div class="hero-text">
 			<h1 class="page-title text-balance">欢迎来到这里</h1>
 			<p class="page-lead">折腾笔记、小工具与一些没用的实验。</p>
@@ -105,11 +110,11 @@ const fmt = (d: Date) =>
 		}
 	}
 
-	/* logo.svg 是圆形金币，故用 50% 而非圆角矩形 */
+	/* 尺寸与阴影；圆形外观交给 mdui-avatar 自己的 --shape-corner */
 	.hero-avatar {
 		width: 72px;
 		height: 72px;
-		border-radius: 50%;
+		--shape-corner: 50%;
 		flex-shrink: 0;
 		box-shadow: var(--mdui-elevation-level2);
 	}

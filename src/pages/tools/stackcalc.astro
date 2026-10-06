@@ -36,7 +36,7 @@ active="tools"
 输入 C/C++ 表达式，用操作数栈 + 运算符栈逐步展示计算过程。
 </p>
 </div>
-<mdui-chip variant="tonal">
+<mdui-chip variant="assist">
 <mdui-icon-functions></mdui-icon-functions>
 双栈法
 </mdui-chip>
@@ -64,7 +64,7 @@ active="tools"
 <div class="row" style="gap: 0.45rem; flex-wrap: wrap; margin-top: 0.9rem">
 <span class="text-xs faint" style="align-self: center">试试：</span>
 {EXAMPLES.map((e) => (
-<mdui-chip class="example-chip" variant="outlined" data-expr={e}>{e}</mdui-chip>
+<mdui-chip class="example-chip" variant="suggestion" data-expr={e}>{e}</mdui-chip>
 ))}
 </div>
 </div>
@@ -138,8 +138,9 @@ active="tools"
 </div>
 </section>
 
-<details class="syntax-help" id="syntax-help">
-<summary>语法速查</summary>
+<!-- mdui-collapse 替掉 <details>；id 保留，锚点跳转要用 -->
+<mdui-collapse class="syntax-help" id="syntax-help">
+<mdui-collapse-item header="语法速查">
 <dl>
 <dt>运算符</dt>
 <dd>
@@ -189,7 +190,8 @@ active="tools"
 <code>long</code> / <code>size_t</code> 是 64 位，超过双精度安全整数时会报错。
 </p>
 </div>
-</details>
+</mdui-collapse-item>
+</mdui-collapse>
 </Page>
 
 <style>
@@ -201,7 +203,7 @@ active="tools"
 	background-color: rgb(var(--mdui-color-surface-container-low));
 }
 
-.syntax-help > summary {
+.syntax-help mdui-collapse-item::part(header) {
 	cursor: pointer;
 	font-weight: 600;
 	font-size: 0.875rem;
@@ -692,9 +694,12 @@ renderVars();
 run();
 });
 
-// 带 #syntax-help 直接进来时展开，否则跳到页面底部只看到一行折叠标题
-if (location.hash === '#syntax-help') {
-document.querySelector('.syntax-help')?.setAttribute('open', '');
+// 带 #syntax-help 直接进来时展开，否则跳到页面底部只看到一行折叠标题。
+// mdui-collapse-item 的展开状态走 **value 属性**，且非手风琴模式下 value 是数组
+// —— 写成 HTML 属性或沿用 <details> 的 setAttribute('open') 都不管用。
+const syntaxItem = document.querySelector('#syntax-help mdui-collapse-item');
+if (location.hash === '#syntax-help' && syntaxItem) {
+	(syntaxItem as HTMLElement & { value?: unknown }).value = [true];
 }
 
 renderVars();

@@ -34,7 +34,7 @@ const toc = headings.filter((h) => h.depth === 2);
 				>
 				{
 					post.data.tags.map((t) => (
-						<mdui-chip variant="tonal" size="small">
+						<mdui-chip variant="assist">
 							#{t}
 						</mdui-chip>
 					))
@@ -47,24 +47,16 @@ const toc = headings.filter((h) => h.depth === 2);
 			}
 		</header>
 
+		{/* 目录天然是一组可选条目，用 mdui-list + mdui-list-subheader。
+		    注释要放在 {…} 表达式外面，写在分支内部会解析失败。 */}
 		{
 			toc.length > 2 && (
-				<nav class="panel" style="margin-top: 1.5rem" aria-label="目录">
-					<p class="block-title" style="margin-bottom: 0.4rem">目录</p>
-					<ul class="stack-xs">
-						{toc.map((h) => (
-							<li>
-								<a
-									href={`#${h.slug}`}
-									class="muted"
-									style="text-decoration: none"
-								>
-									{h.text}
-								</a>
-							</li>
-						))}
-					</ul>
-				</nav>
+				<mdui-list class="toc-list" aria-label="目录">
+					<mdui-list-subheader>目录</mdui-list-subheader>
+					{toc.map((h) => (
+						<mdui-list-item href={`#${h.slug}`} headline={h.text} headline-line="2" />
+					))}
+				</mdui-list>
 			)
 		}
 
@@ -73,6 +65,25 @@ const toc = headings.filter((h) => h.depth === 2);
 		</div>
 	</article>
 </Page>
+
+<style is:global>
+	.toc-list {
+		margin-top: 1.5rem;
+		border-radius: var(--mdui-shape-corner-large);
+		background: rgb(var(--mdui-color-surface-container));
+		padding: 0.5rem 0.5rem 0.75rem;
+	}
+
+	.toc-list mdui-list-item {
+		/* 同上：mdui-list-item 自身 padding 为 0 */
+		padding: 0.4rem 0.75rem;
+		border-radius: var(--mdui-shape-corner-small);
+	}
+
+	.toc-list mdui-list-item::part(headline) {
+		color: rgb(var(--mdui-color-on-surface-variant));
+	}
+</style>
 
 <style is:global>
 	.article {

@@ -15,7 +15,7 @@ import Page from '../../layouts/Page.astro';
 			</p>
 		</div>
 		<div class="head-tools">
-			<mdui-chip variant="tonal">
+			<mdui-chip variant="assist">
 				<mdui-icon-lock></mdui-icon-lock>
 				本地处理
 			</mdui-chip>
@@ -453,9 +453,9 @@ import Page from '../../layouts/Page.astro';
 					></mdui-text-field>
 				</div>
 				<div class="pdf-form" style="margin-top: 0.4rem">
-					<mdui-checkbox id="secPrint" checked>允许打印</mdui-checkbox>
-					<mdui-checkbox id="secCopy" checked>允许复制文字</mdui-checkbox>
-					<mdui-checkbox id="secModify" checked>允许修改</mdui-checkbox>
+					<mdui-switch id="secPrint" checked>允许打印</mdui-switch>
+					<mdui-switch id="secCopy" checked>允许复制文字</mdui-switch>
+					<mdui-switch id="secModify" checked>允许修改</mdui-switch>
 				</div>
 				<div class="row pdf-actions">
 					<mdui-button variant="filled" id="secRun">加密并下载</mdui-button>

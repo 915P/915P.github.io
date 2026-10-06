@@ -41,7 +41,7 @@ import Page from '../../layouts/Page.astro';
 			</div>
 			<div class="field" id="summarySpaceField" style="flex: 0 0 auto; justify-content: flex-end">
 				<span style="display: block; margin-bottom: 0.35rem">总结果</span>
-				<mdui-checkbox id="summarySpace">每 4 位空格</mdui-checkbox>
+				<mdui-switch id="summarySpace">每 4 位空格</mdui-switch>
 			</div>
 		</div>
 
@@ -301,7 +301,7 @@ import Page from '../../layouts/Page.astro';
 		const list = kind.value === 'float' ? FLOAT_PRESETS : INT_PRESETS;
 		presets.innerHTML =
 			'<span class="text-xs faint" style="align-self:center;margin-right:.25rem">试试：</span>' +
-			list.map((v) => `<mdui-chip class="chip mono" variant="outlined">${esc(v)}</mdui-chip>`).join('');
+			list.map((v) => `<mdui-chip class="chip mono" variant="suggestion">${esc(v)}</mdui-chip>`).join('');
 		presets.querySelectorAll('.chip').forEach((c) =>
 			c.addEventListener('click', () => {
 				num.value = c.textContent ?? '';

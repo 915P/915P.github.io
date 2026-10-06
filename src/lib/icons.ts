@@ -77,6 +77,14 @@ import '@mdui/icons/audio-file.js';
 import '@mdui/icons/image.js';
 import '@mdui/icons/warning.js';
 import '@mdui/icons/play-arrow.js';
+/*
+ * 导航的「未选中 / 选中」两态图标。
+ * 之前 icon 与 active-icon 用的是同一个图标，激活时没有任何视觉变化；
+ * @mdui/icons 正好提供 --outlined 变体，用它做未选中态。
+ */
+import '@mdui/icons/home--outlined.js';
+import '@mdui/icons/article--outlined.js';
+import '@mdui/icons/apps--outlined.js';
 import '@mdui/icons/download.js';
 import '@mdui/icons/info.js';
 import '@mdui/icons/stop.js';
