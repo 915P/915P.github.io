@@ -1,0 +1,198 @@
+/**
+ * 本文件由 `npm run icons:sites` **自动生成**，请勿手改。
+ *
+ * 每个站点的图标都抓到了 `public/icons/sites/` 本地存放：
+ * 运行时不去热链别人的主机，也不必担心对方站点挂了我们首页就花屏。
+ *
+ * 抓不到 favicon 的站点会退化成「标题首字 + 域名散列配色」的徽标，
+ * 至少能让用户认出是哪个站。
+ */
+
+export const siteIcons: Record<string, string> = {
+	"tj-1": "/icons/sites/manual/logo.png",
+	"1.tongji.edu.cn": "/icons/sites/manual/logo.png",
+	"tj-canvas": "/icons/sites/tj-canvas.png",
+	"canvas.tongji.edu.cn": "/icons/sites/tj-canvas.png",
+	"tj-portal": "/icons/sites/manual/logo.png",
+	"all4u.tongji.edu.cn": "/icons/sites/manual/logo.png",
+	"tj-power": "/icons/sites/manual/logo.png",
+	"goudian.tongji.edu.cn": "/icons/sites/manual/logo.png",
+	"tj-agent": "/icons/sites/manual/logo.png",
+	"agent.tongji.edu.cn": "/icons/sites/manual/logo.png",
+	"tj-ywtb": "/icons/sites/manual/logo.png",
+	"myportal.tongji.edu.cn": "/icons/sites/manual/logo.png",
+	"tj-mail": "/icons/sites/tj-mail.png",
+	"mail.tongji.edu.cn": "/icons/sites/tj-mail.png",
+	"tj-look": "/icons/sites/manual/logo.png",
+	"look.tongji.edu.cn": "/icons/sites/manual/logo.png",
+	"tj-v": "/icons/sites/tj-v.png",
+	"v.tongji.edu.cn": "/icons/sites/tj-v.png",
+	"tj-rank": "/icons/sites/tj-rank.png",
+	"zzfw.tongji.edu.cn": "/icons/sites/tj-rank.png",
+	"tj-phy": "/icons/sites/manual/logo.png",
+	"phyvr.tongji.edu.cn": "/icons/sites/manual/logo.png",
+	"tj-second": "/icons/sites/manual/logo.png",
+	"itongjis.tongji.edu.cn": "/icons/sites/manual/logo.png",
+	"tj-lib": "/icons/sites/manual/logo.png",
+	"www.lib.tongji.edu.cn": "/icons/sites/manual/logo.png",
+	"tj-software": "/icons/sites/manual/logo.png",
+	"software.tongji.edu.cn": "/icons/sites/manual/logo.png",
+	"tj-yunpan": "/icons/sites/tj-yunpan.png",
+	"yunpan.tongji.edu.cn": "/icons/sites/tj-yunpan.png",
+	"tj-hq": "/icons/sites/manual/logo.png",
+	"tjhq.tongji.edu.cn": "/icons/sites/manual/logo.png",
+	"tj-qgzx": "/icons/sites/manual/logo.png",
+	"tj-cxcy": "/icons/sites/manual/logo.png",
+	"cxcy.tongji.edu.cn": "/icons/sites/manual/logo.png",
+	"tj-stadium": "/icons/sites/manual/logo.png",
+	"stadium.tongji.edu.cn": "/icons/sites/manual/logo.png",
+	"tj-gaoshu": "/icons/sites/manual/logo.png",
+	"gaoshutongbu.tongji.edu.cn": "/icons/sites/manual/logo.png",
+	"tj-freshman": "/icons/sites/manual/logo.png",
+	"tj-pay": "/icons/sites/manual/logo.png",
+	"paycwc.tongji.edu.cn": "/icons/sites/manual/logo.png",
+	"tj-vpn": "/icons/sites/manual/tj-vpn.png",
+	"nic.tongji.edu.cn": "/icons/sites/manual/logo.png",
+	"tj-nic": "/icons/sites/manual/logo.png",
+	"icourse163": "/icons/sites/icourse163.png",
+	"www.icourse163.org": "/icons/sites/icourse163.png",
+	"chaoxing": "/icons/sites/manual/chaoxing.png",
+	"www.chaoxing.com": "/icons/sites/manual/chaoxing.png",
+	"zhihuishu": "/icons/sites/manual/zhihuishu.png",
+	"online.zhihuishu.com": "/icons/sites/manual/zhihuishu.png",
+	"ketangpai": "/icons/sites/ketangpai.png",
+	"www.ketangpai.com": "/icons/sites/ketangpai.png",
+	"www.ilab-x.com": "/icons/sites/ilab.png",
+	"ilab": "/icons/sites/ilab.png",
+	"scholar": "/icons/sites/scholar.png",
+	"scholar.google.com": "/icons/sites/scholar.png",
+	"semanticscholar": "/icons/sites/semanticscholar.png",
+	"www.semanticscholar.org": "/icons/sites/semanticscholar.png",
+	"cnki": "/icons/sites/cnki.png",
+	"www.cnki.net": "/icons/sites/cnki.png",
+	"wos": "/icons/sites/wos.png",
+	"www.webofscience.com": "/icons/sites/wos.png",
+	"wanfang": "/icons/sites/wanfang.png",
+	"www.wanfangdata.com.cn": "/icons/sites/wanfang.png",
+	"dl.acm.org": "/icons/sites/acm-dl.png",
+	"acm-dl": "/icons/sites/acm-dl.png",
+	"ieee-xplore": "/icons/sites/ieee-xplore.png",
+	"ieeexplore.ieee.org": "/icons/sites/ieee-xplore.png",
+	"inspec": "/icons/sites/inspec.png",
+	"www.inspec.com": "/icons/sites/inspec.png",
+	"proquest": "/icons/sites/proquest.png",
+	"www.proquest.com": "/icons/sites/proquest.png",
+	"51cto": "/icons/sites/51cto.png",
+	"edu.51cto.com": "/icons/sites/51cto.png",
+	"autodesk": "/icons/sites/autodesk.png",
+	"www.autodesk.com.cn": "/icons/sites/autodesk.png",
+	"origin": "/icons/sites/manual/origin.png",
+	"www.originlab.com": "/icons/sites/manual/origin.png",
+	"arxiv": "/icons/sites/arxiv.png",
+	"arxiv.org": "/icons/sites/arxiv.png",
+	"course.f1justin.com": "/icons/sites/course-filter.png",
+	"course-filter": "/icons/sites/course-filter.png",
+	"xk-schedule": "/icons/sites/manual/logo.png",
+	"xk.xialing.icu": "/icons/sites/manual/logo.png",
+	"onetj-webapp": "/icons/sites/onetj-webapp.png",
+	"flowerblackg.github.io": "/icons/sites/onetj-webapp.png",
+	"deepseek": "/icons/sites/deepseek.png",
+	"chat.deepseek.com": "/icons/sites/deepseek.png",
+	"qwen": "/icons/sites/qwen.png",
+	"chat.qwen.ai": "/icons/sites/qwen.png",
+	"doubao": "/icons/sites/doubao.png",
+	"www.doubao.com": "/icons/sites/doubao.png",
+	"notebooklm": "/icons/sites/notebooklm.png",
+	"notebooklm.google": "/icons/sites/notebooklm.png",
+	"gemini": "/icons/sites/gemini.png",
+	"gemini.google.com": "/icons/sites/gemini.png",
+	"chatgpt": "/icons/sites/manual/chatgpt.svg",
+	"chat.openai.com": "/icons/sites/manual/chatgpt.svg",
+	"grok": "/icons/sites/grok.png",
+	"grok.com": "/icons/sites/grok.png",
+	"github": "/icons/sites/github.png",
+	"github.com": "/icons/sites/github.png",
+	"yourtj": "/icons/sites/yourtj.png",
+	"f.yourtj.de": "/icons/sites/yourtj.png",
+	"tj-car": "/icons/sites/tj-car.png",
+	"pinche.tj.hainuo.wang": "/icons/sites/tj-car.png"
+};
+
+/**
+ * 每个图标是「站点自带的」还是「我们生成的兜底徽标」。
+ * 'favicon'   —— 站点确实提供了图标
+ * 'monogram'  —— 站点没有可用图标，这张是我们按标题首字生成的
+ */
+export const siteIconKinds: Record<string, 'favicon' | 'manual' | 'monogram'> = {
+	"tj-1": "manual",
+	"tj-canvas": "favicon",
+	"tj-portal": "manual",
+	"tj-power": "manual",
+	"tj-agent": "manual",
+	"tj-ywtb": "manual",
+	"tj-mail": "favicon",
+	"tj-look": "manual",
+	"tj-v": "favicon",
+	"tj-rank": "favicon",
+	"tj-phy": "manual",
+	"tj-second": "manual",
+	"tj-lib": "manual",
+	"tj-software": "manual",
+	"tj-yunpan": "favicon",
+	"tj-hq": "manual",
+	"tj-qgzx": "manual",
+	"tj-cxcy": "manual",
+	"tj-stadium": "manual",
+	"tj-gaoshu": "manual",
+	"tj-freshman": "manual",
+	"tj-pay": "manual",
+	"tj-vpn": "manual",
+	"tj-nic": "manual",
+	"icourse163": "favicon",
+	"chaoxing": "manual",
+	"zhihuishu": "manual",
+	"ketangpai": "favicon",
+	"ilab": "monogram",
+	"scholar": "favicon",
+	"semanticscholar": "favicon",
+	"cnki": "favicon",
+	"wos": "favicon",
+	"wanfang": "favicon",
+	"acm-dl": "monogram",
+	"ieee-xplore": "favicon",
+	"inspec": "favicon",
+	"proquest": "favicon",
+	"51cto": "favicon",
+	"autodesk": "favicon",
+	"origin": "manual",
+	"arxiv": "favicon",
+	"course-filter": "monogram",
+	"xk-schedule": "manual",
+	"onetj-webapp": "favicon",
+	"deepseek": "favicon",
+	"qwen": "favicon",
+	"doubao": "favicon",
+	"notebooklm": "favicon",
+	"gemini": "favicon",
+	"chatgpt": "manual",
+	"grok": "favicon",
+	"github": "favicon",
+	"yourtj": "favicon",
+	"tj-car": "favicon"
+};
+
+/**
+ * 需要用 CSS mask 渲染的图标（id 列表）。
+ *
+ * 有些图标 SVG 内部带 `<style>：:root{fill:#000} @media (prefers-color-scheme:dark){fill:#fff}`，
+ * 是想自己适配深浅色的。但用 `<img>` 加载时，**SVG 里的媒体查询是按操作系统的
+ * 配色方案算的，跟页面主题无关** —— 你系统是浅色、页面切到深色，图标就成了
+ * 一团黑的、看不见。
+ *
+ * 所以这类图标改用 mask 渲染：形状来自 SVG，颜色来自 CSS 的 currentColor，
+ * 而 currentColor 会跟着页面的 mdui-theme 走，两套主题都对。
+ * （ChatGPT 的六环结就是这种。）
+ */
+export const siteIconMasks: readonly string[] = [
+	"chatgpt"
+];

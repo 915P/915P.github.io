@@ -1,0 +1,1974 @@
+---
+import Base from '../layouts/Base.astro';
+import { guideTabs } from '../data/guide';
+
+/*
+ * /guide/ —— 浏览器起始页。
+ *
+ * 刻意**不用** Page.astro：那一层会套上 Nav（顶栏 + 侧栏 + 底栏）与页脚，
+ * 而起始页要的是整屏、只剩搜索框和磁贴。Base.astro 提供 head / 主题 / mdui 加载，
+ * 正好是需要的全部。
+ *
+ * 交互对标 Firefox 新标签页：
+ *   - 顶部一个输入框，判断是网址还是搜索词
+ *   - 下面按分类分标签页，每页一屏磁贴，点开即走
+ *   - 右下角铅笔进入编辑态，可增删、可拖动排序
+ *   - 左下角小框显示网络连通性推断
+ *   - 布局存 localStorage，只存在本机
+ */
+---
+
+<Base
+	title="起始页"
+	description="浏览器起始页：搜索或直接输网址，下方是常用站点磁贴。"
+>
+	<main class="guide">
+		<div class="guide-search-wrap">
+			<div class="guide-search-row">
+				{/*
+				 * 引擎按钮在搜索框**外面**、左侧独立成一个圆按钮。
+				 * 塞进输入框的 prefix slot 会被 text-field 的内边距挤偏、
+				 * 胶囊左侧多出一块凹，看着不像一个整体。
+				 */}
+				<mdui-button-icon
+					id="engineButton"
+					class="engine-button"
+					aria-label="选择搜索引擎"
+					aria-haspopup="menu"
+					aria-expanded="false"
+				>
+					<span class="engine-mark" id="engineMark"></span>
+				</mdui-button-icon>
+				<form class="guide-search" id="guideForm" role="search">
+					<mdui-text-field
+						id="guideInput"
+						variant="filled"
+						type="search"
+						name="q"
+						placeholder="搜索，或者输入网址"
+						autocomplete="off"
+						aria-label="搜索或输入网址"
+					>
+					</mdui-text-field>
+				</form>
+				<mdui-button-icon id="setButton" class="set-button" aria-label="设置" title="设置">
+					<mdui-icon-settings></mdui-icon-settings>
+				</mdui-button-icon>
+			</div>
+
+			{/*
+			 * 引擎列表。用 mdui-menu 而不是 mdui-select：
+			 * 要的是「点图标弹出一张浮层」，而 select 天生带个长条框。
+			 * menu-item 自带 selected 状态和 change 事件，正好对得上「当前用哪个」。
+			 * 放在 form **外面**，免得菜单项被当成表单控件参与提交。
+			*/}
+			<div class="engine-pop" id="enginePop" hidden>
+				{/*
+				 * ⚠️ 必须显式写 selects="single"。
+				 * mdui-menu 默认是**多选**模式，此时点菜单项不会改变
+				 * 选中状态、也不会 emit change（实测 click 后 selectedKeys
+				 * 仍为空、change 一次都不触发），表现就是「点了没反应」。
+				 */}
+				<mdui-menu class="engine-menu" id="engineMenu" selects="single">
+					<mdui-list-subheader>搜索引擎</mdui-list-subheader>
+				</mdui-menu>
+				<p class="engine-pop-note" id="engineNote"></p>
+				<mdui-button id="engineReset" variant="text" class="engine-pop-reset">
+					恢复自动选择
+				</mdui-button>
+			</div>
+		</div>
+
+		{/*
+		 * 分类标签页。
+		 *
+		 * 一屏铺 40 多个磁贴太挤，按分类拆开更像「常用入口」而不是图标墙。
+		 * 面板在服务端就渲染好空网格，具体磁贴由脚本按 group 填 ——
+		 * 磁贴存在 localStorage 里，本来就得客户端渲染。
+		*/}
+		{/*
+		 * value 必须显式给第一个 tab —— 不写的话 mdui-tabs 不知道该激活谁，
+		 * 表现是「一个 tab 都没选中」，下划线指示器整个不出现（看起来像样式坏了）。
+		*/}
+		<mdui-tabs class="guide-tabs" id="guideTabs" value={guideTabs[0].key}>
+			{
+				guideTabs.map((tab) => (
+					<mdui-tab value={tab.key}>
+						{tab.label}
+					</mdui-tab>
+				))
+			}
+			{
+				guideTabs.map((tab) => (
+					<mdui-tab-panel slot="panel" value={tab.key}>
+						<div class="guide-tiles" data-group={tab.key} role="list"></div>
+					</mdui-tab-panel>
+				))
+			}
+		</mdui-tabs>
+
+		<p class="guide-hint" id="guideHint" hidden></p>
+
+		{/*
+		 * 导入 / 导出。
+		 *
+		 * 公开站点的链接表里**不放**校内裸 IP 这类敏感条目 ——
+		 * 需要的人自己导出、传给自己想给的人，再导入即可。
+		 * 所以导入导出的载体就是一个 JSON 文件，不经过任何服务器。
+		 *
+		 * 藏进编辑态：平时用不到，也不该在起始页上摆两个按钮。
+		*/}
+		<div class="guide-io" id="guideIo" hidden>
+			<mdui-button id="ioExport" variant="text" size="small">导出链接</mdui-button>
+			<mdui-button id="ioImport" variant="text" size="small">导入链接</mdui-button>
+			<input
+				id="ioFile"
+				type="file"
+				accept="application/json,.json"
+				hidden
+			/>
+		</div>
+	</main>
+
+	{/*
+	 * 设置面板。
+	 *
+	 * 做成对话框而不是常驻面板：外观类设置本质是「偶尔调一次」，
+	 * 常驻一排控件只会让起始页变复杂。
+	 */}
+	<mdui-dialog id="setDialog" class="guide-set-dialog">
+		<div slot="headline">设置</div>
+
+		<div class="set-group">
+			<p class="set-group-title">主题色</p>
+			<div class="set-swatches" id="setSwatches" role="group" aria-label="主题色"></div>
+		</div>
+
+		<div class="set-group">
+			<p class="set-group-title">外观模式</p>
+			<mdui-segmented-button-group
+				class="set-modes"
+				id="setModes"
+				aria-label="外观模式"
+			></mdui-segmented-button-group>
+		</div>
+
+		<div class="set-group">
+			<p class="set-group-title">壁纸</p>
+			<div class="set-walls" id="setWalls" role="group" aria-label="壁纸"></div>
+			<mdui-button id="setWallUpload" variant="text" size="small" class="set-upload">
+				自定义壁纸…
+			</mdui-button>
+			<input id="setWallFile" type="file" accept="image/*" hidden />
+			<p class="set-note faint text-xs" id="setWallNote"></p>
+		</div>
+
+		<div class="set-group">
+			<p class="set-group-title">
+				背景遮罩
+				<span class="faint text-xs" id="setScrubValue"></span>
+			</p>
+			<mdui-slider id="setScrub" min={0.3} max={0.92} step={0.02}></mdui-slider>
+			<p class="set-note faint text-xs">
+				遮罩太浅字会看不清，太厚壁纸就白设了。
+			</p>
+		</div>
+
+		<div class="set-group">
+			<p class="set-group-title">网络</p>
+			<mdui-button id="setNetCheck" variant="text" size="small">重新检测网络</mdui-button>
+			<p class="set-note faint text-xs" id="setNetState"></p>
+		</div>
+
+		<div class="set-group">
+			<p class="set-group-title">链接配置</p>
+			<div class="set-row">
+				<mdui-button id="setExport" variant="text" size="small">导出</mdui-button>
+				<mdui-button id="setImport" variant="text" size="small">导入</mdui-button>
+			</div>
+		</div>
+
+		<div class="set-group set-danger">
+			<mdui-button id="setReset" variant="text" size="small">恢复默认链接与外观</mdui-button>
+		</div>
+
+		<div slot="action">
+			<mdui-button id="setDone" variant="filled">完成</mdui-button>
+		</div>
+	</mdui-dialog>
+
+	{/*
+	 * 「这类资源现在可能打不开」的确认框。
+	 *
+	 * 文案由 accessNotice() 按资源类型生成（校内 / 图书馆订购 / 境外三种说法），
+	 * **只讲资源本身的前提，不讲探测推测** —— 「当前推测：…」「你可能开着
+	 * VPN」这类话用户明确要求删掉了：探测本来就是 no-cors 打一个状态码，
+	 * 结论不硬，把它写成断言是误导。
+	 *
+	 * 关键点是**只提示、不阻拦**：用户可能有 VPN、流量按量走、或者只是这次
+	 * 校园网抽风。所以必须让他自己决定，而且默认焦点放在「仍然打开」上，
+	 * 想快点的人回车就行。
+	*/}
+	<mdui-dialog id="warnDialog" class="guide-warn-dialog">
+		<div slot="headline">可能打不开</div>
+		<div slot="description" id="warnText"></div>
+		<div slot="action">
+			<mdui-button id="warnCancel" variant="text">算了</mdui-button>
+			<mdui-button id="warnGo" variant="filled">仍然打开</mdui-button>
+		</div>
+	</mdui-dialog>
+
+	{/*
+	 * 导入前的确认框。
+	 * 导入是**整份替换**，会覆盖现有的磁贴和排序 —— 得让人明确知道这一点，
+	 * 而且得能反悔（导出过就还能导回去，但不问一声就覆盖太粗暴了）。
+	*/}
+	<mdui-dialog id="ioDialog" class="guide-io-dialog">
+		<div slot="headline">导入链接配置</div>
+		<div slot="description" id="ioSummary"></div>
+		<div class="guide-io-detail faint text-xs" id="ioDetail"></div>
+		<div slot="action">
+			<mdui-button id="ioCancel" variant="text">取消</mdui-button>
+			<mdui-button id="ioConfirm" variant="filled">覆盖导入</mdui-button>
+		</div>
+	</mdui-dialog>
+
+	{/*
+	 * 网络连通性探测**没有界面**了。
+	 *
+	 * 原来左下角有个小框常驻显示「已接入校园网 · 国际互联网通畅」这类结论，
+	 * 它一直在替用户下判断、还要占一块视觉空间。现在改成：
+	 *   - 后台照常探测（结果缓存 5 分钟）
+	 *   - 只在**真的要打开某个打不开的站点时**才弹窗询问（见下面的 warnDialog）
+	 *   - 需要手动重测的话，从「设置」里点
+	 * 依据始终是「推测」——网页看不到 IP，只能靠地址可达性反推。
+	 */}
+
+	{/*
+	 * 编辑态的浮动按钮。
+	 *
+	 * ⚠️ 不要用 size="large"：MD3 的大号 FAB 是 96px 见方，配上默认图标
+	 * 差不多占屏幕 1/16，在只有搜索框和磁贴的起始页上过于抢眼（实测很雷霆）。
+	 * 用默认 medium，图标也调小一档。
+	 */}
+	<mdui-fab
+		id="guideFab"
+		class="guide-fab"
+		variant="secondary"
+		aria-label="编辑磁贴"
+	>
+		<mdui-icon-edit slot="icon" class="guide-fab-icon"></mdui-icon-edit>
+	</mdui-fab>
+
+	<style is:global>
+		/*
+		 * 起始页要「只有内容」。Base.astro 的 body 没有额外内边距，
+		 * 这里自己接管整屏高度与背景层次。
+		 *
+		 * 背景是同济邮箱登录页那张校园风景照（从它的
+		 * /coremail/s?func=lp:getImg&img_id=background_001 拿下来的，1920×1080），
+		 * 存在 public/images/tongji-campus.jpg，已压到 1600px / 约 293K。
+		 *
+		 * 用**固定定位的伪元素**铺底，而不是 background-attachment: fixed ——
+		 * 后者在移动端滚动时会明显卡顿，还会让 Safari 的 fixed 定位失效。
+		 * 上面再盖一层半透明遮罩，不然照片太花、搜索框和磁贴标签读不清。
+		 */
+		body:has(.guide) {
+			min-height: 100vh;
+		}
+
+		body:has(.guide)::before {
+			content: '';
+			position: fixed;
+			inset: 0;
+			z-index: -1;
+			background-image: var(--guide-wall, none);
+			background-size: cover;
+			background-position: center;
+			background-repeat: no-repeat;
+		}
+
+		/*
+		 * 遮罩用 MDUI 的 surface 色，所以跟随主题自动切换：
+		 * 浅色下是半透明白、深色下是半透明黑，不需要写两套。
+		 * 透明度取得比较高（浅色 0.72 / 深色 0.55），保证前景对比度够。
+		 *
+		 * ⚠️ 这里必须写 rgba(var(--token), a)，**不能**写
+		 * rgb(var(--token) / a)。MDUI 的令牌值是 `20,18,24` 这样的逗号分量，
+		 * 斜杠语法要靠 var() 替换后才拼出 `rgb(20,18,24 / 0.72)` ——
+		 * 浏览器在解析期看不出问题（getComputedStyle 前的声明检查会「通过」），
+		 * 到计算值阶段才判定为非法，于是整条声明**静默失效**，
+		 * 表现就是遮罩完全不出现（实测踩过）。
+		 */
+		body:has(.guide)::after {
+			content: '';
+			position: fixed;
+			inset: 0;
+			z-index: -1;
+			background: rgba(var(--mdui-color-surface), var(--guide-scrub, 0.72));
+		}
+
+
+		.guide {
+			display: flex;
+			flex-direction: column;
+			align-items: center;
+			gap: 2.5rem;
+			min-height: 100vh;
+			padding: clamp(3rem, 12vh, 7rem) 1.25rem 6rem;
+			box-sizing: border-box;
+		}
+
+		/* ---------------------------------------------------------- 搜索框 */
+
+		/*
+		 * Firefox 的搜索条是一个大圆角胶囊。
+		 *
+		 * 这里让**外层 .guide-search 只负责布局**（透明、无内边距），
+		 * 胶囊本身交给 mdui-text-field 的容器（::part(container)）去画。
+		 * 反过来做（外层画胶囊、text-field 用默认 filled 样式）会叠成两层：
+		 * 灰底 + 白底 + 一道下划线，在页面上非常明显。
+		 *
+		 * 令牌要写成 rgb(var(--...)) 而不是 var(--...)：
+		 * MDUI 的令牌值是 `28, 27, 31` 这样的逗号分量，直接 var() 会算不出颜色，
+		 * 实测背景会静默变成透明。
+		 */
+		.guide-search {
+			display: flex;
+			align-items: center;
+			flex: 1 1 auto;
+			min-width: 0;
+		}
+
+		/* 设置按钮：和引擎按钮同款圆钮，贴在搜索框右侧 */
+	.set-button {
+			--mdui-comp-icon-button-icon-size: 1.2rem;
+			min-width: 0;
+			flex: 0 0 auto;
+			width: 3rem;
+			height: 3rem;
+			padding: 0;
+			border-radius: 50%;
+			background: rgb(var(--mdui-color-surface-container-high));
+			transition: background-color var(--mdui-motion-duration-short2);
+		}
+
+		.set-button:hover,
+		.set-button:focus-visible {
+			background: rgb(var(--mdui-color-surface-container-highest));
+		}
+
+		/* 引擎按钮 + 搜索框并排，整体仍居中 */
+		.guide-search-row {
+			display: flex;
+			align-items: center;
+			gap: 0.6rem;
+		}
+
+		/* 浮层的定位基准：贴着引擎按钮左上角往下展开 */
+		.guide-search-wrap {
+			position: relative;
+			width: min(38rem, 100%);
+		}
+
+		.guide-search:focus-within mdui-text-field::part(container) {
+			outline: 2px solid rgb(var(--mdui-color-primary));
+			outline-offset: 2px;
+		}
+
+		.guide-search-icon {
+			color: rgb(var(--mdui-color-primary));
+			flex: 0 0 auto;
+		}
+
+		.guide-search mdui-text-field {
+			flex: 1 1 auto;
+		}
+
+		.guide-search mdui-text-field::part(container) {
+			background: rgb(var(--mdui-color-surface-container-high)) !important;
+			border-radius: 999px !important;
+			border: none !important;
+			box-shadow: none !important;
+			padding-inline: 1.15rem !important;
+		}
+
+		/* ------------------------------------------------------ 搜索引擎选择 */
+
+		/*
+		 * 引擎按钮：独立圆按钮，和搜索框胶囊并排。
+		 * 底色用 surface-container-high，比胶囊略深一点以示「这是个按钮」。
+		 */
+		.engine-button {
+			--mdui-comp-icon-button-icon-size: 1.4rem;
+			min-width: 0;
+			flex: 0 0 auto;
+			width: 3rem;
+			height: 3rem;
+			padding: 0;
+			border-radius: 50%;
+			background: rgb(var(--mdui-color-surface-container-high));
+			transition: background-color var(--mdui-motion-duration-short2);
+		}
+
+		.engine-button:hover,
+		.engine-button:focus-visible {
+			background: rgb(var(--mdui-color-surface-container-highest));
+		}
+
+		.engine-mark {
+			display: grid;
+			place-items: center;
+			width: 100%;
+			height: 100%;
+		}
+
+		/* 彩色 logo 给足尺寸才看得出细节（Google 的四色、DDG 的八色） */
+		.engine-mark img {
+			width: 1.5rem;
+			height: 1.5rem;
+			object-fit: contain;
+		}
+
+		/*
+		 * 引擎浮层。
+		 *
+		 * 绝对定位在搜索框正下方、宽度与搜索框对齐，
+		 * 视觉上就是「从搜索框里长出来的一张菜单」。
+		 * z-index 要高于磁贴，否则会被下面的标签页盖住。
+		 */
+		.engine-pop {
+			position: absolute;
+			top: calc(100% + 0.5rem);
+			left: 0;
+			z-index: 4;
+			/*
+			 * 宽度**跟着内容走**，不要继承搜索框的 38rem。
+			 * 菜单项本身只有十几个字宽，写死 100% 的话右侧会空掉一大半，
+			 * 看起来像布局出错。min-width 兜住「恢复自动选择」那行按钮，
+			 * max-width 防止窄屏溢出。
+			 */
+			display: flex;
+			flex-direction: column;
+			width: max-content;
+			min-width: 14rem;
+			max-width: min(100%, 20rem);
+			box-sizing: border-box;
+			padding: 0.35rem;
+			border-radius: var(--mdui-shape-corner-medium);
+			background: rgb(var(--mdui-color-surface-container-high));
+			box-shadow: 0 0 1px rgb(var(--mdui-color-outline-variant)), 0 8px 24px rgb(0 0 0 / 0.18);
+		}
+
+		/* mdui-menu 自带 surface + 边框，这里跟浮层背景统一，避免两层壳 */
+		.engine-menu {
+			background: none;
+			box-shadow: none;
+			border: none;
+		}
+
+		/* MD3 把菜单项内边距交给使用者，这里给回常规间距 */
+		.engine-menu mdui-menu-item {
+			--mdui-comp-list-item-label-text-size: var(--mdui-typescale-body-medium-size);
+			padding: 0.5rem 0.75rem;
+			border-radius: var(--mdui-shape-corner-small);
+		}
+
+		/* 菜单里的 logo：彩色 logo 在深色下也需要一点余量才认得出 */
+		.engine-menu .engine-item-icon {
+			display: grid;
+			place-items: center;
+			width: 1.5rem;
+			height: 1.5rem;
+			margin-right: 0.75rem;
+		}
+
+		.engine-menu .engine-item-icon img {
+			width: 1.4rem;
+			height: 1.4rem;
+			object-fit: contain;
+		}
+
+		.engine-pop-note {
+			margin: 0.4rem 0.75rem 0;
+			color: rgb(var(--mdui-color-on-surface-variant));
+			font-size: var(--mdui-typescale-label-small-size);
+			line-height: 1.5;
+		}
+
+		.engine-pop-reset {
+			width: 100%;
+			margin-top: 0.25rem;
+			justify-content: flex-start;
+		}
+
+		/*
+		 * ⚠️ `hidden` 属性对自定义元素**无效**。
+		 * UA 样式表里的 `[hidden] { display: none }` 属于「用户代理」优先级，
+		 * 而 mdui-button 自己的 `display: inline-flex` 是「作者」优先级，
+		 * 作者样式赢 —— 结果就是设了 hidden 按钮照样显示。
+		 * （这个坑之前在 mdui-button-icon 上也踩过一次。）
+		 */
+		[hidden] {
+			display: none !important;
+		}
+
+		/* -------------------------------------------------------- 网络状态 */
+
+		/*
+		 * 左下角的小框。
+		 *
+		 * 之前是搜索框下方一条通栏状态条，实测很占地方：起始页的主角是磁贴，
+		 * 而网络状态只是「参考信息」，不需要占一整行。改成 fixed 小框后，
+		 * 点开对话框、编辑磁贴都不受影响，滚到哪儿都能看到。
+		 */
+		.net-box {
+			position: fixed;
+			left: 1.25rem;
+			bottom: 1.25rem;
+			z-index: 2;
+			display: flex;
+			align-items: center;
+			gap: 0.55rem;
+			max-width: calc(100vw - 2.5rem);
+			padding: 0.3rem 0.4rem 0.3rem 0.85rem;
+			border-radius: 999px;
+			background: rgb(var(--mdui-color-surface-container-high));
+			box-shadow: 0 0 1px rgb(var(--mdui-color-outline-variant));
+			font-size: var(--mdui-typescale-label-small-size);
+		}
+
+		.net-overall {
+			font-weight: var(--mdui-typescale-title-small-weight);
+			/* 单行省略：结论最长是「已接入校园网 · 国际互联网通畅」 */
+			white-space: nowrap;
+			overflow: hidden;
+			text-overflow: ellipsis;
+		}
+
+		.net-overall.tone-ok {
+			color: rgb(var(--mdui-color-primary));
+		}
+
+		.net-overall.tone-warn {
+			color: rgb(var(--mdui-color-error));
+		}
+
+		.net-items {
+			display: flex;
+			align-items: center;
+			gap: 0.4rem;
+			flex: 0 0 auto;
+		}
+
+		/* 每个目标只留一个点，文字全在 title 里 —— 小框塞不下三段文字 */
+		.net-item {
+			display: inline-flex;
+			align-items: center;
+			gap: 0.25rem;
+			color: rgb(var(--mdui-color-on-surface-variant));
+			white-space: nowrap;
+		}
+
+		/* 小圆点用 currentColor，省掉按状态各写一套色 */
+		.net-dot {
+			width: 0.5rem;
+			height: 0.5rem;
+			border-radius: 50%;
+			background: currentColor;
+			flex: 0 0 auto;
+		}
+
+		.net-item.state-ok {
+			color: rgb(var(--mdui-color-primary));
+		}
+
+		.net-item.state-fail {
+			color: rgb(var(--mdui-color-error));
+		}
+
+		.net-item.state-checking .net-dot {
+			animation: net-pulse 1s ease-in-out infinite;
+		}
+
+		@keyframes net-pulse {
+			50% {
+				opacity: 0.25;
+			}
+		}
+
+		@media (prefers-reduced-motion: reduce) {
+			.net-item.state-checking .net-dot {
+				animation: none;
+			}
+		}
+
+		/*
+		 * 窄屏上「结论 + 三个点」还是太宽，只留结论。
+		 * 三个点的信息在点一下标题栏也能看到，不算丢。
+		 */
+		@media (max-width: 559px) {
+			.net-items {
+				display: none;
+			}
+		}
+
+	/* ---------------------------------------------------------- 磁贴 */
+
+		/* 标签页：整页宽，磁贴网格居中在下面 */
+	.guide-tabs {
+		width: 100%;
+		max-width: 60rem;
+		/*
+		 * 标签栏要**不透明**。
+		 * mdui-tabs 默认背景带 alpha，铺在校园风景照上就成了一条灰蒙蒙的
+		 * 脏带子，标签文字对比度也不够（实测很明显）。这里给回实心 surface，
+		 * 外面一圈描边分隔，视觉上就是一条清爽的导航条。
+		 */
+		--mdui-comp-tabs-container-color: rgb(var(--mdui-color-surface));
+		background: rgb(var(--mdui-color-surface));
+		border-radius: var(--mdui-shape-corner-medium);
+		box-shadow: 0 0 1px rgb(var(--mdui-color-outline-variant));
+		overflow: hidden;
+	}
+
+		/*
+		 * 8 列上限、整体居中 —— 和 Firefox 一致。磁贴尺寸用固定值而不是
+		 * minmax()，否则宽屏上会被拉得参差不齐。
+		 */
+		.guide-tiles {
+			display: grid;
+			grid-template-columns: repeat(auto-fill, 6.5rem);
+			justify-content: center;
+			gap: 1.25rem 0.75rem;
+			max-width: 60rem;
+			width: 100%;
+		}
+
+		.guide-tile {
+			position: relative;
+			display: flex;
+			flex-direction: column;
+			align-items: center;
+			gap: 0.5rem;
+			width: 6.5rem;
+			padding: 0.5rem 0.25rem;
+			border-radius: var(--mdui-shape-corner-medium);
+			color: inherit;
+			text-decoration: none;
+			transition: background-color var(--mdui-motion-duration-short2);
+		}
+
+		.guide-tile:hover,
+		.guide-tile:focus-visible {
+			background: rgb(var(--mdui-color-surface-container-high));
+		}
+
+		.guide-tile:focus-visible {
+			outline: 2px solid rgb(var(--mdui-color-primary));
+			outline-offset: -2px;
+		}
+
+		/*
+		 * 图标容器：固定方形 + 大圆角，favicon 铺满、emoji 居中。
+		 * Firefox 用的是「圆角方块 + 站点自己的图标」，这里保持同一比例。
+		 */
+		.guide-tile-icon {
+			display: grid;
+			place-items: center;
+			width: 3.75rem;
+			height: 3.75rem;
+			border-radius: 1.1rem;
+			background: rgb(var(--mdui-color-surface-container-highest));
+			overflow: hidden;
+			font-size: 1.6rem;
+			line-height: 1;
+		}
+
+		.guide-tile-icon img {
+			width: 2.25rem;
+			height: 2.25rem;
+			object-fit: contain;
+		}
+
+		/*
+		 * 用 mask 上色的图标（见 data/site-icons.ts 的 siteIconMasks）。
+		 * 形状来自 SVG，填充色是 currentColor —— 继承磁贴的文字色，
+		 * 于是深浅主题自动正确，不需要两份图。
+		 */
+		.guide-tile-mask {
+			width: 2.25rem;
+			height: 2.25rem;
+			background-color: currentColor;
+			-webkit-mask: center / contain no-repeat;
+			mask: center / contain no-repeat;
+		}
+
+		/*
+		 * 主站工具磁贴：Material Icons，跟 /tools 页面上画的一模一样。
+		 * 用 currentColor，两套主题都对。
+		 */
+		.guide-tile-icon .mdui-icon {
+			font-size: 2.25rem;
+			width: 2.25rem;
+			height: 2.25rem;
+		}
+
+		/*
+		 * 兜底徽标（构建期没抓到 favicon 的站点）。
+		 * 底色由 siteFallbackColor() 按域名散列给出，这里只管排版。
+		 */
+		.guide-tile-icon.is-monogram {
+			color: #fff;
+			font-weight: 600;
+			font-size: 1.5rem;
+		}
+
+		.guide-tile-label {
+			width: 100%;
+			/* 两行截断，和 Firefox 一致（长标题不至于把网格撑开） */
+			display: -webkit-box;
+			-webkit-line-clamp: 2;
+			-webkit-box-orient: vertical;
+			overflow: hidden;
+			text-align: center;
+			font-size: var(--mdui-typescale-body-small-size);
+			line-height: 1.3;
+			overflow-wrap: anywhere;
+		}
+
+		/*
+		 * 网络前提标记（「需校园网」/「境外」）。
+		 *
+		 * 绝对定位到图标右上角，不占磁贴高度 —— 标签位置留给用户看标题。
+		 * 只有真的需要时才出现：不在校园网就不显示「需校园网」，
+		 * 探测还没跑完（unknown）也不显示，不给用户添堵。
+		 */
+		.guide-tile-flag {
+			position: absolute;
+			top: -0.15rem;
+			right: -0.15rem;
+			padding: 0.1rem 0.35rem;
+			border-radius: 999px;
+			background: rgb(var(--mdui-color-tertiary-container));
+			color: rgb(var(--mdui-color-on-tertiary-container));
+			font-size: 0.6rem;
+			line-height: 1.4;
+			white-space: nowrap;
+			pointer-events: none;
+		}
+
+		/* --------------------------------------------------- 编辑态 */
+
+		.guide-tiles.is-editing .guide-tile {
+			cursor: default;
+		}
+
+		.guide-tile-remove {
+			position: absolute;
+			top: -0.35rem;
+			right: -0.35rem;
+			width: 1.5rem;
+			height: 1.5rem;
+			min-width: 0;
+			padding: 0;
+			border: none;
+			border-radius: 50%;
+			background: rgb(var(--mdui-color-error));
+			color: rgb(var(--mdui-color-on-error));
+			font-size: 0.95rem;
+			line-height: 1;
+			cursor: pointer;
+			display: none;
+		}
+
+		.guide-tiles.is-editing .guide-tile-remove {
+			display: grid;
+			place-items: center;
+		}
+
+		/* 拖动排序：编辑态才允许 */
+		.guide-tile[draggable='true'] {
+			cursor: grab;
+		}
+
+		.guide-tile.is-dragging {
+			opacity: 0.45;
+		}
+
+		.guide-tile.is-dropzone {
+			outline: 2px dashed rgb(var(--mdui-color-primary));
+			outline-offset: -2px;
+		}
+
+		.guide-fab {
+			position: fixed;
+			right: 1.25rem;
+			bottom: 1.25rem;
+			z-index: 2;
+			--mdui-comp-fab-icon-size: 1.25rem;
+		}
+
+		/* 编辑态是个次要操作，不该用满色抢注意力 */
+		.guide-fab-icon {
+			--mdui-comp-icon-size: 1.25rem;
+		}
+
+		/* ------------------------------------------------------ 设置面板 */
+
+	.guide-set-dialog .set-group {
+		display: grid;
+		gap: 0.5rem;
+		margin-bottom: 1.1rem;
+	}
+
+	.set-group-title {
+		margin: 0;
+		color: rgb(var(--mdui-color-on-surface-variant));
+		font-size: var(--mdui-typescale-label-medium-size);
+		font-weight: 500;
+	}
+
+	.set-note {
+		margin: 0;
+		line-height: 1.5;
+	}
+
+	.set-row {
+		display: flex;
+		gap: 0.4rem;
+	}
+
+	/* 主题色色板 */
+	.set-swatches {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.55rem;
+	}
+
+	.set-swatch {
+		width: 2rem;
+		height: 2rem;
+		padding: 0;
+		border: 2px solid transparent;
+		border-radius: 50%;
+		cursor: pointer;
+		box-shadow: inset 0 0 0 1px rgb(var(--mdui-color-outline-variant));
+		transition: transform var(--mdui-motion-duration-short2);
+	}
+
+	.set-swatch:hover {
+		transform: scale(1.08);
+	}
+
+	.set-swatch.is-on {
+		border-color: rgb(var(--mdui-color-on-surface));
+	}
+
+	.set-swatch:focus-visible {
+		outline: 2px solid rgb(var(--mdui-color-primary));
+		outline-offset: 2px;
+	}
+
+	.set-modes {
+		justify-self: start;
+	}
+
+	/* 壁纸缩略图 */
+	.set-walls {
+		display: grid;
+		grid-template-columns: repeat(auto-fill, minmax(3.6rem, 1fr));
+		gap: 0.5rem;
+	}
+
+	.set-wall {
+		aspect-ratio: 1;
+		padding: 0;
+		border: 2px solid transparent;
+		border-radius: var(--mdui-shape-corner-small);
+		background-color: rgb(var(--mdui-color-surface-container-highest));
+		background-size: cover;
+		background-position: center;
+		cursor: pointer;
+		box-shadow: inset 0 0 0 1px rgb(var(--mdui-color-outline-variant));
+	}
+
+	.set-wall.is-on {
+		border-color: rgb(var(--mdui-color-primary));
+	}
+
+	.set-wall:focus-visible {
+		outline: 2px solid rgb(var(--mdui-color-primary));
+		outline-offset: 2px;
+	}
+
+	.set-upload {
+		justify-self: start;
+	}
+
+	.set-danger {
+		padding-top: 0.4rem;
+		border-top: 1px solid rgb(var(--mdui-color-outline-variant));
+	}
+
+	
+
+	/* 导入/导出条：只在编辑态出现 */
+	.guide-io {
+		display: flex;
+		gap: 0.5rem;
+		margin-top: -1.5rem;
+	}
+
+	.guide-io-detail {
+		max-width: 32rem;
+		margin-bottom: 0.75rem;
+		line-height: 1.6;
+		white-space: pre-wrap;
+		word-break: break-word;
+	}
+
+	.guide-hint {
+			color: rgb(var(--mdui-color-on-surface-variant));
+			font-size: var(--mdui-typescale-body-small-size);
+			text-align: center;
+			max-width: 32rem;
+			line-height: 1.7;
+		}
+	</style>
+
+	<script>
+		import '../lib/icons';
+		import '@mdui/icons/search.js';
+		import '@mdui/icons/edit.js';
+		import '@mdui/icons/done-all.js';
+		import '@mdui/icons/refresh.js';
+		import '@mdui/icons/settings.js';
+		import {
+			defaultTiles,
+			guideCatalog,
+			guideTabs,
+			FALLBACK_GROUP,
+			siteIcon,
+			siteFallback,
+			siteFallbackColor,
+			serializeConfig,
+			parseConfig,
+			configFilename,
+			type TileConfig,
+			normalizeUrl,
+			resolveTarget,
+			tileAccess,
+			accessWarning,
+			accessNotice,
+			SEARCH_ENGINES,
+			pickEngine,
+			intlAvailable,
+			type SearchEngine,
+			netTargets,
+			parseSnapshot,
+			isStale,
+			describeOverall,
+			THEME_COLORS,
+			THEME_MODES,
+			WALLPAPERS,
+			MAX_CUSTOM_WALLPAPER_BYTES,
+			sanitizeScrub,
+			scrubFor,
+			type ThemeMode,
+			type NetSnapshot,
+			type LinkGroup,
+		} from '../data/guide';
+		import { siteIconMasks } from '../data/site-icons';
+
+		const $ = <T extends HTMLElement = HTMLElement>(id: string): T => {
+			const el = document.getElementById(id);
+			if (!el) throw new Error(`缺少元素 #${id}`);
+			return el as T;
+		};
+		type TextField = HTMLInputElement & { value: string };
+		type FabEl = HTMLElement & { label?: string };
+		/*
+		 * mdui-dialog **没有** show() / close() 方法，只能读写 open 属性 ——
+		 * 照着别的组件想当然地调 dialog.close() 会抛 "close is not a function"。
+		 * 关闭事件是 `closed`，不是 `close`。
+		 */
+		type DialogEl = HTMLElement & { open: boolean };
+		/*
+		 * mdui-menu-item 的 selected 在类型里是 **protected**（组件内部状态），
+		 * value 也是自定义属性，HTMLElement 上都不存在。
+		 * 这两处只能按组件的实际契约断言 —— 它确实支持这两个属性，
+		 * 见 node_modules/mdui/components/menu/menu-item.d.ts。
+		 */
+		type MenuItemEl = HTMLElement & { value: string; selected: boolean };
+
+		const STORE_KEY = 'jwwl:tiles';
+
+		interface Tile {
+			id: string;
+			title: string;
+			url: string;
+			icon: string;
+			group: LinkGroup;
+			/** Material Icons 组件名（如 'swap-horiz'）；有值就不走 favicon */
+			materialIcon?: string;
+		}
+
+		/** group 是否是已知的分类 key */
+		const knownGroup = (value: unknown): value is LinkGroup =>
+			guideTabs.some((tab) => tab.key === value);
+
+		/*
+		 * 读取本地磁贴。
+		 * 存坏数据 / 隐私模式 / 配额满都退回默认集合 —— 起始页不能因为
+		 * 读不到 localStorage 就白屏，那比没有自定义功能更糟。
+		 */
+		function load(): Tile[] {
+			try {
+				const raw = localStorage.getItem(STORE_KEY);
+				if (!raw) return [...defaultTiles];
+				const parsed = JSON.parse(raw) as unknown;
+				if (!Array.isArray(parsed)) return [...defaultTiles];
+				const clean = parsed.filter(
+					(item): item is Tile =>
+						!!item &&
+						typeof (item as Tile).id === 'string' &&
+						typeof (item as Tile).url === 'string',
+				);
+				/*
+				 * 老版本存的磁贴没有 group 字段（分 tabs 之前加的）。
+				 * 这里就地补上 —— 尽量按网址回查目录拿到原分类，
+				 * 查不到就丢进「实用工具」，别让磁贴凭空消失。
+				 */
+				return clean.map((tile) => {
+					if (knownGroup(tile.group)) return tile;
+					const matched = guideCatalog.find(
+						(link) => link.url.replace(/\/+$/, '') === tile.url.replace(/\/+$/, ''),
+					);
+					return { ...tile, group: matched?.group ?? FALLBACK_GROUP };
+				});
+			} catch {
+				return [...defaultTiles];
+			}
+		}
+
+		function save(tiles: Tile[]): void {
+			try {
+				localStorage.setItem(STORE_KEY, JSON.stringify(tiles));
+			} catch {
+				showHint('浏览器不允许本地存储，这次的改动不会被记住。');
+			}
+		}
+
+		let tiles = load();
+		let editing = false;
+
+		const hint = $('guideHint');
+
+		/** 分类 key → 该分类的网格容器 */
+		const grids = new Map<LinkGroup, HTMLElement>();
+		for (const panel of document.querySelectorAll<HTMLElement>('.guide-tiles[data-group]')) {
+			const key = panel.dataset.group;
+			if (knownGroup(key)) grids.set(key, panel);
+		}
+
+		function showHint(text: string): void {
+			hint.textContent = text;
+			hint.toggleAttribute('hidden', !text);
+		}
+
+		// ─────────────────────────────────────────────── 渲染
+
+		function render(): void {
+			for (const grid of grids.values()) grid.textContent = '';
+
+			for (const tile of tiles) {
+				const grid = grids.get(tile.group);
+				if (!grid) continue;
+
+				const item = document.createElement('a');
+				item.className = 'guide-tile';
+				item.href = normalizeUrl(tile.url);
+				/*
+				 * 起始页的磁贴一律**新标签页打开**。
+				 *
+				 * 起始页本身要一直留着 —— 用户是把它当浏览器主页用的，
+				 * 点开一个站点就把主页替换掉，等于毁掉这个页面的存在意义。
+				 *
+				 * noopener 是必须的：没有它，新页面能用 window.opener 反向
+				 * 操作本站（改 localStorage、跳转 location）。
+				 * noreferrer 是少把 Referer 泄露给对方。
+				 */
+				item.target = '_blank';
+				item.rel = 'noopener noreferrer';
+				item.setAttribute('role', 'listitem');
+
+				item.draggable = editing;
+				item.dataset.id = tile.id;
+
+				const box = document.createElement('span');
+				box.className = 'guide-tile-icon';
+				/*
+				 * 图标分两种，按 tile.materialIcon 有无分流：
+				 *
+				 * 1) materialIcon —— 主站自己的工具（/tools/*）。照抄 /tools 页面的画法，
+				 *    <mdui-icon-swap-horiz> 这种组件名由 src/lib/icons.ts 注册，
+				 *    跟主站完全一致。**不能走 favicon**：这些工具全在同一个域名下，
+				 *    按 host 取 favicon 会让 16 个磁贴显示成同一个站点图标
+				 *    （实测一排金色奖杯），用户明确说过别这样。
+				 *
+				 * 2) 其余一律用**本地** favicon（构建期抓好的，见 siteIcon）。
+				 *
+				 * favicon 之前是「先摆 emoji，favicon 加载成功再盖住」，现在整段删了：
+				 *  - 运行时读 https://站点/favicon.ico 失败率极高，
+				 *    每失败一次就在控制台留一条红色报错，一屏十几条；
+				 *  - 而且 emoji 和站点八竿子打不着（谁分得清 💻 是哪个系统），
+				 *    用户明确要求别用。
+				 * 拿不到本地图时，退回「标题首字 + 域名配色」的徽标。
+				 */
+				/*
+				 * 有 materialIcon 就到此为止 —— **绝不能**再往下走兜底分支。
+				 * 兜底那几行是 `box.textContent = ...`，赋值即清空所有子节点，
+				 * 会把刚插进去的 <mdui-icon-*> 抹掉（表现就是图标全变首字徽标）。
+				 */
+				let icon: string | null = null;
+				const materialName =
+					tile.materialIcon && /^[a-z0-9-]{1,40}$/.test(tile.materialIcon)
+						? tile.materialIcon
+						: null;
+				if (materialName) {
+					const glyph = document.createElement(`mdui-icon-${materialName}`);
+					glyph.setAttribute('aria-hidden', 'true');
+					box.appendChild(glyph);
+				} else if ((icon = siteIcon(tile.id, tile.url)) && siteIconMasks.includes(tile.id)) {
+					/*
+					 * 用 CSS mask 渲染，颜色跟着页面主题走。
+					 *
+					 * 这类 SVG 自带 `@media (prefers-color-scheme: dark)` 想自动适配，
+					 * 但 `<img>` 加载的 SVG 里，媒体查询是按**操作系统**配色方案算的，
+					 * 跟页面主题（.mdui-theme-dark）无关 —— 系统浅色 + 页面深色时，
+					 * 图标会是一团黑的、看不见。mask 则由 currentColor 决定，
+					 * 而 currentColor 继承自磁贴的文字色，两套主题都对。
+					 */
+					const mark = document.createElement('span');
+					mark.className = 'guide-tile-mask';
+					// 只写标准 mask：webkitMaskImage 已废弃，且站点本来
+					// 就依赖较新的浏览器特性（:has、MDUI 的现代色彩），老 Safari 无关紧要
+					mark.style.maskImage = `url("${icon}")`;
+					box.appendChild(mark);
+				} else if (icon) {
+					const img = document.createElement('img');
+					img.src = icon;
+					img.alt = '';
+					img.loading = 'lazy';
+					img.decoding = 'async';
+					// 图标已经统一成 128px 白底方图，加载基本是瞬时的
+					img.addEventListener('error', () => {
+						img.remove();
+						box.textContent = siteFallback(tile.title, tile.url);
+						box.style.background = siteFallbackColor(tile.url);
+						box.classList.add('is-monogram');
+					});
+					box.appendChild(img);
+				} else {
+					box.textContent = siteFallback(tile.title, tile.url);
+					box.style.background = siteFallbackColor(tile.url);
+					box.classList.add('is-monogram');
+				}
+
+				const label = document.createElement('span');
+				label.className = 'guide-tile-label';
+				label.textContent = tile.title;
+
+				/*
+				 * 网络前提标记。
+				 *
+				 * **只提示、不拦截** —— 校外点「需校园网」的磁贴照样跳过去，
+				 * 用户可能自己有 VPN、或者正开着移动热点。挡一下反而添堵。
+				 * 另外 unknown（还没测出来）不提示：不能因为没数据就吓人。
+				 */
+				const warning = accessWarning(tileAccess(tile.url), snapshot);
+				/*
+				 * 当前网络打不开时，点开前先问一句。
+				 *
+				 * 原本只是磁贴角标上一句「需校园网」，太容易被忽略；而真正需要
+				 * 提醒的时刻就是「正要打开的时候」。
+				 *
+				 * ⚠️ 只在探测**已经出结果**时才拦 —— snapshot.at 为 0 表示还没测完，
+				 * 这时候拦人纯属添堵（accessWarning 对 unknown 本来就返回 null）。
+				 */
+				if (warning) {
+					item.addEventListener('click', (event) => {
+						event.preventDefault();
+						askToOpen(tile, item.href);
+					});
+				}
+				if (warning) {
+					const flag = document.createElement('span');
+					flag.className = 'guide-tile-flag';
+					flag.textContent = warning;
+					item.appendChild(flag);
+				}
+
+				item.append(box, label);
+
+				if (editing) {
+					const remove = document.createElement('button');
+					remove.className = 'guide-tile-remove';
+					remove.type = 'button';
+					remove.textContent = '×';
+					remove.setAttribute('aria-label', `删除磁贴 ${tile.title}`);
+					remove.addEventListener('click', (event) => {
+						event.preventDefault();
+						event.stopPropagation();
+						tiles = tiles.filter((t) => t.id !== tile.id);
+						save(tiles);
+						render();
+					});
+					item.appendChild(remove);
+					item.draggable = true;
+				}
+
+				grid.appendChild(item);
+			}
+
+			/*
+			 * ⚠️ 这里不再放「添加磁贴」块。
+			 * 默认磁贴已经是 links.ts 的**全量**，再挂一个「添加」入口就得先有个
+			 * 候选池 —— 而候选池恰恰是被抱怨「链接都看不见」的根源：一半入口被藏在
+			 * 一个要主动点开、还得滚动才能看完的对话框里。既然全铺出来了，
+			 * 添加入口就没有存在意义。
+			 */
+			for (const grid of grids.values()) {
+				grid.classList.toggle('is-editing', editing);
+			}
+		}
+
+		// ─────────────────────────────────────────────── 搜索引擎
+
+		/*
+		 * 用户显式选的引擎。null = 没选过，走按网络自动挑。
+		 * 单独存一个 key，而不是存「当前引擎」—— 因为「自动」和「Bing」
+		 * 长得一样但意思完全不同：存了引擎就再也回不到自动模式。
+		 */
+		const ENGINE_KEY = 'jwwl:engine';
+
+		let chosenEngineId: string | null = ((): string | null => {
+			try {
+				const raw = localStorage.getItem(ENGINE_KEY);
+				return raw && SEARCH_ENGINES.some((e) => e.id === raw) ? raw : null;
+			} catch {
+				return null;
+			}
+		})();
+
+		function currentEngine(): SearchEngine {
+			return pickEngine(snapshot, chosenEngineId);
+		}
+
+		const engineButton = $('engineButton');
+		const enginePop = $('enginePop');
+		const engineMark = $('engineMark');
+		const engineNote = $('engineNote');
+		const engineMenu = $('engineMenu');
+
+		/*
+		 * ⚠️ 这里**不再**用 mdui-select：程序化写 .value 会异步派发 change
+		 * （实测赋值后约 2ms 到达，比微任务晚），于是 renderEngine() 里的赋值
+		 * 会反过来触发 change 监听，把自动挑出来的引擎当成「用户手动选的」
+		 * 写进存储 —— 自动模式第一帧就固化了，之后再也不跟着网络变。
+		 *
+		 * 改用 mdui-menu：选中状态交给 menu-item 的 selected 自己管，
+		 * 根本不存在「程序化赋值被当成用户操作」这个问题。
+		 */
+		function renderEngineMenu(): void {
+			const active = currentEngine().id;
+			const header = engineMenu.querySelector('mdui-list-subheader');
+			engineMenu.textContent = '';
+			if (header) engineMenu.appendChild(header);
+			for (const engine of SEARCH_ENGINES) {
+				const item = document.createElement('mdui-menu-item') as unknown as MenuItemEl;
+				item.value = engine.id;
+				item.selected = engine.id === active;
+
+				const icon = document.createElement('span');
+				icon.className = 'engine-item-icon';
+				icon.slot = 'icon';
+				const img = document.createElement('img');
+				img.src = engine.icon;
+				img.alt = '';
+				icon.appendChild(img);
+
+				item.append(icon, engine.name);
+				engineMenu.appendChild(item);
+			}
+		}
+
+		function renderEngine(): void {
+			const engine = currentEngine();
+
+			engineMark.textContent = '';
+			const mark = document.createElement('img');
+			mark.src = engine.icon;
+			mark.alt = engine.name;
+			engineMark.appendChild(mark);
+
+			/*
+			 * placeholder 跟着当前引擎走（Firefox 就是「使用Bing搜索，或者输入网址」），
+			 * 用户不用点开浮层也知道现在搜的是哪家。
+			 */
+			($('guideInput') as unknown as TextField).placeholder = `使用${engine.name}搜索，或者输入网址`;
+
+			const blocked = Boolean(engine.intl && !intlAvailable(snapshot) && snapshot.at);
+			engineButton.setAttribute(
+				'aria-label',
+				blocked ? `搜索引擎：${engine.name}，当前网络可能打不开` : `搜索引擎：${engine.name}`,
+			);
+			engineButton.title = blocked ? `${engine.name} 需要国际互联网` : engine.name;
+
+			// 提示文字：说清楚「为什么是这个引擎」
+			if (chosenEngineId) {
+				engineNote.textContent = blocked
+					? `${engine.name} 需要国际互联网，当前网络可能打不开`
+					: `已手动选择 ${engine.name}`;
+			} else {
+				engineNote.textContent = intlAvailable(snapshot)
+					? '国际互联网可用，默认 Google'
+					: snapshot.at
+						? '国际互联网不畅，默认 Bing'
+						: '默认 Bing（检测后可能改用 Google）';
+			}
+			// 自动模式下没必要给「恢复自动」这个按钮
+			$('engineReset').toggleAttribute('hidden', !chosenEngineId);
+			renderEngineMenu();
+		}
+
+		function setEnginePop(open: boolean): void {
+			enginePop.toggleAttribute('hidden', !open);
+			engineButton.setAttribute('aria-expanded', String(open));
+		}
+
+		engineButton.addEventListener('click', () => {
+			setEnginePop(enginePop.hasAttribute('hidden'));
+		});
+
+		/*
+		 * ⚠️ mdui-menu 的 change 是从 **menu 自己**发出来的
+		 * （源码里是 `this.emit('change')`，见 menu.js 的 onSelectedKeysChange），
+		 * 事件目标是 menu 而不是被点的 menu-item。所以引擎要从
+		 * **menu 自身的 value** 上读，读 event.target.value 永远是 undefined。
+		 *
+		 * 另外 menu 在初始同步 value 时不会 emit（源码里的 isInitial 判断），
+		 * 所以「程序化渲染列表」不会误触发这里。
+		 */
+		type MenuEl = HTMLElement & { value: string };
+
+		engineMenu.addEventListener('change', () => {
+			const picked = (engineMenu as MenuEl).value;
+			if (!picked || !SEARCH_ENGINES.some((e) => e.id === picked)) return;
+			chosenEngineId = picked;
+			try {
+				localStorage.setItem(ENGINE_KEY, picked);
+			} catch {
+				// 存不住只是下次要重选，不影响这次能用
+			}
+			setEnginePop(false);
+			renderEngine();
+			// 焦点还给按钮，否则连按 Tab 会跳到磁贴、跳不回搜索框
+			engineButton.focus();
+		});
+
+		$('engineReset').addEventListener('click', () => {
+			chosenEngineId = null;
+			try {
+				localStorage.removeItem(ENGINE_KEY);
+			} catch {
+				// 同上
+			}
+			renderEngine();
+		});
+
+		// 点浮层外面就关掉；Esc 也关。少了这一步浮层会一直挂在屏幕上。
+		document.addEventListener('click', (event) => {
+			if (enginePop.hasAttribute('hidden')) return;
+			const target = event.target as Node | null;
+			if (target && !enginePop.contains(target) && !engineButton.contains(target)) {
+				setEnginePop(false);
+			}
+		});
+
+		document.addEventListener('keydown', (event) => {
+			if (event.key !== 'Escape' || enginePop.hasAttribute('hidden')) return;
+			setEnginePop(false);
+			engineButton.focus();
+		});
+
+		// ─────────────────────────────────────────────── 设置
+
+		/*
+		 * 外观偏好全部存 localStorage，键名带 jwwl: 前缀，与主站分开 ——
+		 * 将来这个页面拆成独立仓库、单独部署时互不干扰。
+		 */
+		const PREF = {
+			color: 'jwwl:color',
+			mode: 'jwwl:mode',
+			wall: 'jwwl:wall',
+			scrub: 'jwwl:scrub',
+			customWall: 'jwwl:wall-custom',
+		} as const;
+
+		const readPref = (key: string): string | null => {
+			try {
+				return localStorage.getItem(key);
+			} catch {
+				return null;
+			}
+		};
+		const writePref = (key: string, value: string | null): void => {
+			try {
+				if (value === null) localStorage.removeItem(key);
+				else localStorage.setItem(key, value);
+			} catch {
+				// 隐私模式：设置这次生效，刷新后不保留
+			}
+		};
+
+		let themeMode: ThemeMode = 'auto';
+		if ((['auto', 'light', 'dark'] as const).includes(readPref(PREF.mode) as ThemeMode)) {
+			themeMode = readPref(PREF.mode) as ThemeMode;
+		}
+		let themeColor = THEME_COLORS[0].value;
+		if (THEME_COLORS.some((c) => c.value === readPref(PREF.color))) themeColor = readPref(PREF.color)!;
+		let wallpaper: string = WALLPAPERS.some((w) => w.value === readPref(PREF.wall))
+			? readPref(PREF.wall)!
+			: 'none';
+		let scrubLight = sanitizeScrub(readPref(PREF.scrub));
+
+		/** 自定义壁纸是 data URL，只存在本机，不外传 */
+		const customWall = (): string | null => {
+			const value = readPref(PREF.customWall);
+			return value && value.startsWith('data:image/') ? value : null;
+		};
+
+		function effectiveWall(): string {
+			return wallpaper === 'custom' && customWall() ? `url("${customWall()}")` : (WALLPAPERS.find((w) => w.value === wallpaper)?.css ?? '');
+		}
+
+		function effectiveScrub(): number {
+			return scrubFor(themeMode, scrubLight);
+		}
+
+		/**
+		 * 把背景与遮罩真正应用到页面上。
+		 *
+		 * 用 CSS 变量而不是每次去改 background-image，好处是切换主题模式时
+		 * 只需要更新一个变量，壁纸不必重算。
+		 */
+		function applyWallpaper(): void {
+			const root = document.documentElement;
+			root.style.setProperty('--guide-wall', effectiveWall() || 'none');
+			root.style.setProperty('--guide-scrub', String(effectiveScrub()));
+			$('setScrubValue').textContent = `${Math.round(effectiveScrub() * 100)}%`;
+		}
+
+		function applyTheme(): void {
+			const root = document.documentElement;
+			root.classList.remove('mdui-theme-auto', 'mdui-theme-light', 'mdui-theme-dark');
+			root.classList.add(`mdui-theme-${themeMode}`);
+			// 种子色交给 mdui 生成整套 MD3 色调板，别手写每组色值
+			// mdui 由 /vendor/mdui/mdui.global.js 挂到 window 上，没有类型声明
+			const api = (window as unknown as { mdui?: { setColorScheme?: (c: string) => void } }).mdui;
+			api?.setColorScheme?.(themeColor);
+		}
+
+		// 主题色色板
+		const swatches = $('setSwatches');
+		for (const color of THEME_COLORS) {
+			const btn = document.createElement('button');
+			btn.type = 'button';
+			btn.className = 'set-swatch';
+			btn.style.background = color.value;
+			btn.dataset.value = color.value;
+			btn.title = color.label;
+			btn.setAttribute('aria-label', `主题色 ${color.label}`);
+			btn.addEventListener('click', () => {
+				themeColor = color.value;
+				writePref(PREF.color, color.value);
+				applyTheme();
+				syncSettings();
+			});
+			swatches.appendChild(btn);
+		}
+
+		// 外观模式
+		const modes = $('setModes');
+		for (const mode of THEME_MODES) {
+			const btn = document.createElement('mdui-segmented-button');
+			btn.value = mode.value;
+			btn.textContent = mode.label;
+			btn.addEventListener('click', () => {
+				themeMode = mode.value;
+				writePref(PREF.mode, mode.value);
+				applyTheme();
+				applyWallpaper();
+				syncSettings();
+			});
+			modes.appendChild(btn);
+		}
+
+		// 壁纸
+		const walls = $('setWalls');
+		for (const wall of WALLPAPERS) {
+			const btn = document.createElement('button');
+			btn.type = 'button';
+			btn.className = 'set-wall';
+			btn.dataset.value = wall.value;
+			btn.title = wall.label;
+			btn.setAttribute('aria-label', `壁纸 ${wall.label}`);
+			if (wall.css) btn.style.backgroundImage = wall.css;
+			btn.addEventListener('click', () => {
+				wallpaper = wall.value;
+				writePref(PREF.wall, wall.value);
+				applyWallpaper();
+				syncSettings();
+			});
+			walls.appendChild(btn);
+		}
+
+		// 自定义壁纸
+		$('setWallUpload').addEventListener('click', () => {
+			($('setWallFile') as unknown as HTMLInputElement).click();
+		});
+		($('setWallFile') as unknown as HTMLInputElement).addEventListener('change', async (event) => {
+			const input = event.target as HTMLInputElement;
+			const file = input.files?.[0];
+			input.value = '';
+			if (!file) return;
+			if (file.size > MAX_CUSTOM_WALLPAPER_BYTES) {
+				showHint(`这张图 ${(file.size / 1024 / 1024).toFixed(1)}MB 太大了，限 2MB。`);
+				return;
+			}
+			const dataUrl = await new Promise<string>((resolve, reject) => {
+				const reader = new FileReader();
+				reader.onload = () => resolve(String(reader.result));
+				reader.onerror = () => reject(reader.error);
+				reader.readAsDataURL(file);
+			});
+			writePref(PREF.customWall, dataUrl);
+			wallpaper = 'custom';
+			writePref(PREF.wall, 'custom');
+			applyWallpaper();
+			syncSettings();
+		});
+
+		// 遮罩浓度：change 是失焦才触发，拖动过程要用 input 才跟手
+		const scrubSlider = $('setScrub') as unknown as { value: number; addEventListener: Function };
+		const onScrub = (save: boolean) => {
+			scrubLight = sanitizeScrub(scrubSlider.value);
+			writePref(PREF.scrub, save ? String(scrubLight) : null);
+			applyWallpaper();
+		};
+		scrubSlider.addEventListener('input', () => onScrub(false));
+		scrubSlider.addEventListener('change', () => onScrub(true));
+
+		/** 设置面板的当前值要反映到控件上（打开面板、切主题后都会调） */
+		function syncSettings(): void {
+			for (const btn of swatches.querySelectorAll<HTMLElement>('.set-swatch')) {
+				const on = btn.dataset.value === themeColor;
+				btn.classList.toggle('is-on', on);
+				btn.setAttribute('aria-pressed', String(on));
+			}
+			for (const btn of modes.querySelectorAll<HTMLElement>('mdui-segmented-button')) {
+				if ((btn as unknown as { value: string }).value === themeMode) {
+					btn.setAttribute('checked', '');
+					btn.setAttribute('aria-selected', 'true');
+				} else {
+					btn.removeAttribute('checked');
+					btn.removeAttribute('aria-selected');
+				}
+			}
+			for (const btn of walls.querySelectorAll<HTMLElement>('.set-wall')) {
+				const on = btn.dataset.value === wallpaper;
+				btn.classList.toggle('is-on', on);
+				btn.setAttribute('aria-pressed', String(on));
+			}
+			scrubSlider.value = effectiveScrub();
+			const custom = customWall();
+			$('setWallNote').textContent = custom
+				? `已使用自定义壁纸（${(custom.length / 1024).toFixed(0)}KB，存于本机）。`
+				: '照片建议选暗一点的，否则文字会看不清；也可以调高遮罩。';
+			$('setNetState').textContent = snapshot.at
+				? `上次检测：${new Date(snapshot.at).toLocaleString('zh-CN')}　${netVerdict().text}`
+				: '还没有检测记录。';
+		}
+
+		const setDialog = $('setDialog') as DialogEl;
+		const openSettings = (): void => {
+			syncSettings();
+			setDialog.open = true;
+		};
+		$('setButton').addEventListener('click', openSettings);
+		$('setDone').addEventListener('click', () => {
+			setDialog.open = false;
+		});
+		$('setNetCheck').addEventListener('click', async () => {
+			$('setNetState').textContent = '检测中…';
+			await runNetCheck();
+			syncSettings();
+		});
+		// 设置里的导入/导出与编辑态共用同一套逻辑
+		$('setExport').addEventListener('click', () => exportConfig());
+		$('setImport').addEventListener('click', () => pickConfigFile());
+		$('setReset').addEventListener('click', () => {
+			for (const key of [PREF.color, PREF.mode, PREF.wall, PREF.scrub, PREF.customWall]) {
+				writePref(key, null);
+			}
+			themeMode = 'auto';
+			themeColor = THEME_COLORS[0].value;
+			wallpaper = 'none';
+			scrubLight = sanitizeScrub(null);
+			tiles = [...defaultTiles];
+			chosenEngineId = null;
+			try {
+				localStorage.removeItem(STORE_KEY);
+				localStorage.removeItem(ENGINE_KEY);
+			} catch {
+				// 存不住就算了
+			}
+			applyTheme();
+			applyWallpaper();
+			renderEngine();
+			render();
+			syncSettings();
+			showHint('已恢复默认链接与外观。');
+		});
+
+		// 首次进入就把偏好应用到页面（主题脚本在 <head> 里已跑过，这里补齐壁纸）
+		applyTheme();
+		applyWallpaper();
+
+		// ─────────────────────────────────────── 打不开时的确认弹窗
+
+		const warnDialog = $('warnDialog') as DialogEl;
+		/** 待确认打开的网址 */
+		let pendingUrl: string | null = null;
+
+		function askToOpen(tile: Tile, href: string): void {
+			pendingUrl = href;
+			$('warnText').textContent =
+				accessNotice(tileAccess(tile.url), tile.title) ??
+				`「${tile.title}」现在可能打不开。要试试吗？`;
+			warnDialog.open = true;
+		}
+
+		$('warnCancel').addEventListener('click', () => {
+			pendingUrl = null;
+			warnDialog.open = false;
+		});
+
+		$('warnGo').addEventListener('click', () => {
+			const url = pendingUrl;
+			pendingUrl = null;
+			warnDialog.open = false;
+			if (url) window.open(url, '_blank', 'noopener,noreferrer');
+		});
+
+		// ─────────────────────────────────────────────── 导入 / 导出
+
+		const ioDialog = $('ioDialog') as DialogEl;
+		/** 待确认的导入结果；确认前绝不碰现有数据 */
+		let pendingImport: Extract<ReturnType<typeof parseConfig>, { tiles: TileConfig[] }> | null = null;
+
+		function exportConfig(): void {
+			const json = serializeConfig(tiles, chosenEngineId, new Date());
+			// Blob + 临时 <a download>，全程本地，不上传任何东西
+			const url = URL.createObjectURL(new Blob([json], { type: 'application/json' }));
+			const link = document.createElement('a');
+			link.href = url;
+			link.download = configFilename(new Date());
+			link.click();
+			// 立刻 revoke 会让部分浏览器来不及开始下载
+			setTimeout(() => URL.revokeObjectURL(url), 10_000);
+			showHint(`已导出 ${tiles.length} 条链接（不含图标文件，导入方按网址匹配本地图标）。`);
+		}
+
+		function pickConfigFile(): void {
+			($('ioFile') as unknown as HTMLInputElement).click();
+		}
+
+		$('ioExport').addEventListener('click', exportConfig);
+		$('ioImport').addEventListener('click', pickConfigFile);
+
+		const ioFile = $('ioFile') as unknown as HTMLInputElement;
+		ioFile.addEventListener('change', async () => {
+			const file = ioFile.files?.[0];
+			// 重置 value，否则连续导入同一个文件不会再触发 change
+			ioFile.value = '';
+			if (!file) return;
+			if (file.size > 1024 * 1024) {
+				showHint('这个文件超过 1MB，不像是我导出的配置。');
+				return;
+			}
+			let text: string;
+			try {
+				text = await file.text();
+			} catch {
+				showHint('读不出这个文件。');
+				return;
+			}
+			const result = parseConfig(text);
+			if ('error' in result) {
+				showHint(`导入失败：${result.error}`);
+				return;
+			}
+			pendingImport = result;
+			const when = result.exportedAt
+				? new Date(result.exportedAt).toLocaleString('zh-CN')
+				: '未知时间';
+			$('ioSummary').textContent =
+				`将用「${when}」导出的 ${result.tiles.length} 条链接，` +
+				`**整份替换**掉当前的 ${tiles.length} 条（含顺序）。此操作不可撤销。`;
+			$('ioDetail').textContent = result.dropped.length
+				? `有 ${result.dropped.length} 条被丢弃：\n${result.dropped.slice(0, 8).join('\n')}` +
+					(result.dropped.length > 8 ? `\n…… 另有 ${result.dropped.length - 8} 条` : '')
+				: '没有条目被丢弃。';
+			ioDialog.open = true;
+		});
+
+		$('ioCancel').addEventListener('click', () => {
+			pendingImport = null;
+			ioDialog.open = false;
+		});
+
+		$('ioConfirm').addEventListener('click', () => {
+			if (!pendingImport) return;
+			tiles = pendingImport.tiles.map((tile) => ({ ...tile }) as Tile);
+			chosenEngineId = pendingImport.engine;
+			try {
+				localStorage.setItem(STORE_KEY, JSON.stringify(tiles));
+				if (chosenEngineId) localStorage.setItem(ENGINE_KEY, chosenEngineId);
+				else localStorage.removeItem(ENGINE_KEY);
+			} catch {
+				// 存不住也先把界面更新，刷新后会回到旧数据
+			}
+			pendingImport = null;
+			ioDialog.open = false;
+			renderEngine();
+			render();
+			showHint(`已导入 ${tiles.length} 条链接。`);
+		});
+
+		// ─────────────────────────────────────────────── 搜索 / 输网址
+
+		function go(target: string): void {
+			// 判定逻辑放在 data/guide.ts（纯函数，Node 里可测，见 scripts/guide-test.mjs）
+			const next = resolveTarget(target, currentEngine());
+			if (next) window.location.href = next;
+		}
+
+		$('guideForm').addEventListener('submit', (event) => {
+			event.preventDefault();
+			go(($('guideInput') as unknown as TextField).value);
+		});
+
+		// ─────────────────────────────────────────────── 网络检测
+
+		const NET_KEY = 'jwwl:net';
+
+		/** 当前网络快照。render() 要读它给磁贴打「需校园网 / 境外」标记 */
+		let snapshot: NetSnapshot = parseSnapshot(
+			((): string | null => {
+				try {
+					return localStorage.getItem(NET_KEY);
+				} catch {
+					return null;
+				}
+			})(),
+		);
+
+		function saveSnapshot(): void {
+			try {
+				localStorage.setItem(NET_KEY, JSON.stringify(snapshot));
+			} catch {
+				// 隐私模式：只是检测结果记不住，不影响使用
+			}
+		}
+
+		/**
+		 * 探一个地址。
+		 *
+		 * - `cors`：对方带 Access-Control-Allow-Origin，能明确区分「有响应」与
+		 *   「网络不通」。返回 404 / 500 也算通 —— 说明服务器确实应答了。
+		 * - `no-cors`：拿到不透明响应，但 resolve 同样代表「连上了」，reject 代表
+		 *   根本没连到（DNS 解析失败 / 连不上 / TLS 失败）。
+		 *
+		 * 两种模式都要自己掐超时：校外访问校内地址解析失败会很快返回，
+		 * 但若解析出一个不可路由的地址，TCP 握手会一直挂着。
+		 */
+		async function probe(url: string, mode: 'cors' | 'no-cors', timeoutMs: number): Promise<boolean> {
+			const controller = new AbortController();
+			const timer = setTimeout(() => controller.abort(), timeoutMs);
+			try {
+				await fetch(url, {
+					method: 'GET',
+					mode,
+					cache: 'no-store',
+					redirect: 'follow',
+					referrerPolicy: 'no-referrer',
+					signal: controller.signal,
+				});
+				return true;
+			} catch {
+				return false;
+			} finally {
+				clearTimeout(timer);
+			}
+		}
+
+		/** 按顺序试候选地址，任一通即可（个别站点宕机不至于误报） */
+		async function probeTarget(target: (typeof netTargets)[number]): Promise<boolean> {
+			for (const candidate of target.probes) {
+				if (await probe(candidate.url, candidate.mode, target.timeoutMs)) return true;
+			}
+			return false;
+		}
+
+		/**
+		 * 探测结果目前**只存在内存/缓存里，不常驻显示**。
+		 *
+		 * 它唯一的用途是：点击某个「当前网络打不开」的磁贴时，决定要不要先问一句。
+		 * 需要手动重测的话，设置面板里有按钮。
+		 */
+		function netVerdict(): { text: string; tone: 'ok' | 'warn' | 'muted' } {
+			return describeOverall(snapshot);
+		}
+
+		async function runNetCheck(): Promise<void> {
+			for (const target of netTargets) snapshot[target.id] = 'checking';
+			const settled = await Promise.all(
+				netTargets.map(async (target) => {
+					const ok = await probeTarget(target);
+					return [target.id, ok ? ('ok' as const) : ('fail' as const)] as const;
+				}),
+			);
+			for (const [id, state] of settled) snapshot[id] = state;
+			snapshot.at = Date.now();
+			saveSnapshot();
+			// 引擎默认值取决于国际互联网通不通，得跟着更新
+			renderEngine();
+			/*
+			 * 重画磁贴：「需校园网 / 境外」标记取决于刚测出来的结果。
+			 * 不重画的话要等到下次刷新页面才看到。
+			 */
+			render();
+		}
+
+
+		// 只在缓存过期时自动测一次，避免每次打开都打三个外部请求
+		renderEngine();
+		if (isStale(snapshot, Date.now())) void runNetCheck();
+
+
+		// ─────────────────────────────────────────────── 编辑态
+
+		const fab = $('guideFab') as FabEl;
+		const ioBar = $('guideIo');
+		fab.addEventListener('click', () => {
+			editing = !editing;
+			// 导入/导出跟着编辑态一起显隐
+			ioBar.toggleAttribute('hidden', !editing);
+			fab.innerHTML = editing
+				? '<mdui-icon-done-all slot="icon"></mdui-icon-done-all>'
+				: '<mdui-icon-edit slot="icon"></mdui-icon-edit>';
+			fab.setAttribute('aria-label', editing ? '完成编辑' : '编辑磁贴');
+			render();
+			showHint(
+				editing
+					? '编辑中：点磁贴右上角的 × 删除，按住磁贴可以拖动排序。'
+					: '',
+			);
+		});
+
+		// ─────────────────────────────────────────────── 拖动排序
+
+		let dragId: string | null = null;
+
+		/*
+		 * 排序只在**同一个分类内**进行。
+		 * tiles 是一个扁平数组，磁贴按分类分散在各个面板里，
+		 * 所以先取出这个分类在数组里的槽位下标，在槽位内部重排 ——
+		 * 直接对整个数组 splice 会把别的分类的磁贴也搅乱。
+		 */
+		function reorderWithin(group: LinkGroup, overId: string): void {
+			const slots = tiles.reduce<number[]>((acc, tile, i) => {
+				if (tile.group === group) acc.push(i);
+				return acc;
+			}, []);
+			const inGroup = slots.map((slot) => tiles[slot]);
+			const from = inGroup.findIndex((t) => t.id === dragId);
+			const to = inGroup.findIndex((t) => t.id === overId);
+			if (from < 0 || to < 0) return;
+			const reordered = [...inGroup];
+			const [moved] = reordered.splice(from, 1);
+			reordered.splice(to, 0, moved);
+			const next = [...tiles];
+			slots.forEach((slot, i) => {
+				next[slot] = reordered[i];
+			});
+			tiles = next;
+			save(tiles);
+			render();
+		}
+
+		for (const grid of grids.values()) {
+			grid.addEventListener('dragstart', (event) => {
+				const tile = (event.target as HTMLElement | null)?.closest('.guide-tile') as HTMLElement | null;
+				if (!editing || !tile) return;
+				dragId = tile.dataset.id ?? null;
+				tile.classList.add('is-dragging');
+				event.dataTransfer?.setData('text/plain', dragId ?? '');
+				if (event.dataTransfer) event.dataTransfer.effectAllowed = 'move';
+			});
+
+			grid.addEventListener('dragover', (event) => {
+				if (!editing || !dragId) return;
+				event.preventDefault();
+				const over = (event.target as HTMLElement | null)?.closest('.guide-tile') as HTMLElement | null;
+				for (const el of grid.querySelectorAll('.is-dropzone')) el.classList.remove('is-dropzone');
+				// 「添加」按钮没有 data-id，别把它当落点
+				if (over && over.dataset.id && over.dataset.id !== dragId) {
+					over.classList.add('is-dropzone');
+				}
+			});
+
+			grid.addEventListener('drop', (event) => {
+				if (!editing || !dragId) return;
+				event.preventDefault();
+				const over = (event.target as HTMLElement | null)?.closest('.guide-tile') as HTMLElement | null;
+				const targetId = over?.dataset.id;
+				if (!targetId || targetId === dragId) return;
+				const group = grid.dataset.group;
+				if (!knownGroup(group)) return;
+				reorderWithin(group, targetId);
+			});
+
+			grid.addEventListener('dragend', () => {
+				dragId = null;
+				for (const el of grid.querySelectorAll('.is-dropzone, .is-dragging')) {
+					el.classList.remove('is-dropzone', 'is-dragging');
+				}
+			});
+		}
+
+		// 离开页面时如果还在编辑态，滚回去会看到半屏删除按钮，先复位
+		window.addEventListener('pagehide', () => {
+			if (!editing) return;
+			editing = false;
+			ioBar.setAttribute('hidden', '');
+			fab.innerHTML = '<mdui-icon-edit slot="icon"></mdui-icon-edit>';
+			render();
+		});
+
+		render();
+	</script>
+</Base>

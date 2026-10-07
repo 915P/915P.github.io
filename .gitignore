@@ -37,3 +37,7 @@ CLAUDE.md
 
 # 站长维护指南（仅本地，不进入仓库）
 STATION-GUIDE.md
+scripts/.icons-state.json
+
+# 导出的私有链接配置（含校内裸 IP，**不要提交**）
+private/
