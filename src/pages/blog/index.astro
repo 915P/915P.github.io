@@ -1,13 +1,11 @@
 ---
 import { getCollection } from 'astro:content';
 import Page from '../../layouts/Page.astro';
+import { formatDate } from '../../lib/date';
 
 const posts = (await getCollection('blog', ({ data }) => !data.draft)).sort(
 	(a, b) => b.data.pubDate.valueOf() - a.data.pubDate.valueOf(),
 );
-
-const fmt = (d: Date) =>
-	d.toLocaleDateString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit' });
 ---
 
 <Page title="博客" active="blog">
@@ -58,7 +56,7 @@ const fmt = (d: Date) =>
 							datetime={p.data.pubDate.toISOString()}
 							class="text-xs faint post-date"
 						>
-							{fmt(p.data.pubDate)}
+							{formatDate(p.data.pubDate)}
 						</time>
 					</mdui-list-item>
 				))}
@@ -113,23 +111,3 @@ const fmt = (d: Date) =>
 	}
 </style>
 
-<style is:global>
-	.post-card {
-		display: block;
-		padding: 1.1rem 1.25rem;
-		border-radius: var(--mdui-shape-corner-large);
-		background-color: rgb(var(--mdui-color-surface-container-low));
-		text-decoration: none;
-		transition: background-color var(--mdui-motion-duration-short2);
-	}
-
-	.post-card:hover {
-		background-color: rgb(var(--mdui-color-surface-container));
-	}
-
-	.post-title {
-		font-size: var(--mdui-typescale-title-medium-size);
-		font-weight: 600;
-		color: rgb(var(--mdui-color-on-surface));
-	}
-</style>

@@ -3,15 +3,13 @@ import Page from '../layouts/Page.astro';
 import ToolCard from '../components/ToolCard.astro';
 import { allTools } from '../data/tools';
 import { getCollection } from 'astro:content';
+import { formatDate } from '../lib/date';
 
 const posts = (await getCollection('blog', ({ data }) => !data.draft))
 	.sort((a, b) => b.data.pubDate.valueOf() - a.data.pubDate.valueOf())
 	.slice(0, 2);
 
 const featured = allTools.slice(0, 3);
-
-const fmt = (d: Date) =>
-	d.toLocaleDateString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric' });
 ---
 
 <Page title="915P的小站" active="home">
@@ -67,7 +65,7 @@ const fmt = (d: Date) =>
 								class="text-xs faint"
 								style="white-space: nowrap"
 							>
-								{fmt(p.data.pubDate)}
+								{formatDate(p.data.pubDate)}
 							</time>
 						</a>
 					))}
