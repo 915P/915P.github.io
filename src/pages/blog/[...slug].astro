@@ -13,6 +13,10 @@ const { Content, headings } = await render(post);
 const fmt = (d: Date) =>
 	d.toLocaleDateString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric' });
 
+const hasUpdate =
+	post.data.updatedDate &&
+	post.data.updatedDate.getTime() > post.data.pubDate.getTime();
+
 const toc = headings.filter((h) => h.depth === 2);
 ---
 
@@ -32,6 +36,11 @@ const toc = headings.filter((h) => h.depth === 2);
 				<time datetime={post.data.pubDate.toISOString()} class="text-sm muted"
 					>{fmt(post.data.pubDate)}</time
 				>
+				{hasUpdate && (
+					<span class="text-sm muted" title={`更新于 ${fmt(post.data.updatedDate!)}`}>
+						· 已更新
+					</span>
+				)}
 				{
 					post.data.tags.map((t) => (
 						<mdui-chip variant="assist">
