@@ -10,6 +10,8 @@
  * （kind: 'transcode'），但页面默认不暴露，避免用户点一下等半小时。
  */
 
+export { formatBytes } from './format';
+
 /* ------------------------------------------------------------------ 类型 */
 
 export type MediaKind = 'video' | 'audio' | 'image' | 'unknown';
@@ -2018,14 +2020,6 @@ export function parseProbeLog(text: string): ProbeResult {
 	}
 	if (audio?.codec) result.audioCodec = audio.codec;
 	return result;
-}
-
-export function formatBytes(bytes: number): string {
-	if (!Number.isFinite(bytes) || bytes < 0) return '—';
-	if (bytes < 1024) return `${bytes} B`;
-	if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-	if (bytes < 1024 * 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
-	return `${(bytes / 1024 / 1024 / 1024).toFixed(2)} GB`;
 }
 
 /** ProbeResult 的简要摘要（拼接前的编码核对、兼容旧调用点用） */

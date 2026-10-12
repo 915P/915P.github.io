@@ -1,4 +1,5 @@
 import type { PDFFont, PDFDocument, PDFPage } from '@cantoo/pdf-lib';
+export { formatBytes } from './format';
 
 /*
  * PDF 工具箱的纯逻辑层。
@@ -82,14 +83,6 @@ function tick(): Promise<void> {
 
 function report(update: Progress | undefined, done: number, total: number, label: string): void {
 	update?.(done, total, label);
-}
-
-export function formatBytes(bytes: number): string {
-	if (!Number.isFinite(bytes) || bytes < 0) return '—';
-	if (bytes < 1024) return `${bytes} B`;
-	if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-	if (bytes < 1024 * 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
-	return `${(bytes / 1024 / 1024 / 1024).toFixed(2)} GB`;
 }
 
 export function formatPdfDate(date: Date | undefined): string {
