@@ -36,10 +36,16 @@ Part 2: Third-party components — their own licenses
 
 Third-party components bundled or mirrored in this repository (for example
 WebGL Fluid Simulation, pinyin data, barcode/QR libraries, KaTeX,
-html-to-image, CeJS, My Mind, pell, or the oscilloscope app) are NOT covered
-by the MIT license above. Each keeps its upstream license, including but not
-limited to MIT, Apache-2.0, BSD-3-Clause, CC BY 3.0/4.0 and the Unicode
-License v3.
+html-to-image, CeJS, My Mind, pell, the oscilloscope app, or the GeoGebra Math
+Apps bundle) are NOT covered by the MIT license above. Each keeps its upstream
+license, including but not limited to MIT, Apache-2.0, BSD-3-Clause,
+CC BY 3.0/4.0, CC BY-NC-SA 4.0, EUPL-1.2, the GeoGebra Non-Commercial License,
+and the Unicode License v3.
+
+Note in particular that the self-hosted GeoGebra bundle under
+public/apps/geogebra/ is a mixed-license, non-commercial distribution (EUPL-1.2
+for its source code, CC BY-NC-SA 4.0 for its language and UI files, and the
+GeoGebra Non-Commercial License for the bundle as a whole).
 
 See THIRD_PARTY_NOTICES.md (Chinese: THIRD_PARTY_NOTICES.zh-CN.md) for the full
 component-by-component statement.

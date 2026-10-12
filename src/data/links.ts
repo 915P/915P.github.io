@@ -664,12 +664,12 @@ export const navLinks: NavLink[] = [
 		group: 'toolbox',
 	},
 	{
-		id: 'tool-calculator',
-		title: '智能计算器',
-		desc: '四则运算与括号，不使用 eval',
-		url: '/tools/calculator/',
+		id: 'tool-geogebra',
+		title: 'GeoGebra',
+		desc: '函数作图、几何、3D、CAS 与统计的动态数学应用',
+		url: '/apps/geogebra/index.html',
 		icon: '🔧',
-		materialIcon: 'calculate',
+		materialIcon: 'functions',
 		group: 'toolbox',
 	},
 	{

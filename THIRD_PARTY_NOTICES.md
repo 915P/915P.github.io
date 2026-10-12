@@ -24,6 +24,8 @@ package metadata, not merely against claims in the local copies.
 | BSD-3-Clause | Permissive | Yes | Yes | No |
 | CC BY 3.0 | Content | Yes | Yes (state whether modified) | No (4.0 derivatives must use the same license) |
 | Unicode License v3 | Data | Yes | Yes (keep Unicode copyright, do not imply endorsement) | No |
+| EUPL-1.2 | Copyleft | Yes | Yes (keep notices; state modifications) | Yes (derivative Works stay EUPL-1.2; covered by a compatibility list) |
+| CC BY-NC-SA 4.0 | Content | **No** | Yes (state whether modified) | Yes (ShareAlike + NonCommercial) |
 
 ---
 
@@ -627,7 +629,55 @@ forever.
 
 ---
 
-## The site's own work
+## 17. GeoGebra Math Apps (Classic) ⚠️ **mixed license; non-commercial only**
+
+- **Location**: `public/apps/geogebra/` (self-hosted bundle)
+- **Entry point**: `/apps/geogebra/index.html` (linked from the tool index with status
+  `app`; the page is the upstream `GeoGebra.html`, not an Astro page)
+- **Upstream**: <https://www.geogebra.org> · <https://www.geogebra.org/download>
+- **Version**: 5.4.931.2 (Classic app, `web3d` module; bundles `web`, `web3d`
+  and `webSimple`)
+- **License**: **not a single license** — this distribution contains parts under
+  three different terms, per <https://www.geogebra.org/license>:
+  - **EUPL-1.2** — the GeoGebra **source code**, of which this bundle is a
+    compiled build (copyleft). Full text kept at
+    `public/apps/geogebra/LICENSE-EUPL-1.2.txt`
+  - **CC BY-NC-SA 4.0** — the GeoGebra **language files** (`*_keys_*.js`) and the
+    **user-interface image and style files** (logos, icons, stylesheets).
+    <https://creativecommons.org/licenses/by-nc-sa/4.0/legalcode.en>
+  - **GeoGebra Non-Commercial License Agreement** — the **installers / web
+    services / "Materials"**, i.e. this redistributed bundle *as a whole*
+- **Attribution**: **Made with GeoGebra®**, with an appropriate copyright notice
+  and a link to <https://www.geogebra.org>. Copyright © GeoGebra GmbH, Linz,
+  Austria
+- **Commercial use**: **prohibited** for the bundle as a whole. Only the isolated
+  source-code part is EUPL (which does allow commercial use); because language
+  files and UI assets are included, everything in this directory is limited to
+  non-commercial use. Commercial use requires a separate agreement with GeoGebra
+  GmbH (<mailto:office@geogebra.org>)
+- **Verified from**: the upstream license page <https://www.geogebra.org/license>
+  (which also states that the source code is EUPL-1.2 and the language files are
+  CC BY-NC-SA). The bundle itself ships only `README.txt`, no `LICENSE` file, so
+  the license page is the authoritative source
+- **Site modifications**: one only — the service-worker registration for the
+  absolute path `/sworker.js` was removed from `GeoGebra.html` (shipped as
+  `index.html`), since that path only exists at `geogebra.org`'s root. The change
+  is also recorded in `public/apps/geogebra/NOTICE.md`; all other files are
+  verbatim
+- **Notes**:
+  - This is a **distribution**, not runtime CDN loading (contrast §16.3's ffmpeg
+    boundary). The NonCommercial and ShareAlike terms therefore travel with this
+    directory. GeoGebra is **never relicensed under this site's MIT license**, and
+    these terms do not spread to the rest of the site (EUPL/CC obligations bind
+    derivative works of GeoGebra itself, not a mere aggregation beside it)
+  - Footprint: ~117 MB uncompressed, 434 files, which materially enlarges `dist/`
+    and `.git`. Kept as requested; the alternative was a loader-only + CDN setup
+    or shipping a single module (~20–48 MB)
+  - The app is a full-page third-party application; it is not covered by the
+    site's "runs entirely locally" claim in the same way the first-party tools are
+    (it executes only in the visitor's browser, but it is third-party code)
+
+
 
 The following is original to this site and is covered by the MIT license in the
 root [LICENSE](LICENSE):

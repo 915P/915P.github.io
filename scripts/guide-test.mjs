@@ -338,11 +338,37 @@ eq('非法网址原样返回', guide.tileLabel('::::', ''), '::::');
 		null,
 	);
 	eq('无限制的站点永远不提示', guide.accessWarning(plain, off), null);
+	// 国际线路分两档：只有一个通 → 「部分受限」；两个都通 → 不打标记
 	eq(
-		'国际还通着就不提示境外',
+		'只有一个国际站可达 → 部分受限',
 		guide.accessWarning(intl, { campus: 'ok', github: 'ok', google: 'fail', at: 1 }),
+		'部分受限',
+	);
+	eq(
+		'两个国际站都可达 → 不提示',
+		guide.accessWarning(intl, { campus: 'ok', github: 'ok', google: 'ok', at: 1 }),
 		null,
 	);
+	eq(
+		'国际探测未出全结果 → 不提示',
+		guide.accessWarning(intl, { campus: 'ok', github: 'unknown', google: 'fail', at: 1 }),
+		null,
+	);
+	// 探明可达的探测目标自身不再提示：GitHub 通、Google 不通时，GitHub 磁贴不提示
+	const ghOk = { campus: 'ok', github: 'ok', google: 'fail', at: 1 };
+	eq('GitHub 通 → GitHub 磁贴不提示', guide.accessWarning(intl, ghOk, 'https://github.com'), null);
+	eq(
+		'GitHub 通 → 仍提示别的境外站',
+		guide.accessWarning(intl, ghOk, 'https://scholar.google.com/'),
+		'部分受限',
+	);
+	const ggOk = { campus: 'ok', github: 'fail', google: 'ok', at: 1 };
+	eq(
+		'Google 通 → Google 子域不提示',
+		guide.accessWarning(intl, ggOk, 'https://scholar.google.com/'),
+		null,
+	);
+	eq('Google 通 → 仍提示 GitHub', guide.accessWarning(intl, ggOk, 'https://github.com'), '部分受限');
 
 	// 图书馆订购资源单独一类，不跟校内系统混为一谈
 	const sub = guide.tileAccess('https://dl.acm.org/');
@@ -371,11 +397,35 @@ eq('非法网址原样返回', guide.tileLabel('::::', ''), '::::');
 	ok('订购库文案提到 VPN', subText.includes('VPN'));
 	const intlText = guide.accessNotice(intl, 'Google Scholar');
 	ok('境外文案按网络环境措辞', intlText.includes('在当前网络环境下可能无法打开'));
+
+	// 境外站再分两档：全不通 vs 只有部分线路可达
+	const intlDown = guide.accessNotice(intl, 'Google Scholar', {
+		campus: 'unknown',
+		github: 'fail',
+		google: 'fail',
+		at: 1,
+	});
+	ok('境外全不通文案点名境外站', intlDown.includes('境外站点'));
+	ok('境外全不通文案说受限', intlDown.includes('可能受限'));
+	const intlPartial = guide.accessNotice(intl, 'Google Scholar', {
+		campus: 'unknown',
+		github: 'ok',
+		google: 'fail',
+		at: 1,
+	});
+	ok('境外部分可达文案用保守措辞', intlPartial.includes('你当前的网络环境可能无法打开'));
+	ok('境外两档文案不同', intlDown !== intlPartial);
 	eq('无限制的资源没有提醒', guide.accessNotice(plain, '必应'), null);
-	// 三种说法必须互不相同 —— 分具体情况写的前提是确实分开了
-	ok('三类文案互不相同', new Set([campusText, subText, intlText]).size === 3);
-	ok('文案里不再出现含糊的万能句', ![campusText, subText, intlText].some((s) => s.includes('没有解锁此资源')));
-	ok('文案里不再出现「当前推测」', ![campusText, subText, intlText].some((s) => s.includes('推测')));
+	// 各种说法必须互不相同 —— 分具体情况写的前提是确实分开了
+	ok('各类文案互不相同', new Set([campusText, subText, intlText, intlDown, intlPartial]).size === 5);
+	ok(
+		'文案里不再出现含糊的万能句',
+		![campusText, subText, intlText, intlDown, intlPartial].some((s) => s.includes('没有解锁此资源')),
+	);
+	ok(
+		'文案里不再出现「当前推测」',
+		![campusText, subText, intlText, intlDown, intlPartial].some((s) => s.includes('推测')),
+	);
 }
 
 // 小工具图标必须走 Material Icons，不能回落到本站 favicon
@@ -574,6 +624,16 @@ eq('非法网址原样返回', guide.tileLabel('::::', ''), '::::');
 		'bing',
 	);
 	eq('未选 + 还没检测 → Bing（保守）', guide.pickEngine(guide.emptySnapshot(), null).id, 'bing');
+	eq(
+		'未选 + 国际部分可达 → Bing',
+		guide.pickEngine({ campus: 'ok', github: 'ok', google: 'fail', at: 1 }, null).id,
+		'bing',
+	);
+	eq(
+		'未选 + 国际部分可达（另一侧）→ Bing',
+		guide.pickEngine({ campus: 'ok', github: 'fail', google: 'ok', at: 1 }, null).id,
+		'bing',
+	);
 
 	// 手动选择优先于自动逻辑，即便当前网络用不了
 	eq(
@@ -899,6 +959,81 @@ eq('非法网址原样返回', guide.tileLabel('::::', ''), '::::');
 	ok('渐变默认在区间内', guide.SCRUB_RANGE.defaultValue >= guide.SCRUB_RANGE.min);
 	// 自定义壁纸不按照片算 —— data URL 无法预知亮度，用常规档
 	eq('自定义壁纸用常规遮罩', guide.defaultScrubFor('custom'), guide.SCRUB_RANGE.defaultValue);
+}
+
+// ------------------------------------------------------ 标签页（可新建/删除/排序）
+
+{
+	// parseTabs：合法项通过，非法项跳过；非法/空返回 null
+	const good = guide.parseTabs([
+		{ key: 'frequent', label: '常用', tone: 'primary' },
+		{ key: 'x-1', label: '自定义', tone: 'nope' },
+		{ key: 'BAD KEY', label: '非法', tone: 'primary' },
+		{ key: 'dup', label: '一', tone: 'primary' },
+		{ key: 'dup', label: '二', tone: 'secondary' },
+		null,
+		'x',
+	]);
+	ok('parseTabs 返回数组', Array.isArray(good));
+	eq('parseTabs 跳过非法项', good.length, 3);
+	eq('parseTabs 非法 tone 被轮换补齐', good[1].tone, guide.nextTabTone(good.slice(0, 1)));
+	ok('parseTabs 保留合法 key', good[0].key === 'frequent' && good[2].key === 'dup');
+
+	eq('parseTabs 空数组返回 null', guide.parseTabs([]), null);
+	eq('parseTabs 非数组返回 null', guide.parseTabs('x'), null);
+	eq('parseTabs 全是垃圾返回 null', guide.parseTabs([{ key: '??', label: '' }]), null);
+
+	const many = Array.from({ length: guide.MAX_TABS + 1 }, (_, i) => ({
+		key: `t${i}`,
+		label: `T${i}`,
+		tone: 'primary',
+	}));
+	eq('parseTabs 超过上限返回 null', guide.parseTabs(many), null);
+
+	// makeTabKey 不与现有重复
+	const keys = new Set([...guide.guideTabs.map((t) => t.key), guide.makeTabKey(guide.guideTabs)]);
+	eq('makeTabKey 不撞现有', keys.size, guide.guideTabs.length + 1);
+
+	// 序列化 / 解析往返保留自定义标签页与归组
+	const customTabs = [
+		{ key: 'frequent', label: '常用', tone: 'primary' },
+		{ key: 'tab-mine', label: '我的', tone: 'tertiary' },
+	];
+	const tabsTiles = [
+		{ id: 'a', title: 'A', url: 'https://a.com', icon: '🔗', group: 'tab-mine' },
+	];
+	const json = guide.serializeConfig(
+		tabsTiles,
+		null,
+		{ color: '#66ccff', mode: 'auto', wallpaper: 'none', scrub: 0.5, assumeCampus: false },
+		new Date(),
+		customTabs,
+	);
+	eq('导出带 tabs', JSON.parse(json).tabs.length, 2);
+	const back = guide.parseConfig(json);
+	ok('导回保留 tabs', 'tiles' in back && back.tabs && back.tabs.length === 2);
+	eq('导回保留 label', back.tabs[1].label, '我的');
+	eq('导回磁贴 group 保留', back.tiles[0].group, 'tab-mine');
+
+	// v1/v2（无 tabs）→ tabs 缺省，磁贴按默认分类归置
+	const legacy = guide.parseConfig(
+		JSON.stringify({
+			version: 2,
+			tiles: [{ id: 'a', title: 'A', url: 'https://a.com', icon: '🔗', group: 'frequent' }],
+		}),
+	);
+	ok('老文件没有 tabs', 'tiles' in legacy && legacy.tabs === undefined);
+	eq('老文件 group 保留', legacy.tiles[0].group, 'frequent');
+
+	// v3 文件里 group 指向不存在的标签页 → 落到第一个标签页
+	const stray = guide.parseConfig(
+		JSON.stringify({
+			version: 3,
+			tabs: [{ key: 'only', label: '唯一', tone: 'primary' }],
+			tiles: [{ id: 'a', title: 'A', url: 'https://a.com', icon: '🔗', group: 'nope' }],
+		}),
+	);
+	ok('未知 group 落到首个标签页', 'tiles' in stray && stray.tiles[0].group === 'only');
 }
 
 // ---------------------------------------------------------------- 收尾

@@ -59,11 +59,52 @@ export function tileAccess(url: string): TileAccess {
  * 注意 campusOnly 的判定不看 campus 状态为 'unknown'/'checking' ——
  * 那不是「校外」，只是还没测出来，此时不该给用户添堵。
  */
-export function accessWarning(access: TileAccess, snapshot: NetSnapshot): string | null {
+export function accessWarning(
+	access: TileAccess,
+	snapshot: NetSnapshot,
+	url?: string,
+): string | null {
 	if (access.campusOnly && snapshot.campus === 'fail') return '需校园网';
 	if (access.subscription && snapshot.campus === 'fail') return '需订阅';
-	if (access.intl && snapshot.github === 'fail' && snapshot.google === 'fail') return '境外';
+	if (access.intl) {
+		/*
+		 * 境外站点按国际连通性**分两档**，不能一律「境外」、也不能一律不提示：
+		 *   - GitHub / Google 都通 → 国际线路正常，不打标记；
+		 *   - 只有一个通 → 线路只通了一部分，标「部分受限」；
+		 *   - 两个都不通 → 「境外」。
+		 * 只要还有 unknown / checking，就当还没测出来，什么都不标 ——
+		 * 拿没出结果的探测吓人，是这个页面最忌讳的事。
+		 */
+		const intlOk = (snapshot.github === 'ok' ? 1 : 0) + (snapshot.google === 'ok' ? 1 : 0);
+		if (intlOk === 2) return null;
+		if (intlOk === 1) {
+			/*
+			 * 「部分受限」只提醒**确实可能打不开**的站：探测目标自身
+			 * （github.com / google.com 及其子域）既然已经探明可达，再挂标记
+			 * 就是自相矛盾。典型场景是「GitHub 通、Google 不通」——GitHub
+			 * 磁贴不该提示。url 缺省时（旧调用点/纯单测）退回到一律提示。
+			 */
+			if (url && coveredByOkProbe(url, snapshot)) return null;
+			return '部分受限';
+		}
+		if (snapshot.github === 'fail' && snapshot.google === 'fail') return '境外';
+	}
 	return null;
+}
+
+/** 探测目标对应的站点；探明可达时，这类站点自身不再提示「部分受限」 */
+const INTL_PROBE_SITES: Array<{ key: 'github' | 'google'; host: string }> = [
+	{ key: 'github', host: 'github.com' },
+	{ key: 'google', host: 'google.com' },
+];
+
+/** 该网址是否落在某个「已探测为可达」的目标域名（含子域）内 */
+function coveredByOkProbe(url: string, snapshot: NetSnapshot): boolean {
+	const host = urlHost(url);
+	if (!host) return false;
+	return INTL_PROBE_SITES.some(
+		(p) => (host === p.host || host.endsWith(`.${p.host}`)) && snapshot[p.key] === 'ok',
+	);
 }
 
 /**
@@ -75,21 +116,38 @@ export function accessWarning(access: TileAccess, snapshot: NetSnapshot): string
  *
  *  - 校内资源：明说只在校内网解析得出来；
  *  - 订购数据库：明说全文要机构账号解锁，校外先连 VPN；
- *  - 境外站点：明说服务器在境外。
+ *  - 境外站点：明说服务器在境外，并按当前国际连通性分「全部不通」与
+ *    「只有部分线路可达」两种说法。
  *
  * 一条都**不猜**探测结论（「当前推测」「你可能开着 VPN」这类）——
  * 用户明确说过不要。探测是推测，把它当事实讲出来是误导；
  * 这里只讲「这类资源本来就有什么前提」，那是确定的事实。
+ * 境外这一档会用到探测结果，但**一律带「可能」**，且不猜用户自己的状况。
+ *
+ * @param snapshot 当前网络快照；省略时按「不确定」措辞（向后兼容）
  */
-export function accessNotice(access: TileAccess, title: string): string | null {
+export function accessNotice(
+	access: TileAccess,
+	title: string,
+	snapshot?: NetSnapshot,
+): string | null {
 	if (access.campusOnly) {
 		return `「${title}」是校内资源，只在校内网（或已连的 VPN）里才解析得出来。现在还要打开吗？`;
 	}
 	if (access.subscription) {
-		return `「${title}」要靠同济图书馆的机构订阅才能下全文，校外一般得先把学校 VPN 连上。现在还要打开吗？`;
+		return `「${title}」需要通过校园网（或学校 VPN ）的机构订阅才能下全文。现在还要打开吗？`;
 	}
 	if (access.intl) {
-		return `「${title}」在当前网络环境下可能无法打开。现在还要打开吗？`;
+		const intlOk = snapshot
+			? (snapshot.github === 'ok' ? 1 : 0) + (snapshot.google === 'ok' ? 1 : 0)
+			: 0;
+		if (snapshot && snapshot.github === 'fail' && snapshot.google === 'fail') {
+			return `「${title}」是境外站点，当前网络访问国际互联网可能受限。现在还要打开吗？`;
+		}
+		if (intlOk === 1) {
+			return `「${title}」是境外站点，你当前的网络环境可能无法打开。现在还要打开吗？`;
+		}
+		return `「${title}」是境外站点，在当前网络环境下可能无法打开。现在还要打开吗？`;
 	}
 	return null;
 }
@@ -172,13 +230,71 @@ export { linkSearchText } from '../data/links';
 /**
  * 标签页。
  *
- * 用 links.ts 的分类定义，不另建一套 —— 同一个链接只归一类，
- * 不会出现「两处叫法不一样」。
+ * 默认用 links.ts 的分类定义，不另建一套 —— 同一个链接只归一类，
+ * 不会出现「两处叫法不一样」。用户可以自己新建/删除/重排，
+ * 那一份存在 localStorage 里，这里只给**默认值**。
  */
-export const guideTabs = linkCategories;
+export interface GuideTab {
+	/** 稳定标识；磁贴的 group 就是它。字符集限定 [a-z0-9-] */
+	key: string;
+	label: string;
+	/** MD3 配色角色，用于分类标题 */
+	tone: 'primary' | 'secondary' | 'tertiary';
+}
+
+export const guideTabs: GuideTab[] = linkCategories;
 
 /** 用户手加磁贴时没得选分类时的兜底 */
-export const FALLBACK_GROUP: LinkGroup = 'tools';
+export const FALLBACK_GROUP: string = 'tools';
+
+/** 标签页数量的上限，防止畸形配置把标签栏撑爆 */
+export const MAX_TABS = 24;
+/** 标签页名称长度上限 */
+export const MAX_TAB_LABEL = 12;
+
+const TAB_TONES: GuideTab['tone'][] = ['primary', 'secondary', 'tertiary'];
+
+/** 新标签页的配色：按已有数量轮换，避免清一色 */
+export function nextTabTone(tabs: GuideTab[]): GuideTab['tone'] {
+	return TAB_TONES[tabs.length % TAB_TONES.length];
+}
+
+/** 生成一个不与现有重复的标签页 key */
+export function makeTabKey(tabs: GuideTab[]): string {
+	const used = new Set(tabs.map((t) => t.key));
+	const base = `tab-${Date.now().toString(36)}`;
+	let key = base;
+	let n = 1;
+	while (used.has(key)) key = `${base}-${n++}`;
+	return key;
+}
+
+/**
+ * 校验并规整一份标签页数组（来自本地存储或导入文件）。
+ *
+ * 任何一项非法就跳过该条；一条都不剩则返回 null，由调用方决定退回默认。
+ * key 限定 `[a-z0-9-]`：它会被写进磁贴的 group、也会拼进 DOM 的 data 属性，
+ * 放开字符集只会自找麻烦。
+ */
+export function parseTabs(raw: unknown): GuideTab[] | null {
+	if (!Array.isArray(raw) || raw.length === 0 || raw.length > MAX_TABS) return null;
+	const out: GuideTab[] = [];
+	const seen = new Set<string>();
+	for (const item of raw) {
+		if (!item || typeof item !== 'object') continue;
+		const entry = item as Record<string, unknown>;
+		const key = typeof entry.key === 'string' ? entry.key.trim().slice(0, 40) : '';
+		const label = typeof entry.label === 'string' ? entry.label.trim().slice(0, MAX_TAB_LABEL) : '';
+		if (!key || !label || seen.has(key) || !/^[a-z0-9-]+$/.test(key)) continue;
+		seen.add(key);
+		const tone = TAB_TONES.includes(entry.tone as GuideTab['tone'])
+			? (entry.tone as GuideTab['tone'])
+			: nextTabTone(out);
+		out.push({ key, label, tone });
+	}
+	return out.length ? out : null;
+}
+
 
 /**
  * 默认磁贴 = **全部**候选，一个不藏。
@@ -300,14 +416,19 @@ export function intlAvailable(snapshot: NetSnapshot): boolean {
  *
  * 用户在界面上显式选过就尊重选择（哪怕当前网络用不了那个引擎 ——
  * 用户可能开着自己的代理）；没选过才按网络自动挑：
- * 国际互联网可用 → Google，否则 → Bing。
+ * 国际互联网**完全通畅**（GitHub 与 Google 都通）→ Google；
+ * 其余情况（部分可达 / 不畅 / 未检测）→ Bing。
+ *
+ * 门槛刻意用「两个都通」而不是 intlAvailable 的「任一通」：
+ * 只通一个时 Google 未必稳，默认走 Bing 更保险。
  */
 export function pickEngine(snapshot: NetSnapshot, chosenId: string | null): SearchEngine {
 	if (chosenId) {
 		const hit = SEARCH_ENGINES.find((engine) => engine.id === chosenId);
 		if (hit) return hit;
 	}
-	const preferred = intlAvailable(snapshot) ? 'google' : 'bing';
+	const intlFull = snapshot.github === 'ok' && snapshot.google === 'ok';
+	const preferred = intlFull ? 'google' : 'bing';
 	return (
 		SEARCH_ENGINES.find((engine) => engine.id === preferred) ??
 		// SEARCH_ENGINES 是模块内写死的常量，按 id 找不到只可能是数据写错了
@@ -650,7 +771,7 @@ export function describeOverall(snapshot: NetSnapshot): { text: string; tone: 'o
  * 一个 `javascript:` 开头的地址就够在别人浏览器里执行任意脚本了。
  * 所以这里对协议、字段类型、条目数量全都设卡。
  */
-export const CONFIG_VERSION = 2;
+export const CONFIG_VERSION = 3;
 
 /** 能导入的最低版本。1 只含链接与搜索引擎，没有任何外观字段 */
 export const MIN_CONFIG_VERSION = 1;
@@ -686,7 +807,8 @@ export interface TileConfig {
 	 * 'text' → emoji 或短文字。未设置时按网址自动取站点 favicon。
 	 */
 	iconMode?: 'url' | 'material' | 'text';
-	group: LinkGroup;
+	/** 归属的标签页 key（用户可自定义，故不再限定为固定分类） */
+	group: string;
 	/** Material Icons 组件名（如 'swap-horiz'）；有值时渲染图标而不是 favicon */
 	materialIcon?: string;
 }
@@ -699,6 +821,8 @@ export interface GuideConfig {
 	engine: string | null;
 	/** 主题色 / 模式 / 壁纸 / 遮罩 / 校园网假设。v1 文件里没有 */
 	appearance?: AppearanceConfig;
+	/** 标签页定义（顺序即显示顺序）。v1/v2 文件里没有，缺席时保持现状 */
+	tabs?: GuideTab[];
 	tiles: TileConfig[];
 }
 
@@ -759,6 +883,7 @@ export function serializeConfig(
 	engine: string | null,
 	appearance: AppearanceConfig,
 	now: Date,
+	tabs: GuideTab[] = guideTabs,
 ): string {
 	/*
 	 * 自定义壁纸按体积决定去留。
@@ -780,6 +905,7 @@ export function serializeConfig(
 			assumeCampus: appearance.assumeCampus,
 			...(keepWall ? { customWall: wall } : {}),
 		},
+		tabs: tabs.map((tab) => ({ key: tab.key, label: tab.label, tone: tab.tone })),
 		tiles: tiles.map((tile) => ({
 			id: tile.id,
 			title: tile.title,
@@ -801,6 +927,11 @@ export interface ParseResult {
 	 * 只换链接和搜索引擎。
 	 */
 	appearance?: AppearanceConfig;
+	/**
+	 * 标签页定义。v3 才带；缺席时导入**不碰**现有标签页，
+	 * 只按现有标签页归置磁贴。
+	 */
+	tabs?: GuideTab[];
 	/** 被丢弃的条目数及原因，便于如实告诉用户「导入了 N 条、丢弃了 M 条」 */
 	dropped: string[];
 	exportedAt?: string;
@@ -839,7 +970,14 @@ export function parseConfig(raw: string): ParseResult | { error: string } {
 		return { error: `配置里有 ${rawTiles.length} 条，超过上限 ${MAX_CONFIG_TILES} 条。` };
 	}
 
-	const knownGroups = new Set<string>(guideTabs.map((tab) => tab.key));
+	/*
+	 * 标签页：v3 文件才带。带了就用文件里的（磁贴按它的 key 归置），
+	 * 缺席则按默认分类校验 —— 老文件的行为保持不变。
+	 */
+	const parsedTabs = parseTabs(record.tabs) ?? undefined;
+	const tabKeys = (parsedTabs ?? guideTabs).map((tab) => tab.key);
+	const knownGroups = new Set<string>(tabKeys);
+	const fallbackGroup = parsedTabs ? tabKeys[0] : FALLBACK_GROUP;
 	const tiles: TileConfig[] = [];
 	const dropped: string[] = [];
 
@@ -871,9 +1009,7 @@ export function parseConfig(raw: string): ParseResult | { error: string } {
 			dropped.push(`${where}「${title}」：网址不合法或不是 http(s)`);
 			continue;
 		}
-		const group = knownGroups.has(String(entry.group))
-			? (entry.group as LinkGroup)
-			: FALLBACK_GROUP;
+		const group = knownGroups.has(String(entry.group)) ? String(entry.group) : fallbackGroup;
 
 		const material =
 			typeof entry.materialIcon === 'string' && /^[a-z0-9-]{1,40}$/.test(entry.materialIcon)
@@ -950,7 +1086,14 @@ export function parseConfig(raw: string): ParseResult | { error: string } {
 		};
 	}
 
-	return { tiles, engine, appearance, dropped, ...(exportedAt ? { exportedAt } : {}) };
+	return {
+		tiles,
+		engine,
+		appearance,
+		dropped,
+		...(parsedTabs ? { tabs: parsedTabs } : {}),
+		...(exportedAt ? { exportedAt } : {}),
+	};
 }
 
 /**
@@ -1113,7 +1256,7 @@ export function wallCss(value: string): string {
  * ⚠️ 默认 0.5 是给**渐变**壁纸定的。渐变本身自带颜色（素笺那张接近白），
  * 0.72 压上去连「有壁纸」都看不出来，用户只会以为背景是纯色。
  */
-export const SCRUB_RANGE = { min: 0.3, max: 0.92, step: 0.02, defaultValue: 0.5 };
+export const SCRUB_RANGE = { min: 0.3, max: 0.92, step: 0.02, defaultValue: 0.3 };
 
 /**
  * 照片壁纸的默认遮罩：比渐变更厚，保证亮照片上的文字也读得清。

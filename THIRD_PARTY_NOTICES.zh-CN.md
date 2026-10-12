@@ -20,6 +20,8 @@
 | BSD-3-Clause | 宽松 | ✅ | ✅ | 无 |
 | CC BY 3.0 | 内容 | ✅ | ✅（需说明是否修改） | 无（4.0 衍生需同许可） |
 | Unicode License v3 | 数据 | ✅ | ✅（需保留 Unicode 版权声明、不得暗示背书） | 无 |
+| EUPL-1.2 | 著佐权 | ✅ | ✅（需保留声明、说明是否修改） | 有（衍生作品须沿用 EUPL-1.2，或落入兼容许可清单） |
+| CC BY-NC-SA 4.0 | 内容 | ❌ | ✅（需说明是否修改） | 有（相同方式共享 + 非商业） |
 
 ---
 
@@ -526,7 +528,45 @@ ffmpeg.wasm 的 `exec()` 只在 worker 本身死掉时才 reject；ffmpeg 自己
 
 ---
 
-## 站点自研部分
+## 17. GeoGebra 数学应用（经典版）⚠️ **混合许可；仅限非商业**
+
+- **位置**：`public/apps/geogebra/`（本站自托管的整包）
+- **入口**：`/apps/geogebra/index.html`（工具列表中状态为 `app`；页面即上游的
+  `GeoGebra.html`，不是 Astro 页面）
+- **上游**：<https://www.geogebra.org> · <https://www.geogebra.org/download>
+- **版本**：5.4.931.2（经典版，`web3d` 模块；同时含 `web`、`web3d`、`webSimple`）
+- **许可**：**不是单一许可** —— 本分发包含三套不同条款，依据
+  <https://www.geogebra.org/license>：
+  - **EUPL-1.2** —— GeoGebra **源代码**（本整包即其编译产物），属著佐权。
+    全文见 `public/apps/geogebra/LICENSE-EUPL-1.2.txt`
+  - **CC BY-NC-SA 4.0** —— GeoGebra **语言文件**（`*_keys_*.js`）与
+    **用户界面图像、样式文件**（logo、图标、样式表）。
+    <https://creativecommons.org/licenses/by-nc-sa/4.0/legalcode.en>
+  - **GeoGebra 非商业许可协议** —— **安装包 / 网页服务 / “Materials”**，
+    即本自托管整包**作为整体**的部分
+- **署名**：**Made with GeoGebra®**，并附版权声明与
+  <https://www.geogebra.org> 链接。版权归 GeoGebra GmbH（奥地利林茨）所有
+- **商用**：整包**禁止**商用。只有被单独抽出的源代码部分才是 EUPL（该许可本身
+  允许商用）；由于整包里同时包含语言文件与界面素材，本目录下的一切都仅限非商业
+  使用。商用需与 GeoGebra GmbH 另行签订协议（<mailto:office@geogebra.org>）
+- **核实来源**：上游许可页 <https://www.geogebra.org/license>（其中明确写明
+  源代码为 EUPL-1.2、语言文件为 CC BY-NC-SA）。整包本身只带 `README.txt`，
+  没有 `LICENSE` 文件，故以许可页为准
+- **本站改动**：仅一处 —— 从 `GeoGebra.html`（发布为 `index.html`）中删除了
+  指向绝对路径 `/sworker.js` 的 Service Worker 注册（该路径只存在于
+  `geogebra.org` 的站点根）。改动同样记录在
+  `public/apps/geogebra/NOTICE.md`；其余文件均原样保留
+- **说明**：
+  - 这里是**分发**，不是 §16.3 里 ffmpeg 那种运行时 CDN 加载。因此非商业与
+    相同方式共享条款会随本目录一起生效。GeoGebra **绝不按本站 MIT 重新许可**，
+    且这些条款不会传染到站点其余部分（EUPL/CC 约束的是 GeoGebra 自身的衍生
+    作品，而非与其并列的“聚合”）
+  - 体量：解压约 117 MB、434 个文件，会显著增大 `dist/` 与 `.git`。按需求整包
+    保留；备选方案是「仅放 loader + 走 CDN」或只收单个模块（约 20–48 MB）
+  - 它是整页的第三方应用；与本站自研工具「完全本地运行」的定位不同（它确实只在
+    访客浏览器里执行，但毕竟是第三方代码）
+
+
 
 以下内容为本站原创，采用根目录 [LICENSE](LICENSE) 中的 MIT 许可：
 

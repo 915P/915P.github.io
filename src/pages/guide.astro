@@ -86,23 +86,36 @@ import { guideTabs } from '../data/guide';
 		{/*
 		 * value 必须显式给第一个 tab —— 不写的话 mdui-tabs 不知道该激活谁，
 		 * 表现是「一个 tab 都没选中」，下划线指示器整个不出现（看起来像样式坏了）。
+		 *
+		 * 下面这份只作**首屏兜底**；脚本会用 localStorage 里的标签页
+		 * （默认即这里的默认分类）把整个 <mdui-tabs> 重建一次，
+		 * 以支持新建 / 删除 / 拖动排序。
 		*/}
-		<mdui-tabs class="guide-tabs" id="guideTabs" value={guideTabs[0].key}>
-			{
-				guideTabs.map((tab) => (
-					<mdui-tab value={tab.key}>
-						{tab.label}
-					</mdui-tab>
-				))
-			}
-			{
-				guideTabs.map((tab) => (
-					<mdui-tab-panel slot="panel" value={tab.key}>
-						<div class="guide-tiles" data-group={tab.key} role="list"></div>
-					</mdui-tab-panel>
-				))
-			}
-		</mdui-tabs>
+		<div class="guide-tabbar">
+			<div class="guide-tabs-host" id="guideTabsHost">
+				<mdui-tabs class="guide-tabs" id="guideTabs" value={guideTabs[0].key}>
+					{
+						guideTabs.map((tab) => (
+							<mdui-tab value={tab.key}>{tab.label}</mdui-tab>
+						))
+					}
+					{
+						guideTabs.map((tab) => (
+							<mdui-tab-panel slot="panel" value={tab.key}>
+								<div class="guide-tiles" data-group={tab.key} role="list"></div>
+							</mdui-tab-panel>
+						))
+					}
+				</mdui-tabs>
+			</div>
+			<button
+				type="button"
+				class="guide-tab-add"
+				id="tabAdd"
+				title="新建标签页"
+				aria-label="新建标签页"><mdui-icon-add></mdui-icon-add></button
+			>
+		</div>
 
 		{/*
 		 * 导入 / 导出。
@@ -112,7 +125,6 @@ import { guideTabs } from '../data/guide';
 		 * 所以导入导出的载体就是一个 JSON 文件，不经过任何服务器。
 		 * 入口在右下角「编辑与设置」里，不占起始页的地盘。
 		 */}
-		<p class="guide-hint" id="guideHint" hidden></p>
 	</main>
 
 	{/*
@@ -271,6 +283,7 @@ import { guideTabs } from '../data/guide';
 			<mdui-segmented-button-group
 				id="tileIconMode"
 				selects="single"
+				full-width
 				aria-label="图标模式"
 			>
 				<mdui-segmented-button value="site">自动</mdui-segmented-button>
@@ -307,12 +320,12 @@ import { guideTabs } from '../data/guide';
 			))}
 		</mdui-select>
 		<p class="set-note faint text-xs" id="tileError" hidden></p>
-		<div slot="action">
-			<mdui-button id="tileDelete" variant="text" class="guide-tile-delete">删除</mdui-button>
-			<div class="flex-grow"></div>
-			<mdui-button id="tileCancel" variant="text">取消</mdui-button>
-			<mdui-button id="tileSave" variant="filled">保存</mdui-button>
-		</div>
+		<mdui-button id="tileDelete" slot="action" variant="text" class="guide-tile-delete"
+			>删除</mdui-button
+		>
+		<div slot="action" class="flex-grow"></div>
+		<mdui-button id="tileCancel" slot="action" variant="text">取消</mdui-button>
+		<mdui-button id="tileSave" slot="action" variant="filled">保存</mdui-button>
 	</mdui-dialog>
 
 	<mdui-dialog id="ioDialog" class="guide-io-dialog" close-on-esc close-on-overlay-click>
@@ -719,6 +732,75 @@ import { guideTabs } from '../data/guide';
 
 	/* ---------------------------------------------------------- 磁贴 */
 
+		/* 标签栏：标签 + 右侧「新建标签页」按钮 */
+	.guide-tabbar {
+		display: flex;
+		align-items: flex-start;
+		gap: 0.4rem;
+		width: 100%;
+		max-width: 60rem;
+	}
+
+	.guide-tabs-host {
+		flex: 1 1 auto;
+		min-width: 0;
+	}
+
+	.guide-tab-add {
+		flex-shrink: 0;
+		display: grid;
+		place-items: center;
+		width: 2.75rem;
+		height: 2.75rem;
+		margin-top: 0.35rem;
+		border: none;
+		border-radius: 50%;
+		background: rgb(var(--mdui-color-surface));
+		color: rgb(var(--mdui-color-on-surface-variant));
+		box-shadow: 0 0 1px rgb(var(--mdui-color-outline-variant));
+		cursor: pointer;
+	}
+
+	.guide-tab-add:hover {
+		background: rgb(var(--mdui-color-surface-container-high));
+	}
+
+	/* 标签页拖动中的提示（mdui-tab 内部布局，只做轻量反馈） */
+	.guide-tabs mdui-tab.is-dragging {
+		opacity: 0.5;
+	}
+
+	/* 标签页右键菜单（重命名 / 删除）—— 自绘小浮层，不动 mdui 组件 */
+	.guide-tab-menu {
+		position: fixed;
+		z-index: 2000;
+		display: grid;
+		min-width: 8rem;
+		padding: 0.25rem;
+		border-radius: var(--mdui-shape-corner-medium);
+		background: rgb(var(--mdui-color-surface-container-high));
+		box-shadow: 0 4px 16px rgba(0, 0, 0, 0.24);
+	}
+
+	.guide-tab-menu button {
+		border: none;
+		background: none;
+		color: rgb(var(--mdui-color-on-surface));
+		font: inherit;
+		text-align: left;
+		padding: 0.5rem 0.85rem;
+		border-radius: var(--mdui-shape-corner-small);
+		cursor: pointer;
+	}
+
+	.guide-tab-menu button:hover {
+		background: rgb(var(--mdui-color-surface-container-highest));
+	}
+
+	.guide-tab-menu button.is-danger {
+		color: rgb(var(--mdui-color-error));
+	}
+
 		/* 标签页：整页宽，磁贴网格居中在下面 */
 	.guide-tabs {
 		width: 100%;
@@ -771,6 +853,15 @@ import { guideTabs } from '../data/guide';
 		.guide-tile:focus-visible {
 			outline: 2px solid rgb(var(--mdui-color-primary));
 			outline-offset: -2px;
+		}
+
+		/* 「添加磁贴」方块：外观同普通磁贴，只是图标是一个 ＋ */
+		.guide-tile-add {
+			border: none;
+			background: none;
+			font: inherit;
+			color: rgb(var(--mdui-color-on-surface-variant));
+			cursor: pointer;
 		}
 
 		/*
@@ -908,10 +999,24 @@ import { guideTabs } from '../data/guide';
 	 */
 	.guide-tile-dialog::part(panel) {
 		width: min(24rem, calc(100vw - 2rem));
+		/* 左右内边距收窄：分段按钮组（4 个）需要 ~253px，
+		   mdui 默认 24px 内边距会让窄屏下的内容宽度不够，撑出横向滚动条 */
+		padding-inline: 0.75rem;
 	}
 
+	/*
+	 * body 默认是 display:block，gap 不生效（设了也白设）。改成纵向 flex，
+	 * 才能靠 gap 给字段之间留出稳定间距 —— 否则字段紧贴，
+	 * 下一个字段浮起的标签（如「分类」）会压到上一个控件上。
+	 * 顶部再留出约一个浮起标签的高度，避免第一个字段的标签被滚动裁剪。
+	 */
 	.guide-tile-dialog::part(body) {
-		gap: 0.6rem;
+		display: flex;
+		flex-direction: column;
+		gap: 0.85rem;
+		padding-block-start: 0.85rem;
+		/* 任何子项都不该再撑出横向滚动条 */
+		overflow-x: hidden;
 	}
 
 	/* 磁贴编辑弹窗：压缩字段高度，让布局更紧凑 */
@@ -932,10 +1037,16 @@ import { guideTabs } from '../data/guide';
 		font-weight: 500;
 	}
 
-	/* 分段按钮组占满整行，避免内容溢出导致横向滚动 */
+	/* 分段按钮组用 mdui 的 full-width（见 HTML 属性），四等分撑满整行，
+	   不再靠 overflow:hidden 把超出的按钮硬裁掉 */
 	.guide-tile-dialog mdui-segmented-button-group {
 		width: 100%;
-		overflow: hidden;
+		min-width: 0;
+	}
+
+	/* 允许分段按钮收缩，避免四等分时把容器撑宽 */
+	.guide-tile-dialog mdui-segmented-button {
+		min-width: 0;
 	}
 
 	.guide-tile-dialog .tile-icon-input {
@@ -952,7 +1063,7 @@ import { guideTabs } from '../data/guide';
 		line-height: 1;
 	}
 
-	/* 「删除」单独一个文字按钮，放在动作行最左侧 —— 远离保存，减少误触 */
+	/* 「删除」放动作行最左侧（用弹性 spacer 把它和取消/保存分开）—— 减少误触 */
 	.guide-tile-dialog .guide-tile-delete {
 		color: rgb(var(--mdui-color-error));
 	}
@@ -1116,14 +1227,6 @@ import { guideTabs } from '../data/guide';
 		white-space: pre-wrap;
 		word-break: break-word;
 	}
-
-	.guide-hint {
-			color: rgb(var(--mdui-color-on-surface-variant));
-			font-size: var(--mdui-typescale-body-small-size);
-			text-align: center;
-			max-width: 32rem;
-			line-height: 1.7;
-		}
 	</style>
 
 	<script>
@@ -1172,7 +1275,12 @@ import { guideTabs } from '../data/guide';
 			type AppearanceConfig,
 			type ThemeMode,
 			type NetSnapshot,
-			type LinkGroup,
+			type GuideTab,
+			parseTabs,
+			nextTabTone,
+			makeTabKey,
+			MAX_TABS,
+			MAX_TAB_LABEL,
 		} from '../data/guide';
 		import { siteIconMasks } from '../data/site-icons';
 
@@ -1201,6 +1309,7 @@ import { guideTabs } from '../data/guide';
 		type MenuItemEl = HTMLElement & { value: string; selected: boolean };
 
 		const STORE_KEY = 'jwwl:tiles';
+		const TAB_KEY = 'jwwl:tabs';
 
 	interface Tile {
 		id: string;
@@ -1215,14 +1324,47 @@ import { guideTabs } from '../data/guide';
 		 */
 		icon: string;
 		iconMode?: 'url' | 'material' | 'text';
-		group: LinkGroup;
+		group: string;
 		/** Material Icons 组件名（如 'swap-horiz'）；有值就不走 favicon */
 		materialIcon?: string;
 	}
 
-		/** group 是否是已知的分类 key */
-		const knownGroup = (value: unknown): value is LinkGroup =>
-			guideTabs.some((tab) => tab.key === value);
+		/*
+		 * 标签页（用户可新建 / 删除 / 拖动排序），存 localStorage。
+		 * 读不到或存坏就退回 links.ts 里的默认分类。
+		 */
+		const defaultTabList = (): GuideTab[] => guideTabs.map((tab) => ({ ...tab }));
+
+		function loadTabs(): GuideTab[] {
+			try {
+				const raw = localStorage.getItem(TAB_KEY);
+				if (!raw) return defaultTabList();
+				return parseTabs(JSON.parse(raw)) ?? defaultTabList();
+			} catch {
+				return defaultTabList();
+			}
+		}
+
+		let tabs: GuideTab[] = loadTabs();
+		if (!tabs.length) tabs = defaultTabList();
+
+		function saveTabs(): void {
+			try {
+				localStorage.setItem(TAB_KEY, JSON.stringify(tabs));
+			} catch {
+				showHint('浏览器不允许本地存储，这次的改动不会被记住。');
+			}
+		}
+
+		/** 当前激活的标签页 key */
+		let activeTab: string = tabs[0]?.key ?? '';
+
+		/** group 是否是当前存在的标签页 key */
+		const knownGroup = (value: unknown): value is string =>
+			typeof value === 'string' && tabs.some((tab) => tab.key === value);
+
+		/** 归置磁贴时的兜底标签页（第一个） */
+		const fallbackGroup = (): string => tabs[0]?.key ?? FALLBACK_GROUP;
 
 		/*
 		 * 读取本地磁贴。
@@ -1244,14 +1386,15 @@ import { guideTabs } from '../data/guide';
 				/*
 				 * 老版本存的磁贴没有 group 字段（分 tabs 之前加的）。
 				 * 这里就地补上 —— 尽量按网址回查目录拿到原分类，
-				 * 查不到就丢进「实用工具」，别让磁贴凭空消失。
+				 * 查不到就丢进兜底标签页，别让磁贴凭空消失。
 				 */
 				return clean.map((tile) => {
 					if (knownGroup(tile.group)) return tile;
 					const matched = guideCatalog.find(
 						(link) => link.url.replace(/\/+$/, '') === tile.url.replace(/\/+$/, ''),
 					);
-					return { ...tile, group: matched?.group ?? FALLBACK_GROUP };
+					const group = matched && knownGroup(matched.group) ? matched.group : fallbackGroup();
+					return { ...tile, group };
 				});
 			} catch {
 				return [...defaultTiles];
@@ -1268,18 +1411,15 @@ import { guideTabs } from '../data/guide';
 
 		let tiles = load();
 
-		const hint = $('guideHint');
+		/** 标签页 key → 该标签页的网格容器（renderTabs 里重建） */
+		const grids = new Map<string, HTMLElement>();
 
-		/** 分类 key → 该分类的网格容器 */
-		const grids = new Map<LinkGroup, HTMLElement>();
-		for (const panel of document.querySelectorAll<HTMLElement>('.guide-tiles[data-group]')) {
-			const key = panel.dataset.group;
-			if (knownGroup(key)) grids.set(key, panel);
-		}
-
-		function showHint(text: string): void {
-			hint.textContent = text;
-			hint.toggleAttribute('hidden', !text);
+		/*
+		 * 「最后一次操作」提示不再展示 —— 起始页底下不写这些。
+		 * 保留同名空函数，省得逐个删调用点。
+		 */
+		function showHint(_text: string): void {
+			void _text;
 		}
 
 		// ─────────────────────────────────────────────── 渲染
@@ -1429,7 +1569,7 @@ import { guideTabs } from '../data/guide';
 				 * 用户可能自己有 VPN、或者正开着移动热点。挡一下反而添堵。
 				 * 另外 unknown（还没测出来）不提示：不能因为没数据就吓人。
 				 */
-				const warning = accessWarning(tileAccess(tile.url), snapshot);
+				const warning = accessWarning(tileAccess(tile.url), snapshot, tile.url);
 				/*
 				 * 当前网络打不开时，点开前先问一句。
 				 *
@@ -1470,14 +1610,30 @@ import { guideTabs } from '../data/guide';
 				grid.appendChild(item);
 			}
 
+			// 每个标签页末尾放一个「添加磁贴」方块：点开就是新建表单
+			for (const [group, grid] of grids) {
+				grid.appendChild(createAddTile(group));
+			}
+		}
 
-			/*
-			 * ⚠️ 这里不再放「添加磁贴」块。
-			 * 默认磁贴已经是 links.ts 的**全量**，再挂一个「添加」入口就得先有个
-			 * 候选池 —— 而候选池恰恰是被抱怨「链接都看不见」的根源：一半入口被藏在
-			 * 一个要主动点开、还得滚动才能看完的对话框里。既然全铺出来了，
-			 * 添加入口就没有存在意义。
-			 */
+		function createAddTile(group: string): HTMLElement {
+			const btn = document.createElement('button');
+			btn.type = 'button';
+			btn.className = 'guide-tile guide-tile-add';
+			btn.setAttribute('role', 'listitem');
+			btn.title = '添加磁贴';
+			btn.setAttribute('aria-label', '添加磁贴');
+			const box = document.createElement('span');
+			box.className = 'guide-tile-icon';
+			const glyph = document.createElement('mdui-icon-add');
+			glyph.setAttribute('aria-hidden', 'true');
+			box.appendChild(glyph);
+			const label = document.createElement('span');
+			label.className = 'guide-tile-label';
+			label.textContent = '添加';
+			btn.append(box, label);
+			btn.addEventListener('click', () => openNewTile(group));
+			return btn;
 		}
 
 		// ─────────────────────────────────────────────── 搜索引擎
@@ -1770,21 +1926,30 @@ import { guideTabs } from '../data/guide';
 			swatches.appendChild(btn);
 		}
 
-		// 外观模式：group 的 value 就是选中项（详见 syncSettings 里的说明）
+		/*
+		 * 外观模式：选中态**完全交给 group 自己管**，我们只监听它的 change。
+		 *
+		 * 之前是给每个按钮挂 click，并在里面 syncSettings() 回写 group.value。
+		 * 那样会跟 mdui 处理这次点击的时机打架：真实鼠标点击时，mdui 正在
+		 * 更新选中，我们在同一拍把 value 又写回去，结果两边互相覆盖，选中的
+		 * 那一项反而被清空（合成 .click() 不触发指针逻辑，所以一直没发现）。
+		 * 正确做法：不碰按钮事件，只听 group 的 change，value 从 group 读。
+		 */
 		const modes = $('setModes') as unknown as SelectEl;
 		for (const mode of THEME_MODES) {
 			const btn = document.createElement('mdui-segmented-button');
 			btn.value = mode.value;
 			btn.textContent = mode.label;
-			btn.addEventListener('click', () => {
-				themeMode = mode.value;
-				writePref(PREF.mode, mode.value);
-				applyTheme();
-				applyWallpaper();
-				syncSettings();
-			});
 			modes.appendChild(btn);
 		}
+		modes.addEventListener('change', () => {
+			const value = modes.value;
+			if (!THEME_MODES.some((m) => m.value === value)) return;
+			themeMode = value as ThemeMode;
+			writePref(PREF.mode, value);
+			applyTheme();
+			applyWallpaper();
+		});
 
 		/*
 		 * 壁纸缩略图，**按 group 分段**渲染。
@@ -1995,19 +2160,22 @@ import { guideTabs } from '../data/guide';
 			assumeCampus = false;
 			snapshot = applyAssumeCampus(snapshot, false);
 			tiles = [...defaultTiles];
+			tabs = defaultTabList();
+			activeTab = tabs[0]?.key ?? '';
 			chosenEngineId = null;
 			try {
 				localStorage.removeItem(STORE_KEY);
 				localStorage.removeItem(ENGINE_KEY);
+				localStorage.removeItem(TAB_KEY);
 			} catch {
 				// 存不住就算了
 			}
 			applyTheme();
 			applyWallpaper();
 			renderEngine();
-			render();
+			renderTabs();
 			syncSettings();
-			showHint('已恢复默认磁贴与外观。');
+			showHint('已恢复默认磁贴、标签页与外观。');
 		});
 
 		/** 当前外观设置的快照，导出时整份带走 */
@@ -2066,7 +2234,7 @@ import { guideTabs } from '../data/guide';
 		function askToOpen(tile: Tile, href: string): void {
 			pendingUrl = href;
 			$('warnText').textContent =
-				accessNotice(tileAccess(tile.url), tile.title) ??
+				accessNotice(tileAccess(tile.url), tile.title, snapshot) ??
 				`「${tile.title}」现在可能打不开。要试试吗？`;
 			closeOtherDialogs('warnDialog');
 			warnDialog.open = true;
@@ -2091,7 +2259,7 @@ import { guideTabs } from '../data/guide';
 		let pendingImport: Extract<ReturnType<typeof parseConfig>, { tiles: TileConfig[] }> | null = null;
 
 		function exportConfig(): void {
-			const json = serializeConfig(tiles, chosenEngineId, currentAppearance(), new Date());
+			const json = serializeConfig(tiles, chosenEngineId, currentAppearance(), new Date(), tabs);
 			// Blob + 临时 <a download>，全程本地，不上传任何东西
 			const url = URL.createObjectURL(new Blob([json], { type: 'application/json' }));
 			const link = document.createElement('a');
@@ -2144,6 +2312,7 @@ import { guideTabs } from '../data/guide';
 			$('ioSummary').textContent =
 				`将用「${when}」导出的 ${result.tiles.length} 条磁贴，` +
 				`**整份替换**掉当前的 ${tiles.length} 条（含顺序）。` +
+				(result.tabs ? `标签页也会替换为文件里的 ${result.tabs.length} 个。` : '') +
 				(result.appearance
 					? '主题色、外观模式、壁纸、遮罩和校园网设置也会一起替换。'
 					: '这份文件不含外观设置，外观保持现状。') +
@@ -2171,10 +2340,15 @@ import { guideTabs } from '../data/guide';
 
 		$('ioConfirm').addEventListener('click', () => {
 			if (!pendingImport) return;
+			if (pendingImport.tabs) {
+				tabs = pendingImport.tabs.map((tab) => ({ ...tab }));
+				activeTab = tabs[0]?.key ?? '';
+			}
 			tiles = pendingImport.tiles.map((tile) => ({ ...tile }) as Tile);
 			chosenEngineId = pendingImport.engine;
 			try {
 				localStorage.setItem(STORE_KEY, JSON.stringify(tiles));
+				if (pendingImport.tabs) localStorage.setItem(TAB_KEY, JSON.stringify(tabs));
 				if (chosenEngineId) localStorage.setItem(ENGINE_KEY, chosenEngineId);
 				else localStorage.removeItem(ENGINE_KEY);
 			} catch {
@@ -2185,7 +2359,7 @@ import { guideTabs } from '../data/guide';
 			pendingImport = null;
 			ioDialog.open = false;
 			renderEngine();
-			render();
+			renderTabs();
 			syncSettings();
 			showHint('已导入。');
 		});
@@ -2366,6 +2540,24 @@ import { guideTabs } from '../data/guide';
 			tileIconModeChanged(mode);
 			// 输入框的值在 dialog 首次升级后才稳定，延迟再同步一次
 			requestAnimationFrame(() => tileIconModeChanged(mode));
+			tileDelete.style.display = '';
+			closeOtherDialogs('tileDialog');
+			tileDialog.open = true;
+			hideTileError();
+		}
+
+		/** 新建磁贴：空表单，分类预设为当前标签页，隐藏「删除」 */
+		function openNewTile(group: string): void {
+			editingId = null;
+			($('tileTitle') as unknown as TextField).value = '';
+			($('tileUrl') as unknown as TextField).value = '';
+			($('tileGroup') as unknown as SelectEl).value = group;
+			($('tileIconMode') as unknown as SelectEl).value = 'site';
+			($('tileIconUrl') as unknown as TextField).value = '';
+			($('tileIconText') as unknown as TextField).value = '';
+			tileIconModeChanged('site');
+			requestAnimationFrame(() => tileIconModeChanged('site'));
+			tileDelete.style.display = 'none';
 			closeOtherDialogs('tileDialog');
 			tileDialog.open = true;
 			hideTileError();
@@ -2464,7 +2656,7 @@ import { guideTabs } from '../data/guide';
 		});
 
 		$('tileSave').addEventListener('click', () => {
-			if (!editingId) return;
+			const id = editingId;
 			const title = ($('tileTitle') as unknown as TextField).value.trim();
 			const url = ($('tileUrl') as unknown as TextField).value.trim();
 			const iconMode = ($('tileIconMode') as unknown as SelectEl).value;
@@ -2517,38 +2709,43 @@ import { guideTabs } from '../data/guide';
 				return;
 			}
 
-			tiles = tiles.map((t) =>
-				t.id === editingId
-					? ({
-							...t,
-							title,
-							url,
-							iconMode: (iconMode === 'site' ? undefined : iconMode) as Tile['iconMode'],
-							icon,
-							group: group as LinkGroup,
-							// 网址换了，原来按域名匹配到的图标就不再作数
-							...(!icon && t.materialIcon ? { materialIcon: undefined } : {}),
-						} as Tile)
-					: t,
-			);
+			const next: Tile = {
+				id: id ?? `i-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
+				title,
+				url,
+				iconMode: (iconMode === 'site' ? undefined : iconMode) as Tile['iconMode'],
+				icon,
+				group,
+			};
+			tiles = id
+				? tiles.map((t) =>
+						t.id === id
+							? ({
+									...t,
+									...next,
+									// 网址换了，原来按域名匹配到的图标就不再作数
+									...(!icon && t.materialIcon ? { materialIcon: undefined } : {}),
+								} as Tile)
+							: t,
+					)
+				: [...tiles, next];
 			editingId = null;
 			tileDialog.open = false;
 			save(tiles);
 			render();
-			showHint(`已保存「${title}」。`);
 		});
 
-		// ─────────────────────────────────────────────── 拖动排序
+		// ─────────────────────────────────────────────── 拖动排序（磁贴）
 
 		let dragId: string | null = null;
 
 		/*
-		 * 排序只在**同一个分类内**进行。
-		 * tiles 是一个扁平数组，磁贴按分类分散在各个面板里，
-		 * 所以先取出这个分类在数组里的槽位下标，在槽位内部重排 ——
-		 * 直接对整个数组 splice 会把别的分类的磁贴也搅乱。
+		 * 排序只在**同一个标签页内**进行。
+		 * tiles 是一个扁平数组，磁贴按标签页分散在各个面板里，
+		 * 所以先取出这个标签页在数组里的槽位下标，在槽位内部重排 ——
+		 * 直接对整个数组 splice 会把别的标签页的磁贴也搅乱。
 		 */
-		function reorderWithin(group: LinkGroup, overId: string): void {
+		function reorderWithin(group: string, overId: string): void {
 			const slots = tiles.reduce<number[]>((acc, tile, i) => {
 				if (tile.group === group) acc.push(i);
 				return acc;
@@ -2569,7 +2766,7 @@ import { guideTabs } from '../data/guide';
 			render();
 		}
 
-		for (const grid of grids.values()) {
+		function wireGridDnD(grid: HTMLElement): void {
 			grid.addEventListener('dragstart', (event) => {
 				const tile = (event.target as HTMLElement | null)?.closest('.guide-tile') as HTMLElement | null;
 				if (!tile) return;
@@ -2597,7 +2794,7 @@ import { guideTabs } from '../data/guide';
 				const targetId = over?.dataset.id;
 				if (!targetId || targetId === dragId) return;
 				const group = grid.dataset.group;
-				if (!knownGroup(group)) return;
+				if (!group || !knownGroup(group)) return;
 				reorderWithin(group, targetId);
 			});
 
@@ -2609,6 +2806,242 @@ import { guideTabs } from '../data/guide';
 			});
 		}
 
-		render();
+		// ─────────────────────────────────── 标签页：渲染 / 新建 / 删除 / 排序
+
+		const tabsHost = $('guideTabsHost');
+		type TabsEl = HTMLElement & { value: string };
+
+		/*
+		 * 每次重排 / 增删都**整块换新** <mdui-tabs>，而不是改现有元素的子节点 ——
+		 * mdui-tabs 在连接时读取子标签，事后增删它未必能感知；
+		 * 换新元素最省心，也顺带让内部选中态与数据天然一致。
+		 */
+		function renderTabs(): void {
+			if (!tabs.length) tabs = defaultTabList();
+			const keys = new Set(tabs.map((tab) => tab.key));
+
+			// 磁贴归位：group 指向已不存在的标签页时，落到兜底标签页
+			let moved = false;
+			tiles = tiles.map((tile) => {
+				if (keys.has(tile.group)) return tile;
+				moved = true;
+				return { ...tile, group: fallbackGroup() };
+			});
+			if (moved) save(tiles);
+			if (!keys.has(activeTab)) activeTab = tabs[0].key;
+
+			const tabsEl = document.createElement('mdui-tabs') as TabsEl;
+			tabsEl.className = 'guide-tabs';
+			tabsEl.id = 'guideTabs';
+			tabsEl.setAttribute('value', activeTab);
+
+			for (const tab of tabs) {
+				const el = document.createElement('mdui-tab');
+				el.setAttribute('value', tab.key);
+				el.textContent = tab.label;
+				el.setAttribute('draggable', 'true');
+				el.title = '拖动可排序，右键可重命名 / 删除';
+				el.addEventListener('contextmenu', (event) => {
+					event.preventDefault();
+					openTabMenu(tab, event);
+				});
+				wireTabDrag(el);
+				tabsEl.appendChild(el);
+			}
+			for (const tab of tabs) {
+				const panel = document.createElement('mdui-tab-panel');
+				panel.setAttribute('slot', 'panel');
+				panel.setAttribute('value', tab.key);
+				const grid = document.createElement('div');
+				grid.className = 'guide-tiles';
+				grid.dataset.group = tab.key;
+				grid.setAttribute('role', 'list');
+				panel.appendChild(grid);
+				tabsEl.appendChild(panel);
+			}
+
+			tabsHost.textContent = '';
+			tabsHost.appendChild(tabsEl);
+
+			grids.clear();
+			for (const grid of tabsEl.querySelectorAll<HTMLElement>('.guide-tiles[data-group]')) {
+				const key = grid.dataset.group;
+				if (key && keys.has(key)) {
+					grids.set(key, grid);
+					wireGridDnD(grid);
+				}
+			}
+			tabsEl.addEventListener('change', () => {
+				activeTab = tabsEl.value;
+			});
+
+			renderTileGroupOptions();
+			render();
+		}
+
+		// 标签页拖动排序
+		let dragTabKey: string | null = null;
+
+		function wireTabDrag(el: HTMLElement): void {
+			el.addEventListener('dragstart', (event) => {
+				dragTabKey = el.getAttribute('value');
+				el.classList.add('is-dragging');
+				event.dataTransfer?.setData('text/plain', dragTabKey ?? '');
+				if (event.dataTransfer) event.dataTransfer.effectAllowed = 'move';
+			});
+			el.addEventListener('dragover', (event) => {
+				if (!dragTabKey) return;
+				event.preventDefault();
+			});
+			el.addEventListener('drop', (event) => {
+				event.preventDefault();
+				const overKey = el.getAttribute('value');
+				if (!dragTabKey || !overKey || overKey === dragTabKey) return;
+				const from = tabs.findIndex((t) => t.key === dragTabKey);
+				const to = tabs.findIndex((t) => t.key === overKey);
+				if (from < 0 || to < 0) return;
+				const next = [...tabs];
+				const [movedTab] = next.splice(from, 1);
+				next.splice(to, 0, movedTab);
+				tabs = next;
+				saveTabs();
+				renderTabs();
+			});
+			el.addEventListener('dragend', () => {
+				dragTabKey = null;
+				el.classList.remove('is-dragging');
+			});
+		}
+
+		// mdui 的 prompt / confirm 函数（全局构建自带），拿不到时退回原生弹窗
+		type MduiApi = {
+			prompt?: (options: Record<string, unknown>) => Promise<string>;
+			confirm?: (options: Record<string, unknown>) => Promise<void>;
+		};
+		const mduiApi = (window as unknown as { mdui?: MduiApi }).mdui;
+
+		async function askTabName(headline: string, initial: string): Promise<string | null> {
+			if (!mduiApi?.prompt) {
+				const value = window.prompt(headline, initial);
+				return value ? value.trim().slice(0, MAX_TAB_LABEL) || null : null;
+			}
+			try {
+				const value = await mduiApi.prompt({
+					headline,
+					confirmText: '确定',
+					cancelText: '取消',
+					textFieldOptions: { value: initial, label: '标签页名称', maxlength: MAX_TAB_LABEL },
+					validator: (v: string) => (v.trim() ? true : '名称不能为空'),
+				});
+				return value.trim().slice(0, MAX_TAB_LABEL) || null;
+			} catch {
+				return null;
+			}
+		}
+
+		async function askConfirm(headline: string, description: string): Promise<boolean> {
+			if (!mduiApi?.confirm) return window.confirm(`${headline}\n${description}`);
+			try {
+				await mduiApi.confirm({ headline, description, confirmText: '删除', cancelText: '取消' });
+				return true;
+			} catch {
+				return false;
+			}
+		}
+
+		async function addTab(): Promise<void> {
+			if (tabs.length >= MAX_TABS) {
+				showHint(`最多 ${MAX_TABS} 个标签页。`);
+				return;
+			}
+			const name = await askTabName('新建标签页', '');
+			if (!name) return;
+			const tab: GuideTab = { key: makeTabKey(tabs), label: name, tone: nextTabTone(tabs) };
+			tabs = [...tabs, tab];
+			activeTab = tab.key;
+			saveTabs();
+			renderTabs();
+			showHint(`已新建标签页「${name}」。`);
+		}
+
+		async function renameTab(tab: GuideTab): Promise<void> {
+			const name = await askTabName('重命名标签页', tab.label);
+			if (!name || name === tab.label) return;
+			tabs = tabs.map((t) => (t.key === tab.key ? { ...t, label: name } : t));
+			saveTabs();
+			renderTabs();
+		}
+
+		async function deleteTab(tab: GuideTab): Promise<void> {
+			if (tabs.length <= 1) {
+				showHint('至少要保留一个标签页。');
+				return;
+			}
+			const count = tiles.filter((t) => t.group === tab.key).length;
+			const ok = await askConfirm(
+				`删除标签页「${tab.label}」？`,
+				count ? `其中的 ${count} 个磁贴也会一起删除。` : '这个标签页是空的。',
+			);
+			if (!ok) return;
+			tabs = tabs.filter((t) => t.key !== tab.key);
+			tiles = tiles.filter((t) => t.group !== tab.key);
+			if (activeTab === tab.key) activeTab = tabs[0].key;
+			saveTabs();
+			save(tiles);
+			renderTabs();
+			showHint(`已删除标签页「${tab.label}」。`);
+		}
+
+		$('tabAdd').addEventListener('click', () => {
+			void addTab();
+		});
+
+		// 标签页右键菜单（重命名 / 删除）—— 自绘小浮层，避免再引入一套组件
+		let tabMenu: HTMLElement | null = null;
+		function closeTabMenu(): void {
+			tabMenu?.remove();
+			tabMenu = null;
+		}
+		function openTabMenu(tab: GuideTab, event: MouseEvent): void {
+			closeTabMenu();
+			const menu = document.createElement('div');
+			menu.className = 'guide-tab-menu';
+			const add = (label: string, danger: boolean, run: () => void): void => {
+				const btn = document.createElement('button');
+				btn.type = 'button';
+				btn.textContent = label;
+				if (danger) btn.classList.add('is-danger');
+				btn.addEventListener('click', () => {
+					closeTabMenu();
+					run();
+				});
+				menu.appendChild(btn);
+			};
+			add('重命名', false, () => void renameTab(tab));
+			add('删除', true, () => void deleteTab(tab));
+			menu.style.left = `${event.clientX}px`;
+			menu.style.top = `${event.clientY}px`;
+			document.body.appendChild(menu);
+			tabMenu = menu;
+		}
+		document.addEventListener('click', closeTabMenu);
+		window.addEventListener('blur', closeTabMenu);
+
+		// 磁贴编辑弹窗里的「分类」下拉：选项跟着标签页走
+		function renderTileGroupOptions(): void {
+			const sel = $('tileGroup') as unknown as SelectEl;
+			const current = sel.value;
+			sel.textContent = '';
+			for (const tab of tabs) {
+				const item = document.createElement('mdui-menu-item');
+				item.setAttribute('value', tab.key);
+				item.textContent = tab.label;
+				sel.appendChild(item);
+			}
+			if (tabs.some((tab) => tab.key === current)) sel.value = current;
+			else sel.value = tabs[0]?.key ?? '';
+		}
+
+		renderTabs();
 	</script>
 </Base>

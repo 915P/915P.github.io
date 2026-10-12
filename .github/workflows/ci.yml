@@ -1,0 +1,52 @@
+name: CI
+
+# PR 与推送到 main 都要过检查，坏 PR 在合并前就亮红。
+# deploy.yml 只负责真正发布；本流程负责把住质量门。
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# 只读即可，不需要任何写权限
+permissions:
+  contents: read
+
+# 同一分支的新提交取消尚未跑完的旧任务
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    # 与 deploy.yml 保持一致：锁定 ubuntu-24.04（原因见 deploy.yml 注释）
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: 安装依赖
+        run: npm ci
+
+      - name: 类型检查
+        run: npm run check
+
+      # 四套纯 Node 回归测试；改动若只涉及其中一块，可留到 PR 里说明
+      - name: 单元测试（eval）
+        run: npm run test:eval
+
+      - name: 单元测试（pdf）
+        run: npm run test:pdf
+
+      - name: 单元测试（media）
+        run: npm run test:media
+
+      - name: 单元测试（guide）
+        run: npm run test:guide
+
+      - name: 构建
+        run: npm run build
