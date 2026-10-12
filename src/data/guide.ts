@@ -89,7 +89,7 @@ export function accessNotice(access: TileAccess, title: string): string | null {
 		return `「${title}」要靠同济图书馆的机构订阅才能下全文，校外一般得先把学校 VPN 连上。现在还要打开吗？`;
 	}
 	if (access.intl) {
-		return `「${title}」的服务器在境外，当前网络可能连不上。现在还要打开吗？`;
+		return `「${title}」在当前网络环境下可能无法打开。现在还要打开吗？`;
 	}
 	return null;
 }
@@ -407,6 +407,8 @@ export interface NetTarget {
 }
 
 /**
+/**
+/**
  * 校园网判定用的地址，以及**为什么是这几个**。
  *
  * 实测（对 223.5.5.5 与 119.29.29.29 两个公共 DNS 分别 dig，结果一致）：
@@ -427,6 +429,14 @@ export interface NetTarget {
  * 于是我一度以为「同济把校内 IP 发布到了公网 DNS」。那其实是**本机的
  * systemd-resolved（127.0.0.53）** 返回的结果，不代表公网行为。
  * 判断「校外能不能访问」必须显式指定公共 DNS 去问，不能信本机解析器。
+ *
+ * ⚠️ 这条路**依赖解析器**，而解析器是可以换的：系统 DNS 换成 TUNA 的
+ * 101.6.6.6 这类公共解析器后，这几个域名在校内校外都解析不出，探测恒为失败，
+ * 于是满屏「需校园网」的误报。改用裸 IP 探测可以绕开 DNS，但得把内网地址
+ * 写进公开仓库的源码里 —— 综合考虑后没有这么做。
+ *
+ * 所以留给用户一个**兜底**：设置里的「默认在校园网环境下」。
+ * 打开它就当校园网可达，不再依赖探测（见 assumeCampusOn）。
  *
  * ⚠️ 另外几个**故意没放进来**的候选：
  * - `192.0.2.10:2080`（高程作业）：裸 IP，路由确实只有校园网通。但它**不保证
@@ -518,6 +528,52 @@ export function isStale(snapshot: NetSnapshot, now: number, ttl = NET_TTL): bool
 }
 
 /**
+ * 「默认在校园网环境下」—— 用户自己声明的一档，**不信探测**。
+ *
+ * 为什么需要它：校园网探测的判据是「校内域名解析不出就连不上」，而这依赖
+ * 系统解析器。解析器一旦换成公共 DNS（TUNA 101.6.6.6、Cloudflare 之类），
+ * 校内域名照样解析失败，于是**人在校内也被判成校外**，满屏「需校园网」误报。
+ * 探测在这里没有能力分辨，只能问人。
+ *
+ * 打开时直接把 campus 当 'ok'：校内系统不该再被提示，也不会再去探那几个
+ * 域名（省三次外部请求）。GitHub / Google 的探测照旧 —— 那一层跟校园网无关。
+ */
+export const ASSUME_CAMPUS_KEY = 'jwwl:net-campus';
+
+/** 读用户声明；解析失败（隐私模式、脏数据）一律当作没声明 */
+export function readAssumeCampus(): boolean {
+	try {
+		return localStorage.getItem(ASSUME_CAMPUS_KEY) === '1';
+	} catch {
+		return false;
+	}
+}
+
+export function writeAssumeCampus(on: boolean): void {
+	try {
+		if (on) localStorage.setItem(ASSUME_CAMPUS_KEY, '1');
+		else localStorage.removeItem(ASSUME_CAMPUS_KEY);
+	} catch {
+		// 存不住只是下次打开回到默认，不影响本次
+	}
+}
+
+/**
+ * 把「默认在校园网环境下」叠到探测结果上，得到**实际生效**的判定。
+ *
+ * 只改 campus 一项，github / google 照旧 —— 那一层是国际连通性，
+ * 跟在不在校园网没关系，不能顺手一起放行。
+ *
+ * ⚠️ `at` 刻意**不**动：它记录的是「上次探测是什么时候」，github / google
+ * 那两项照旧在探、时间戳对它们仍然成立。归零会让 isStale() 永远为真，
+ * 于是每次打开页面都重跑一遍探测 —— 白费两次外部请求。
+ */
+export function applyAssumeCampus(snapshot: NetSnapshot, assumed: boolean): NetSnapshot {
+	if (!assumed) return snapshot;
+	return { ...snapshot, campus: 'ok' };
+}
+
+/**
  * 读本地缓存。
  *
  * 存坏数据就当没检测过 —— 这个信息本来就是「参考」，读不出来不该阻断页面。
@@ -594,7 +650,30 @@ export function describeOverall(snapshot: NetSnapshot): { text: string; tone: 'o
  * 一个 `javascript:` 开头的地址就够在别人浏览器里执行任意脚本了。
  * 所以这里对协议、字段类型、条目数量全都设卡。
  */
-export const CONFIG_VERSION = 1;
+export const CONFIG_VERSION = 2;
+
+/** 能导入的最低版本。1 只含链接与搜索引擎，没有任何外观字段 */
+export const MIN_CONFIG_VERSION = 1;
+
+/**
+ * 外观类设置，导入导出用。
+ *
+ * `customWall` 是自定义壁纸的 data URL，动辄几百 KB。它只在内置壁纸
+ * 不够用、用户自己传了图时才有值；导出的文件超过体积上限就整个不带这个字段
+ * （对方导入时退回纯色，导入结果里会说明）。
+ */
+export interface AppearanceConfig {
+	/** 主题色种子，见 THEME_COLORS */
+	color: string;
+	mode: ThemeMode;
+	/** 壁纸 id，见 WALLPAPERS；'custom' 表示用 customWall */
+	wallpaper: string;
+	/** 背景遮罩不透明度 */
+	scrub: number;
+	/** 是否默认按校园网环境处理（不探测校内站点） */
+	assumeCampus: boolean;
+	customWall?: string;
+}
 
 /** 单个磁贴的导出格式 */
 export interface TileConfig {
@@ -602,6 +681,11 @@ export interface TileConfig {
 	title: string;
 	url: string;
 	icon: string;
+	/**
+	 * 图标模式：'url' → 图片 URL，'material' → Material Icons 组件名，
+	 * 'text' → emoji 或短文字。未设置时按网址自动取站点 favicon。
+	 */
+	iconMode?: 'url' | 'material' | 'text';
 	group: LinkGroup;
 	/** Material Icons 组件名（如 'swap-horiz'）；有值时渲染图标而不是 favicon */
 	materialIcon?: string;
@@ -613,6 +697,8 @@ export interface GuideConfig {
 	exportedAt: string;
 	/** 搜索引擎 id；null = 按网络自动挑 */
 	engine: string | null;
+	/** 主题色 / 模式 / 壁纸 / 遮罩 / 校园网假设。v1 文件里没有 */
+	appearance?: AppearanceConfig;
 	tiles: TileConfig[];
 }
 
@@ -621,7 +707,10 @@ export const MAX_CONFIG_TILES = 500;
 /** 字段长度上限，同样是防畸形 */
 const MAX_TITLE = 60;
 const MAX_URL = 500;
-const MAX_ICON = 8;
+/** 文字 / emoji 图标的最大长度 */
+const MAX_ICON_TEXT = 8;
+/** 图片 URL 的最大长度 */
+const MAX_ICON_URL = 500;
 
 /**
  * 允许的链接形态：http(s) 绝对地址，或**根相对路径**。
@@ -656,18 +745,48 @@ export function urlHost(url: string): string | null {
 	}
 }
 
-/** 导出：把当前磁贴与引擎选择打包成 JSON（带缩进，方便人看/手动改） */
-export function serializeConfig(tiles: TileConfig[], engine: string | null, now: Date): string {
+/** 自定义壁纸进配置文件的上限：再大这文件就没法看也没法转手了 */
+export const MAX_CUSTOM_WALL_IN_CONFIG = 600 * 1024;
+
+/**
+ * 导出：把磁贴、搜索引擎与外观设置打包成 JSON（带缩进，方便人看/手动改）
+ *
+ * 自定义壁纸按体积决定去留：小就一起带过去，太大就只留个 id，
+ * 对方导入时会退回纯色并在结果里说明 —— 不声不响丢设置比丢个提示糟。
+ */
+export function serializeConfig(
+	tiles: TileConfig[],
+	engine: string | null,
+	appearance: AppearanceConfig,
+	now: Date,
+): string {
+	/*
+	 * 自定义壁纸按体积决定去留。
+	 * ⚠️ 必须是「显式挑字段再拼」，不能写成 `{ ...appearance, ...(带上 ? {customWall} : {}) }`
+	 * —— 后者在**不带**的时候只是没往里加，原来那个大字符串仍在
+	 * appearance 里被展开带出去，等于没截断（实测就是这么错的）。
+	 */
+	const wall = appearance.customWall ?? '';
+	const keepWall = wall.length > 0 && wall.length <= MAX_CUSTOM_WALL_IN_CONFIG;
 	const config: GuideConfig = {
 		version: CONFIG_VERSION,
 		exportedAt: now.toISOString(),
 		engine,
+		appearance: {
+			color: appearance.color,
+			mode: appearance.mode,
+			wallpaper: appearance.wallpaper,
+			scrub: appearance.scrub,
+			assumeCampus: appearance.assumeCampus,
+			...(keepWall ? { customWall: wall } : {}),
+		},
 		tiles: tiles.map((tile) => ({
 			id: tile.id,
 			title: tile.title,
 			url: tile.url,
 			icon: tile.icon,
 			group: tile.group,
+			...(tile.iconMode ? { iconMode: tile.iconMode } : {}),
 			...(tile.materialIcon ? { materialIcon: tile.materialIcon } : {}),
 		})),
 	};
@@ -677,6 +796,11 @@ export function serializeConfig(tiles: TileConfig[], engine: string | null, now:
 export interface ParseResult {
 	tiles: TileConfig[];
 	engine: string | null;
+	/**
+	 * 外观设置。v1 文件里没有，为 undefined —— 此时导入**不碰**现有外观，
+	 * 只换链接和搜索引擎。
+	 */
+	appearance?: AppearanceConfig;
 	/** 被丢弃的条目数及原因，便于如实告诉用户「导入了 N 条、丢弃了 M 条」 */
 	dropped: string[];
 	exportedAt?: string;
@@ -701,9 +825,9 @@ export function parseConfig(raw: string): ParseResult | { error: string } {
 	const record = parsed as Record<string, unknown>;
 
 	const version = record.version;
-	if (version !== CONFIG_VERSION) {
+	if (typeof version !== 'number' || version < MIN_CONFIG_VERSION || version > CONFIG_VERSION) {
 		return {
-			error: `配置版本是 ${JSON.stringify(version)}，这份程序只认 ${CONFIG_VERSION}。`,
+			error: `配置版本是 ${JSON.stringify(version)}，这份程序只认 ${MIN_CONFIG_VERSION} 到 ${CONFIG_VERSION}。`,
 		};
 	}
 
@@ -729,7 +853,14 @@ export function parseConfig(raw: string): ParseResult | { error: string } {
 		const id = typeof entry.id === 'string' ? entry.id.slice(0, 80) : '';
 		const title = typeof entry.title === 'string' ? entry.title.trim().slice(0, MAX_TITLE) : '';
 		const url = typeof entry.url === 'string' ? entry.url.trim().slice(0, MAX_URL) : '';
-		const icon = typeof entry.icon === 'string' ? entry.icon.slice(0, MAX_ICON) : '';
+		const rawIcon = typeof entry.icon === 'string' ? entry.icon : '';
+		const iconMode =
+			entry.iconMode === 'url' || entry.iconMode === 'material' || entry.iconMode === 'text'
+				? entry.iconMode
+				: undefined;
+		const icon = iconMode === 'url'
+			? rawIcon.trim().slice(0, MAX_ICON_URL)
+			: rawIcon.trim().slice(0, MAX_ICON_TEXT);
 
 		if (!title) {
 			dropped.push(`${where}：没有名称`);
@@ -757,6 +888,7 @@ export function parseConfig(raw: string): ParseResult | { error: string } {
 			group,
 			// 组件名会拼进标签名，必须限制字符集：不能有空格、斜杠、尖括号
 			...(material ? { materialIcon: material } : {}),
+			...(iconMode ? { iconMode } : {}),
 		});
 	}
 
@@ -771,13 +903,65 @@ export function parseConfig(raw: string): ParseResult | { error: string } {
 			: null;
 
 	const exportedAt = typeof record.exportedAt === 'string' ? record.exportedAt : undefined;
-	return { tiles, engine, dropped, ...(exportedAt ? { exportedAt } : {}) };
+
+	/*
+	 * 外观设置：v1 没有这个字段，**缺席时返回 undefined**，调用方保持现状。
+	 * 少了字段不代表文件坏 —— 老版本导出的文件照样能用，只是不带外观。
+	 */
+	const rawAppearance = record.appearance;
+	let appearance: AppearanceConfig | undefined;
+	if (rawAppearance && typeof rawAppearance === 'object' && !Array.isArray(rawAppearance)) {
+		const a = rawAppearance as Record<string, unknown>;
+		const color =
+			typeof a.color === 'string' && THEME_COLORS.some((c) => c.value === a.color)
+				? a.color
+				: undefined;
+		const mode = THEME_MODES.some((m) => m.value === a.mode) ? (a.mode as ThemeMode) : undefined;
+		const wallRaw = typeof a.wallpaper === 'string' ? a.wallpaper : '';
+		const knownWall = WALLPAPERS.some((w) => w.value === wallRaw);
+		/*
+		 * 体积同样要卡：手搓一个超大 data URL 就能把 localStorage 顶爆，
+		 * 而那会让**所有**偏好都存不住（不只是壁纸）。
+		 * 超限的一并按「没有自定义壁纸」处理，退回纯色。
+		 */
+		const wallRawText = typeof a.customWall === 'string' ? a.customWall : '';
+		const customWall =
+			wallRawText.length > 0 && wallRawText.length <= MAX_CUSTOM_WALLPAPER_BYTES
+				? wallRawText
+				: undefined;
+		// 'custom' 只是标记，真正的图在 customWall 里；少了它就等于没有
+		const wallpaper = knownWall
+			? wallRaw
+			: wallRaw === 'custom' && customWall
+				? 'custom'
+				: 'none';
+		/*
+		 * 文件里**出现** appearance 就整份替换（语义和链接一样：覆盖导入）。
+		 * 单个字段认不出来只回落那一个字段的默认值，不连累其他字段 ——
+		 * 手改过的文件里一个写错的颜色，不该把好好的壁纸设置也一起扔掉。
+		 */
+		appearance = {
+			color: color ?? THEME_COLORS[0].value,
+			mode: mode ?? 'auto',
+			wallpaper,
+			scrub: sanitizeScrub(a.scrub),
+			assumeCampus: a.assumeCampus === true,
+			...(wallpaper === 'custom' && customWall ? { customWall } : {}),
+		};
+	}
+
+	return { tiles, engine, appearance, dropped, ...(exportedAt ? { exportedAt } : {}) };
 }
 
-/** 导出文件名：起始页-链接-2026-10-07.json */
+/**
+ * 导出文件名：起始页-配置-2026-10-11.json
+ *
+ * 从「链接」改成「配置」是因为导出的内容早就不只是链接了 ——
+ * 主题色、壁纸、遮罩、校园网假设都在里面。
+ */
 export function configFilename(now: Date): string {
 	const pad = (n: number) => String(n).padStart(2, '0');
-	return `起始页-链接-${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}.json`;
+	return `起始页-配置-${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}.json`;
 }
 
 /* ------------------------------------------------------------ 外观设置 */
@@ -813,35 +997,142 @@ export const THEME_MODES: ThemeModeOption[] = [
 ];
 
 /**
- * 内置壁纸。
+/**
+ * 校园照片壁纸，按季节分组。
  *
- * ⚠️ 刻意**只留纯色和渐变**。真实照片当背景，文字对比度很难两套主题都做好；
- * 而这份数据是要随仓库公开的，也不该塞来源不明的图。
- * 想用照片可以用「自定义壁纸」，存在自己浏览器里，不外传。
+ * 图片来源：「印象同济」photo.tongji.edu.cn（学校官方图片站）。
+ * 由 scripts/fetch-walls.mjs 抓取并压到 1600px 宽，落盘在 public/images/walls/。
+ * 每个分组用 `photo` 标记，面板按这个字段分段显示。
+ *
+ * ⚠️ 照片当背景，文字对比度不如纯色那么好做 —— 所以遮罩默认值给得比较高
+ * （见 SCRUB_RANGE），且深色主题会自动再压暗一档。
  */
-export const WALLPAPERS = [
-	{ value: 'none', label: '纯色', css: '' },
-	{ value: 'campus', label: '同济校园', css: 'url(/images/tongji-campus.jpg)' },
+export const PHOTO_WALLS = [
+	{ value: 'spring', label: '春', css: '', photos: [
+		{ value: 'spring-lib', label: '图书馆', file: '/images/walls/春-图书馆.jpg' },
+		{ value: 'spring-sakura', label: '樱花大道', file: '/images/walls/春-樱花大道.jpg' },
+		{ value: 'spring-sanhao', label: '三好坞', file: '/images/walls/春-三好坞.jpg' },
+		{ value: 'spring-pillar', label: '国立柱', file: '/images/walls/春-国立柱.jpg' },
+	] },
+	{ value: 'summer', label: '夏', css: '', photos: [
+		{ value: 'summer-sanhao', label: '三好坞', file: '/images/walls/夏-三好坞.jpg' },
+		{ value: 'summer-pillar', label: '国立柱', file: '/images/walls/夏-国立柱.jpg' },
+		{ value: 'summer-bridge', label: '桥', file: '/images/walls/夏-桥.jpg' },
+	] },
+	{ value: 'autumn', label: '秋', css: '', photos: [
+		{ value: 'autumn-pillar', label: '国立柱', file: '/images/walls/秋-国立柱.jpg' },
+		{ value: 'autumn-bridge', label: '桥', file: '/images/walls/秋-桥.jpg' },
+	] },
+	{ value: 'winter', label: '冬', css: '', photos: [
+		{ value: 'winter-pillar', label: '国立柱', file: '/images/walls/冬-国立柱.jpg' },
+		{ value: 'winter-sanhao', label: '三好坞', file: '/images/walls/冬-三好坞.jpg' },
+		{ value: 'winter-gate', label: '校门', file: '/images/walls/冬-校门.jpg' },
+	] },
+	{ value: 'night', label: '夜', css: '', photos: [
+		{ value: 'night-sanhao', label: '三好坞', file: '/images/walls/夜-三好坞.jpg' },
+		{ value: 'night-lib', label: '图书馆', file: '/images/walls/夜-图书馆.jpg' },
+		{ value: 'night-pillar', label: '国立柱', file: '/images/walls/夜-国立柱.jpg' },
+	] },
+] as const;
+
+/** 纯渐变壁纸：不按季节分组，也不需要遮罩之外的额外处理 */
+export const GRADIENT_WALLS = [
 	{ value: 'dawn', label: '晨曦', css: 'linear-gradient(160deg,#ffd8a8 0%,#ff9a8b 45%,#a18cd1 100%)' },
 	{ value: 'sea', label: '海雾', css: 'linear-gradient(160deg,#a8edea 0%,#7fcdbb 50%,#2f6f8f 100%)' },
 	{ value: 'night', label: '夜航', css: 'linear-gradient(160deg,#2b5876 0%,#4e4376 100%)' },
 	{ value: 'ink', label: '素笺', css: 'linear-gradient(160deg,#f6f5f4 0%,#e8e6e3 100%)' },
 ] as const;
 
-export type WallpaperId = (typeof WALLPAPERS)[number]['value'];
+/**
+ * 壁纸选项的总表。
+ *
+ * 面板直接遍历它；`group` 用来分段渲染（照片按季节、渐变单独一段）。
+ * `random` 是「按当前季节/时段随机抽一张」的伪 id —— 它不对应任何一张具体图，
+ * 而是每次应用时现抽（见 pickWallByTime）。
+ */
+export interface WallpaperOption {
+	value: string;
+	label: string;
+	css: string;
+	group: string;
+}
 
-/** 遮罩不透明度：太小则前景文字读不清，太大则看不见壁纸 */
-export const SCRUB_RANGE = { min: 0.3, max: 0.92, step: 0.02, defaultValue: 0.72 };
+export const WALLPAPERS: WallpaperOption[] = [
+	{ value: 'none', label: '纯色', css: '', group: '基础' },
+	{ value: 'random', label: '随机（按季节）', css: '', group: '基础' },
+	...PHOTO_WALLS.flatMap((season) =>
+		season.photos.map((photo) => ({
+			value: photo.value,
+			label: `${season.label}·${photo.label}`,
+			css: `url(${photo.file})`,
+			group: `校园照片·${season.label}`,
+		})),
+	),
+	...GRADIENT_WALLS.map((wall) => ({ value: wall.value, label: wall.label, css: wall.css, group: '渐变' })),
+];
 
-/** 预设遮罩里，深色主题的默认值略低（背景本身就暗，再压太黑） */
-export const SCRUB_DARK_DEFAULT = 0.55;
+export type WallpaperId = string;
 
 /**
- * 按主题模式算出实际遮罩浓度。
- * 深色下自动降一档，避免壁纸把界面压得死黑。
+ * 按当前时间挑一张照片壁纸。
+ *
+ * 白天从**当前季节**那一组抽，晚上从「夜」抽。
+ * 抽完返回具体那一张的 value，所以界面上能显示「现在用的是哪张」，
+ * 用户也依然可以在面板里手动改。
+ *
+ * 月份 → 季节：3-5 春，6-8 夏，9-11 秋，12-2 冬。
+ * 时段：19:00 之后、7:00 之前算夜晚。
  */
-export function scrubFor(mode: ThemeMode, lightValue: number): number {
-	return mode === 'dark' ? Math.min(lightValue, SCRUB_DARK_DEFAULT) : lightValue;
+export function pickWallByTime(now: Date): string {
+	const month = now.getMonth() + 1;
+	const hour = now.getHours();
+	const season =
+		hour >= 19 || hour < 7
+			? 'night'
+			: month >= 3 && month <= 5
+				? 'spring'
+				: month >= 6 && month <= 8
+					? 'summer'
+					: month >= 9 && month <= 11
+						? 'autumn'
+						: 'winter';
+	const group = PHOTO_WALLS.find((item) => item.value === season) ?? PHOTO_WALLS[0];
+	// Math.random 只在每次加载/点按钮时调用一次，不放进渲染循环
+	const picked = group.photos[Math.floor(Math.random() * group.photos.length)];
+	return picked.value;
+}
+
+/** 取一张照片壁纸的 css 背景值 */
+export function wallCss(value: string): string {
+	return WALLPAPERS.find((w) => w.value === value)?.css ?? '';
+}
+
+/**
+ * 遮罩不透明度：太小则前景文字读不清，太大则看不见壁纸。
+ *
+ * ⚠️ 默认 0.5 是给**渐变**壁纸定的。渐变本身自带颜色（素笺那张接近白），
+ * 0.72 压上去连「有壁纸」都看不出来，用户只会以为背景是纯色。
+ */
+export const SCRUB_RANGE = { min: 0.3, max: 0.92, step: 0.02, defaultValue: 0.5 };
+
+/**
+ * 照片壁纸的默认遮罩：比渐变更厚，保证亮照片上的文字也读得清。
+ *
+ * 遮罩色是固定近黑（不跟主题走），所以深浅两套主题共用这一档浓度 ——
+ * 之前浅色主题走浅灰白遮罩时定的 0.88 那个数不能要了：
+ * 同一个浓度换成深色遮罩，樱花大道会黑得看不清轮廓。
+ */
+export const PHOTO_SCRUB_DEFAULT = 0.58;
+
+/**
+ * 按当前壁纸算出遮罩默认值：照片用更厚的那档。
+ *
+ * 用户手动调过之后以他调的为准，这里只在「没存过遮罩」时给出起点值。
+ */
+export function defaultScrubFor(wallpaper: string): number {
+	return wallpaper !== 'none' && wallpaper !== 'custom' && WALLPAPERS.find((w) => w.value === wallpaper)?.group.startsWith('校园照片')
+		? PHOTO_SCRUB_DEFAULT
+		: SCRUB_RANGE.defaultValue;
 }
 
 /** 校验存进来的壁纸/遮罩值，防止手改 localStorage 存进奇怪的值 */

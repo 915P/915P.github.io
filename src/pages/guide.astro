@@ -51,9 +51,6 @@ import { guideTabs } from '../data/guide';
 					>
 					</mdui-text-field>
 				</form>
-				<mdui-button-icon id="setButton" class="set-button" aria-label="设置" title="设置">
-					<mdui-icon-settings></mdui-icon-settings>
-				</mdui-button-icon>
 			</div>
 
 			{/*
@@ -107,27 +104,15 @@ import { guideTabs } from '../data/guide';
 			}
 		</mdui-tabs>
 
-		<p class="guide-hint" id="guideHint" hidden></p>
-
 		{/*
 		 * 导入 / 导出。
 		 *
 		 * 公开站点的链接表里**不放**校内裸 IP 这类敏感条目 ——
 		 * 需要的人自己导出、传给自己想给的人，再导入即可。
 		 * 所以导入导出的载体就是一个 JSON 文件，不经过任何服务器。
-		 *
-		 * 藏进编辑态：平时用不到，也不该在起始页上摆两个按钮。
-		*/}
-		<div class="guide-io" id="guideIo" hidden>
-			<mdui-button id="ioExport" variant="text" size="small">导出链接</mdui-button>
-			<mdui-button id="ioImport" variant="text" size="small">导入链接</mdui-button>
-			<input
-				id="ioFile"
-				type="file"
-				accept="application/json,.json"
-				hidden
-			/>
-		</div>
+		 * 入口在右下角「编辑与设置」里，不占起始页的地盘。
+		 */}
+		<p class="guide-hint" id="guideHint" hidden></p>
 	</main>
 
 	{/*
@@ -136,8 +121,14 @@ import { guideTabs } from '../data/guide';
 	 * 做成对话框而不是常驻面板：外观类设置本质是「偶尔调一次」，
 	 * 常驻一排控件只会让起始页变复杂。
 	 */}
-	<mdui-dialog id="setDialog" class="guide-set-dialog">
-		<div slot="headline">设置</div>
+	{/*
+	 * 三个对话框都显式加上 close-on-esc / close-on-overlay-click。
+	 * ⚠️ mdui 这两个属性**默认 false**，不写就等于「只能点按钮关」——
+	 * 用户 Esc、点遮罩全都试过之后会觉得这弹窗关不掉。
+	 * warnDialog 是例外：它问的是「确定要打开吗」，误触遮罩不该算回答。
+	 */}
+	<mdui-dialog id="setDialog" class="guide-set-dialog" close-on-esc close-on-overlay-click>
+		<div slot="headline">编辑与设置</div>
 
 		<div class="set-group">
 			<p class="set-group-title">主题色</p>
@@ -146,19 +137,23 @@ import { guideTabs } from '../data/guide';
 
 		<div class="set-group">
 			<p class="set-group-title">外观模式</p>
-			<mdui-segmented-button-group
-				class="set-modes"
-				id="setModes"
-				aria-label="外观模式"
-			></mdui-segmented-button-group>
+		<mdui-segmented-button-group
+			class="set-modes"
+			id="setModes"
+			selects="single"
+			aria-label="外观模式"
+		></mdui-segmented-button-group>
 		</div>
 
 		<div class="set-group">
 			<p class="set-group-title">壁纸</p>
 			<div class="set-walls" id="setWalls" role="group" aria-label="壁纸"></div>
-			<mdui-button id="setWallUpload" variant="text" size="small" class="set-upload">
-				自定义壁纸…
-			</mdui-button>
+			<div class="set-row">
+				<mdui-button id="setWallShuffle" variant="text" size="small">再抽一张</mdui-button>
+				<mdui-button id="setWallUpload" variant="text" size="small" class="set-upload">
+					自定义壁纸…
+				</mdui-button>
+			</div>
 			<input id="setWallFile" type="file" accept="image/*" hidden />
 			<p class="set-note faint text-xs" id="setWallNote"></p>
 		</div>
@@ -176,16 +171,39 @@ import { guideTabs } from '../data/guide';
 
 		<div class="set-group">
 			<p class="set-group-title">网络</p>
+			<div class="set-row">
+				<label class="set-switch" for="setAssume">
+					<span>
+						默认在校园网环境下
+						<span class="faint text-xs">
+							打开后不再探测校内网站，一律当作已接入。
+						</span>
+					</span>
+					<mdui-switch id="setAssume"></mdui-switch>
+				</label>
+			</div>
 			<mdui-button id="setNetCheck" variant="text" size="small">重新检测网络</mdui-button>
 			<p class="set-note faint text-xs" id="setNetState"></p>
 		</div>
 
 		<div class="set-group">
-			<p class="set-group-title">链接配置</p>
+			<p class="set-group-title">磁贴</p>
+			<p class="set-note faint text-xs">
+				拖动磁贴可以调整位置；右键磁贴可以改名称、网址、图标或删除。
+			</p>
+		</div>
+
+		<div class="set-group">
+			<p class="set-group-title">备份与恢复</p>
 			<div class="set-row">
-				<mdui-button id="setExport" variant="text" size="small">导出</mdui-button>
-				<mdui-button id="setImport" variant="text" size="small">导入</mdui-button>
+				<mdui-button id="setExport" variant="text" size="small">导出配置</mdui-button>
+				<mdui-button id="setImport" variant="text" size="small">导入配置</mdui-button>
 			</div>
+			{/* 选文件用的隐藏 input，跟着导入按钮走；label 兼容读屏 */}
+			<input id="ioFile" type="file" accept="application/json,.json" hidden aria-hidden="true" />
+			<p class="set-note faint text-xs" id="setIoNote">
+				导出的文件包含磁贴、搜索引擎和全部外观设置；自定义壁纸太大时不会带上。
+			</p>
 		</div>
 
 		<div class="set-group set-danger">
@@ -223,8 +241,82 @@ import { guideTabs } from '../data/guide';
 	 * 导入是**整份替换**，会覆盖现有的磁贴和排序 —— 得让人明确知道这一点，
 	 * 而且得能反悔（导出过就还能导回去，但不问一声就覆盖太粗暴了）。
 	*/}
-	<mdui-dialog id="ioDialog" class="guide-io-dialog">
-		<div slot="headline">导入链接配置</div>
+	{/*
+	 * 右键磁贴出来的编辑框。
+	 *
+	 * 字段是给「用户自己加的磁贴」用的：默认磁贴的名字和网址来自
+	 * links.ts，在这里改只影响本机。删除按钮也放在这个框里而不是磁贴角上
+	 * —— 角上常驻一个 × 会让页面看起来一直处在某个特殊状态，
+	 * 而删除并不是高频操作。
+	 */}
+	<mdui-dialog id="tileDialog" class="guide-tile-dialog" close-on-esc close-on-overlay-click>
+		<div slot="headline">编辑磁贴</div>
+		<mdui-text-field
+			id="tileTitle"
+			label="名称"
+			variant="outlined"
+			maxlength="60"
+			enterkeyhint="done"
+		></mdui-text-field>
+		<mdui-text-field
+			id="tileUrl"
+			label="网址"
+			variant="outlined"
+			maxlength="500"
+			enterkeyhint="done"
+		></mdui-text-field>
+
+		<div class="tile-field">
+			<p class="tile-field-label">图标</p>
+			<mdui-segmented-button-group
+				id="tileIconMode"
+				selects="single"
+				aria-label="图标模式"
+			>
+				<mdui-segmented-button value="site">自动</mdui-segmented-button>
+				<mdui-segmented-button value="url">图片</mdui-segmented-button>
+				<mdui-segmented-button value="material">图标</mdui-segmented-button>
+				<mdui-segmented-button value="text">文字</mdui-segmented-button>
+			</mdui-segmented-button-group>
+		</div>
+
+		<div id="tileIconUrlWrap" class="tile-icon-input" hidden>
+			<mdui-text-field
+				id="tileIconUrl"
+				label="图片 URL"
+				variant="outlined"
+				maxlength="500"
+				placeholder="https://example.com/icon.png"
+			></mdui-text-field>
+		</div>
+		<div id="tileIconMaterialWrap" class="tile-icon-input" hidden>
+			<mdui-select id="tileIconMaterial" label="选择图标" variant="outlined"></mdui-select>
+		</div>
+		<div id="tileIconTextWrap" class="tile-icon-input" hidden>
+			<mdui-text-field
+				id="tileIconText"
+				label="文字 / emoji"
+				variant="outlined"
+				maxlength="4"
+			></mdui-text-field>
+		</div>
+
+		<mdui-select id="tileGroup" label="分类" variant="outlined">
+			{guideTabs.map((tab) => (
+				<mdui-menu-item value={tab.key}>{tab.label}</mdui-menu-item>
+			))}
+		</mdui-select>
+		<p class="set-note faint text-xs" id="tileError" hidden></p>
+		<div slot="action">
+			<mdui-button id="tileDelete" variant="text" class="guide-tile-delete">删除</mdui-button>
+			<div class="flex-grow"></div>
+			<mdui-button id="tileCancel" variant="text">取消</mdui-button>
+			<mdui-button id="tileSave" variant="filled">保存</mdui-button>
+		</div>
+	</mdui-dialog>
+
+	<mdui-dialog id="ioDialog" class="guide-io-dialog" close-on-esc close-on-overlay-click>
+		<div slot="headline">导入配置</div>
 		<div slot="description" id="ioSummary"></div>
 		<div class="guide-io-detail faint text-xs" id="ioDetail"></div>
 		<div slot="action">
@@ -245,7 +337,12 @@ import { guideTabs } from '../data/guide';
 	 */}
 
 	{/*
-	 * 编辑态的浮动按钮。
+	 * 编辑与设置的**唯一入口**。
+	 *
+	 * 原来这里是「编辑磁贴」的 FAB，搜索行右侧另有一个设置齿轮，
+	 * 两个入口分管一半功能 —— 调外观得找一个、改链接得找另一个。
+	 * 现在合成一个面板（见下面 setDialog），入口留在 FAB 的位置：
+	 * 它是整个页面唯一的悬浮控件，位置最显眼，又不跟搜索框抢那一行。
 	 *
 	 * ⚠️ 不要用 size="large"：MD3 的大号 FAB 是 96px 见方，配上默认图标
 	 * 差不多占屏幕 1/16，在只有搜索框和磁贴的起始页上过于抢眼（实测很雷霆）。
@@ -255,9 +352,10 @@ import { guideTabs } from '../data/guide';
 		id="guideFab"
 		class="guide-fab"
 		variant="secondary"
-		aria-label="编辑磁贴"
+		aria-label="编辑与设置"
+		title="编辑与设置"
 	>
-		<mdui-icon-edit slot="icon" class="guide-fab-icon"></mdui-icon-edit>
+		<mdui-icon-settings slot="icon" class="guide-fab-icon"></mdui-icon-settings>
 	</mdui-fab>
 
 	<style is:global>
@@ -289,23 +387,29 @@ import { guideTabs } from '../data/guide';
 		}
 
 		/*
-		 * 遮罩用 MDUI 的 surface 色，所以跟随主题自动切换：
-		 * 浅色下是半透明白、深色下是半透明黑，不需要写两套。
-		 * 透明度取得比较高（浅色 0.72 / 深色 0.55），保证前景对比度够。
+		 * 遮罩跟主题**解耦**：固定用近黑，深浅两套主题都是给背景压暗，
+		 * 保证前景（不透明的搜索框 / 磁贴面板）对比度够。
 		 *
-		 * ⚠️ 这里必须写 rgba(var(--token), a)，**不能**写
-		 * rgb(var(--token) / a)。MDUI 的令牌值是 `20,18,24` 这样的逗号分量，
-		 * 斜杠语法要靠 var() 替换后才拼出 `rgb(20,18,24 / 0.72)` ——
-		 * 浏览器在解析期看不出问题（getComputedStyle 前的声明检查会「通过」），
-		 * 到计算值阶段才判定为非法，于是整条声明**静默失效**，
-		 * 表现就是遮罩完全不出现（实测踩过）。
+		 * 原来浅色主题用的是 rgba(var(--mdui-color-surface), a)，也就是
+		 * rgba(251,252,254,a) —— 一层近乎白纸的东西盖在白花照片上，
+		 * 透明度加到 0.92 也还是亮的（实测樱花大道糊成灰白，字照样费劲）。
+		 * 物理上只有深色遮罩能压暗背景，跟主题的前景色是两件事：
+		 * 深色遮罩 + 浅色主题完全成立，就像给照片加了层墨镜，
+		 * 前景该白的还是白。
+		 *
+		 * ⚠️ 必须写 rgb(分量) 而不是 var()：这是固定色，不跟主题走，
+		 * 也就不需要（也不能）再拼 MDUI 令牌（MDUI 令牌是 `28, 27, 31`
+		 * 这种逗号分量，直接 rgb() 拼会静默失效）。
+		 *
+		 * 浓度经 --guide-scrub 传进来（照片默认 0.58、渐变 0.5，见
+		 * PHOTO_SCRUB_DEFAULT / SCRUB_RANGE），滑块可调。
 		 */
 		body:has(.guide)::after {
 			content: '';
 			position: fixed;
 			inset: 0;
 			z-index: -1;
-			background: rgba(var(--mdui-color-surface), var(--guide-scrub, 0.72));
+			background: rgba(12, 14, 18, var(--guide-scrub, 0.5));
 		}
 
 
@@ -758,36 +862,12 @@ import { guideTabs } from '../data/guide';
 			pointer-events: none;
 		}
 
-		/* --------------------------------------------------- 编辑态 */
+		/* --------------------------------------------------- 拖动排序 */
 
-		.guide-tiles.is-editing .guide-tile {
-			cursor: default;
-		}
-
-		.guide-tile-remove {
-			position: absolute;
-			top: -0.35rem;
-			right: -0.35rem;
-			width: 1.5rem;
-			height: 1.5rem;
-			min-width: 0;
-			padding: 0;
-			border: none;
-			border-radius: 50%;
-			background: rgb(var(--mdui-color-error));
-			color: rgb(var(--mdui-color-on-error));
-			font-size: 0.95rem;
-			line-height: 1;
-			cursor: pointer;
-			display: none;
-		}
-
-		.guide-tiles.is-editing .guide-tile-remove {
-			display: grid;
-			place-items: center;
-		}
-
-		/* 拖动排序：编辑态才允许 */
+		/*
+		 * 磁贴**始终**可拖（见 render() 里 item.draggable = true）。
+		 * grab 是「按住就能挪」的暗示，比 default 更能让人发现这个能力。
+		 */
 		.guide-tile[draggable='true'] {
 			cursor: grab;
 		}
@@ -809,12 +889,75 @@ import { guideTabs } from '../data/guide';
 			--mdui-comp-fab-icon-size: 1.25rem;
 		}
 
-		/* 编辑态是个次要操作，不该用满色抢注意力 */
+		/* 编辑与设置是个次要操作，不该用满色抢注意力 */
 		.guide-fab-icon {
 			--mdui-comp-icon-size: 1.25rem;
 		}
 
-		/* ------------------------------------------------------ 设置面板 */
+		/* ------------------------------------------------------ 磁贴编辑弹窗 */
+
+	/*
+	 * ⚠️ 不要给 mdui-dialog 自身写 display: grid。
+	 * 组件的 :host 默认是 display:none，靠它控制显隐；
+	 * 一旦用类选择器覆盖成 grid，`open = false` 也照样显示 ——
+	 * 表现就是「一打开页面，关着的编辑框浮在那儿」，而且它的遮罩
+	 * 还会吞掉点掉的点击（“点击毫无反应”就是这么来的）。
+	 *
+	 * 要排版就用 ::part() 或者 slotted 内容自己的类：
+	 * 下面只改 panel 和内部间距，不动 host 的 display。
+	 */
+	.guide-tile-dialog::part(panel) {
+		width: min(24rem, calc(100vw - 2rem));
+	}
+
+	.guide-tile-dialog::part(body) {
+		gap: 0.6rem;
+	}
+
+	/* 磁贴编辑弹窗：压缩字段高度，让布局更紧凑 */
+	.guide-tile-dialog mdui-text-field,
+	.guide-tile-dialog mdui-select {
+		--mdui-comp-text-field-container-height: 3rem;
+	}
+
+	.guide-tile-dialog .tile-field {
+		display: grid;
+		gap: 0.35rem;
+	}
+
+	.guide-tile-dialog .tile-field-label {
+		margin: 0;
+		color: rgb(var(--mdui-color-on-surface-variant));
+		font-size: var(--mdui-typescale-label-medium-size);
+		font-weight: 500;
+	}
+
+	/* 分段按钮组占满整行，避免内容溢出导致横向滚动 */
+	.guide-tile-dialog mdui-segmented-button-group {
+		width: 100%;
+		overflow: hidden;
+	}
+
+	.guide-tile-dialog .tile-icon-input {
+		display: grid;
+	}
+
+	/* 文字 / emoji 图标样式 */
+	.guide-tile-icon.is-text {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		font-size: 1.1rem;
+		font-weight: 600;
+		line-height: 1;
+	}
+
+	/* 「删除」单独一个文字按钮，放在动作行最左侧 —— 远离保存，减少误触 */
+	.guide-tile-dialog .guide-tile-delete {
+		color: rgb(var(--mdui-color-error));
+	}
+
+	/* ------------------------------------------------------ 设置面板 */
 
 	.guide-set-dialog .set-group {
 		display: grid;
@@ -837,6 +980,35 @@ import { guideTabs } from '../data/guide';
 	.set-row {
 		display: flex;
 		gap: 0.4rem;
+	}
+
+	/*
+	 * 「默认在校园网环境下」开关：左文字右开关。
+	 * 说明文字走 body-small + on-surface-variant，跟 set-note 一致，
+	 * 免得在面板里显得比标题还重。
+	 */
+	.set-switch {
+		display: flex;
+		align-items: flex-start;
+		justify-content: space-between;
+		gap: 1rem;
+		width: 100%;
+		cursor: pointer;
+	}
+
+	.set-switch > span {
+		display: flex;
+		flex-direction: column;
+		gap: 0.25rem;
+		color: rgb(var(--mdui-color-on-surface));
+		font-size: var(--mdui-typescale-body-medium-size);
+		line-height: 1.5;
+	}
+
+	.set-switch > span > span {
+		max-width: 26rem;
+		color: rgb(var(--mdui-color-on-surface-variant));
+		font-size: var(--mdui-typescale-body-small-size);
 	}
 
 	/* 主题色色板 */
@@ -879,6 +1051,23 @@ import { guideTabs } from '../data/guide';
 		display: grid;
 		grid-template-columns: repeat(auto-fill, minmax(3.6rem, 1fr));
 		gap: 0.5rem;
+	}
+
+	/*
+	 * 壁纸分组小标题（校园照片·春 / 渐变 / 基础）。
+	 * 占满整行：标题下面是它自己的那一排缩略图，
+	 * 不然会和下一组的图混在同一 grid 行里对不齐。
+	 */
+	.set-wall-group {
+		grid-column: 1 / -1;
+		margin: 0.4rem 0 0.1rem;
+		color: rgb(var(--mdui-color-on-surface-variant));
+		font-size: var(--mdui-typescale-label-small-size);
+		font-weight: 600;
+	}
+
+	.set-wall-group:first-child {
+		margin-top: 0;
 	}
 
 	.set-wall {
@@ -961,6 +1150,9 @@ import { guideTabs } from '../data/guide';
 			tileAccess,
 			accessWarning,
 			accessNotice,
+			readAssumeCampus,
+			writeAssumeCampus,
+			applyAssumeCampus,
 			SEARCH_ENGINES,
 			pickEngine,
 			intlAvailable,
@@ -974,7 +1166,10 @@ import { guideTabs } from '../data/guide';
 			WALLPAPERS,
 			MAX_CUSTOM_WALLPAPER_BYTES,
 			sanitizeScrub,
-			scrubFor,
+			isUsableUrl,
+			pickWallByTime,
+			defaultScrubFor,
+			type AppearanceConfig,
 			type ThemeMode,
 			type NetSnapshot,
 			type LinkGroup,
@@ -987,7 +1182,10 @@ import { guideTabs } from '../data/guide';
 			return el as T;
 		};
 		type TextField = HTMLInputElement & { value: string };
-		type FabEl = HTMLElement & { label?: string };
+		/** mdui-select 同理：选中值只在 value 上 */
+		type SelectEl = HTMLElement & { value: string };
+		/** mdui-button 没有原生 button 的 disabled/focus 那套，这里只用得到 label */
+		type ButtonEl = HTMLElement;
 		/*
 		 * mdui-dialog **没有** show() / close() 方法，只能读写 open 属性 ——
 		 * 照着别的组件想当然地调 dialog.close() 会抛 "close is not a function"。
@@ -1004,15 +1202,23 @@ import { guideTabs } from '../data/guide';
 
 		const STORE_KEY = 'jwwl:tiles';
 
-		interface Tile {
-			id: string;
-			title: string;
-			url: string;
-			icon: string;
-			group: LinkGroup;
-			/** Material Icons 组件名（如 'swap-horiz'）；有值就不走 favicon */
-			materialIcon?: string;
-		}
+	interface Tile {
+		id: string;
+		title: string;
+		url: string;
+		/**
+		 * 图标值。含义由 iconMode 决定：
+		 * - 'url' → 图片 URL
+		 * - 'material' → Material Icons 组件名
+		 * - 'text' → emoji 或短文字
+		 * - 未设置 → 按网址自动取站点 favicon（向后兼容）
+		 */
+		icon: string;
+		iconMode?: 'url' | 'material' | 'text';
+		group: LinkGroup;
+		/** Material Icons 组件名（如 'swap-horiz'）；有值就不走 favicon */
+		materialIcon?: string;
+	}
 
 		/** group 是否是已知的分类 key */
 		const knownGroup = (value: unknown): value is LinkGroup =>
@@ -1061,7 +1267,6 @@ import { guideTabs } from '../data/guide';
 		}
 
 		let tiles = load();
-		let editing = false;
 
 		const hint = $('guideHint');
 
@@ -1103,7 +1308,15 @@ import { guideTabs } from '../data/guide';
 				item.rel = 'noopener noreferrer';
 				item.setAttribute('role', 'listitem');
 
-				item.draggable = editing;
+				/*
+				 * **始终**可拖，不需要先进某个「编辑模式」。
+				 *
+				 * 原来拖动要先点右下角 FAB 切到编辑态才能用，而「调整位置」
+				 * 本来就是想到才做的事 —— 为了挪一下磁贴先切一遍模式，
+				 * 挪完还得切回来，太多余。现在拖动是磁贴的固有能力，
+				 * 右键菜单负责改内容和删除，两者都不需要显式进入编辑态。
+				 */
+				item.draggable = true;
 				item.dataset.id = tile.id;
 
 				const box = document.createElement('span');
@@ -1131,12 +1344,41 @@ import { guideTabs } from '../data/guide';
 				 * 兜底那几行是 `box.textContent = ...`，赋值即清空所有子节点，
 				 * 会把刚插进去的 <mdui-icon-*> 抹掉（表现就是图标全变首字徽标）。
 				 */
+				/*
+				 * 用户自定义图标模式（优先级最高，主站小工具除外）：
+				 * - 'url' → 图片 URL
+				 * - 'material' → Material Icons 组件名
+				 * - 'text' → emoji 或短文字
+				 * 这些都不走 siteIcon 兜底，只有 iconMode 为空时
+				 * 才按网址自动取 favicon。
+				 */
 				let icon: string | null = null;
 				const materialName =
 					tile.materialIcon && /^[a-z0-9-]{1,40}$/.test(tile.materialIcon)
 						? tile.materialIcon
 						: null;
-				if (materialName) {
+				if (tile.iconMode === 'url' && tile.icon) {
+					const img = document.createElement('img');
+					img.src = tile.icon;
+					img.alt = '';
+					img.loading = 'lazy';
+					img.decoding = 'async';
+					img.addEventListener('error', () => {
+						img.remove();
+						box.textContent = siteFallback(tile.title, tile.url);
+						box.style.background = siteFallbackColor(tile.url);
+						box.classList.add('is-monogram');
+					});
+					box.appendChild(img);
+				} else if (tile.iconMode === 'material' && tile.icon) {
+					const glyph = document.createElement(`mdui-icon-${tile.icon}`);
+					glyph.setAttribute('aria-hidden', 'true');
+					box.appendChild(glyph);
+				} else if (tile.iconMode === 'text' && tile.icon) {
+					box.textContent = tile.icon;
+					box.style.background = siteFallbackColor(tile.url);
+					box.classList.add('is-text');
+				} else if (materialName) {
 					const glyph = document.createElement(`mdui-icon-${materialName}`);
 					glyph.setAttribute('aria-hidden', 'true');
 					box.appendChild(glyph);
@@ -1212,25 +1454,22 @@ import { guideTabs } from '../data/guide';
 
 				item.append(box, label);
 
-				if (editing) {
-					const remove = document.createElement('button');
-					remove.className = 'guide-tile-remove';
-					remove.type = 'button';
-					remove.textContent = '×';
-					remove.setAttribute('aria-label', `删除磁贴 ${tile.title}`);
-					remove.addEventListener('click', (event) => {
-						event.preventDefault();
-						event.stopPropagation();
-						tiles = tiles.filter((t) => t.id !== tile.id);
-						save(tiles);
-						render();
-					});
-					item.appendChild(remove);
-					item.draggable = true;
-				}
+				/*
+				 * 右键 = 编辑这块磁贴。
+				 *
+				 * 浏览器自己的右键菜单在这里没有意义（「另存为」对起始页磁贴
+				 * 没用途），所以拦掉换成编辑框。
+				 * ⚠️ 拖拽中松开的右键也会触发 contextmenu，但那时的
+				 * event.target 已是落点磁贴，不会误开被拖的那一块。
+				 */
+				item.addEventListener('contextmenu', (event) => {
+					event.preventDefault();
+					openTileEditor(tile);
+				});
 
 				grid.appendChild(item);
 			}
+
 
 			/*
 			 * ⚠️ 这里不再放「添加磁贴」块。
@@ -1239,9 +1478,6 @@ import { guideTabs } from '../data/guide';
 			 * 一个要主动点开、还得滚动才能看完的对话框里。既然全铺出来了，
 			 * 添加入口就没有存在意义。
 			 */
-			for (const grid of grids.values()) {
-				grid.classList.toggle('is-editing', editing);
-			}
 		}
 
 		// ─────────────────────────────────────────────── 搜索引擎
@@ -1439,10 +1675,22 @@ import { guideTabs } from '../data/guide';
 		}
 		let themeColor = THEME_COLORS[0].value;
 		if (THEME_COLORS.some((c) => c.value === readPref(PREF.color))) themeColor = readPref(PREF.color)!;
-		let wallpaper: string = WALLPAPERS.some((w) => w.value === readPref(PREF.wall))
-			? readPref(PREF.wall)!
-			: 'none';
-		let scrubLight = sanitizeScrub(readPref(PREF.scrub));
+		/*
+		 * 默认设为 'random'：白天按当前季节、晚上按「夜」抽一张照片。
+		 * 之前默认 'none'（纯色）—— 起始页一片灰，用户看到的就是「什么都没有」。
+		 */
+		let wallpaper: string =
+			readPref(PREF.wall) === 'random' || WALLPAPERS.some((w) => w.value === readPref(PREF.wall))
+				? (readPref(PREF.wall) ?? 'random')
+				: 'random';
+		/*
+		 * 遮罩：存过就用存的值，没存过按**当前壁纸**给起点值 ——
+		 * 照片比渐变更吃遮罩（樱花大道那张白得发亮，0.72 白遮罩盖上去
+		 * 搜索框和标签还是费劲），所以照片走更厚的那档。
+		 */
+		let scrubLight = readPref(PREF.scrub)
+			? sanitizeScrub(readPref(PREF.scrub))
+			: defaultScrubFor(wallpaper);
 
 		/** 自定义壁纸是 data URL，只存在本机，不外传 */
 		const customWall = (): string | null => {
@@ -1450,12 +1698,34 @@ import { guideTabs } from '../data/guide';
 			return value && value.startsWith('data:image/') ? value : null;
 		};
 
+		/**
+		 * 真正要画上去的背景。
+		 *
+		 * `random` 在**这一层**就解析成一张具体的图：抽哪张由 pickWallByTime 按
+		 * 当前季节/时段决定，抽完写回 wallpaper，之后所有读取都看到具体那张。
+		 * 不每次渲染现抽 —— 否则一改遮罩、一切主题，背景就跟着换一张，
+		 * 用户根本不知道发生了什么。
+		 */
 		function effectiveWall(): string {
-			return wallpaper === 'custom' && customWall() ? `url("${customWall()}")` : (WALLPAPERS.find((w) => w.value === wallpaper)?.css ?? '');
+			if (wallpaper === 'random') {
+				wallpaper = pickWallByTime(new Date());
+				// 不写 localStorage：记的是「随机」这个意图，不是某一张具体的图，
+				// 否则下次打开永远停在第一次抽到的那张
+				writePref(PREF.wall, null);
+			}
+			if (wallpaper === 'custom' && customWall()) return `url("${customWall()}")`;
+			return WALLPAPERS.find((w) => w.value === wallpaper)?.css ?? '';
 		}
 
+		/*
+		 * 遮罩浓度只跟**壁纸**有关，跟主题无关 —— 遮罩色是固定近黑，
+		 * 深浅两套主题都要它把背景压暗（见 CSS 里 body::after 的注释）。
+		 * 之前这里还按主题降一档（深色 0.55 封顶），那是因为浅色遮罩
+		 * 用的是浅灰白、深色用近黑；现在两套同色，再按主题分档只会
+		 * 出现「同一张照片两个主题两个亮度」的怪事。
+		 */
 		function effectiveScrub(): number {
-			return scrubFor(themeMode, scrubLight);
+			return scrubLight;
 		}
 
 		/**
@@ -1500,8 +1770,8 @@ import { guideTabs } from '../data/guide';
 			swatches.appendChild(btn);
 		}
 
-		// 外观模式
-		const modes = $('setModes');
+		// 外观模式：group 的 value 就是选中项（详见 syncSettings 里的说明）
+		const modes = $('setModes') as unknown as SelectEl;
 		for (const mode of THEME_MODES) {
 			const btn = document.createElement('mdui-segmented-button');
 			btn.value = mode.value;
@@ -1516,24 +1786,60 @@ import { guideTabs } from '../data/guide';
 			modes.appendChild(btn);
 		}
 
-		// 壁纸
+		/*
+		 * 壁纸缩略图，**按 group 分段**渲染。
+		 *
+		 * 照片那十几个按季节分成五段，每段前面加一行小标题；
+		 * 渐变和「纯色 / 随机」各占一段。全挤成一排的话，15 个方块摆在一起
+		 * 分不出谁是谁，只有 hover 出 title 才知道。
+		 */
 		const walls = $('setWalls');
-		for (const wall of WALLPAPERS) {
-			const btn = document.createElement('button');
-			btn.type = 'button';
-			btn.className = 'set-wall';
-			btn.dataset.value = wall.value;
-			btn.title = wall.label;
-			btn.setAttribute('aria-label', `壁纸 ${wall.label}`);
-			if (wall.css) btn.style.backgroundImage = wall.css;
-			btn.addEventListener('click', () => {
-				wallpaper = wall.value;
-				writePref(PREF.wall, wall.value);
-				applyWallpaper();
-				syncSettings();
-			});
-			walls.appendChild(btn);
+		const wallGroups = [...new Set(WALLPAPERS.map((w) => w.group))];
+		for (const group of wallGroups) {
+			const title = document.createElement('p');
+			title.className = 'set-wall-group';
+			title.textContent = group;
+			walls.appendChild(title);
+			for (const wall of WALLPAPERS.filter((w) => w.group === group)) {
+				const btn = document.createElement('button');
+				btn.type = 'button';
+				btn.className = 'set-wall';
+				btn.dataset.value = wall.value;
+				btn.dataset.group = wall.group;
+				btn.title = wall.label;
+				btn.setAttribute('aria-label', `壁纸 ${wall.label}`);
+				// 渐变直接当背景，照片用 background-image 也一样（值是 url(...)）
+				if (wall.css) btn.style.backgroundImage = wall.css;
+				btn.addEventListener('click', () => {
+					wallpaper = wall.value;
+					/*
+					 * 手动点「随机」时**当场抽一张**，而不是等下次刷新。
+					 * 存 null：记下「要随机」这个意图，具体哪张下次打开重新抽。
+					 */
+					if (wall.value === 'random') {
+						wallpaper = pickWallByTime(new Date());
+						writePref(PREF.wall, null);
+					} else {
+						writePref(PREF.wall, wall.value);
+					}
+					applyWallpaper();
+					syncSettings();
+					if (wall.value === 'random') showHint('已按当前季节/时段换了一张。');
+				});
+				walls.appendChild(btn);
+			}
 		}
+
+		/** 「再抽一张」：只在用随机模式时才有意义 */
+		$('setWallShuffle').addEventListener('click', () => {
+			const previous = wallpaper;
+			wallpaper = pickWallByTime(new Date());
+			writePref(PREF.wall, null);
+			applyWallpaper();
+			syncSettings();
+			if (wallpaper === previous) showHint('这次抽到的还是同一张，再点一次试试。');
+			else showHint('换了一张。');
+		});
 
 		// 自定义壁纸
 		$('setWallUpload').addEventListener('click', () => {
@@ -1578,36 +1884,71 @@ import { guideTabs } from '../data/guide';
 				btn.classList.toggle('is-on', on);
 				btn.setAttribute('aria-pressed', String(on));
 			}
-			for (const btn of modes.querySelectorAll<HTMLElement>('mdui-segmented-button')) {
-				if ((btn as unknown as { value: string }).value === themeMode) {
-					btn.setAttribute('checked', '');
-					btn.setAttribute('aria-selected', 'true');
-				} else {
-					btn.removeAttribute('checked');
-					btn.removeAttribute('aria-selected');
-				}
-			}
+			/*
+			 * 外观模式：设 group 的 value，别去逐个按钮设 checked。
+			 *
+			 * mdui-segmented-button 的高亮看的是 **selected** 属性
+			 * （内建样式 :host([selected]) 给 secondary-container 底色，
+			 * 还会在按钮里显示一个 ✓），而我们最早在这儿给按钮设
+			 * checked —— 那是个 HTML 原生属性，mdui 根本不看，
+			 * 于是「选中哪一项」在界面上毫无提示。
+			 *
+			 * group 自己监听 value 变化（onValueChange）并回填 selectedKeys、
+			 * 再给对应按钮打上 selected，这条路才真的会亮。点击同理：
+			 * 组内部同步，不需要我们再插手。
+			 */
+			modes.value = themeMode;
 			for (const btn of walls.querySelectorAll<HTMLElement>('.set-wall')) {
+				/*
+				 * 随机模式下当前那张也高亮 —— 否则面板看起来「什么都没选」，
+				 * 而背景明明有图。这不代表用户选了它，只是告诉人现在用的是哪张。
+				 */
 				const on = btn.dataset.value === wallpaper;
 				btn.classList.toggle('is-on', on);
 				btn.setAttribute('aria-pressed', String(on));
 			}
+			// 「随机」那一格在「当前正是随机抽出来的」时也亮
+			const randomBtn = walls.querySelector<HTMLElement>('.set-wall[data-value="random"]');
+			const isRandom = readPref(PREF.wall) === null || readPref(PREF.wall) === 'random';
+			randomBtn?.classList.toggle('is-on', isRandom);
 			scrubSlider.value = effectiveScrub();
 			const custom = customWall();
 			$('setWallNote').textContent = custom
 				? `已使用自定义壁纸（${(custom.length / 1024).toFixed(0)}KB，存于本机）。`
 				: '照片建议选暗一点的，否则文字会看不清；也可以调高遮罩。';
+			($('setAssume') as unknown as { checked: boolean }).checked = assumeCampus;
 			$('setNetState').textContent = snapshot.at
 				? `上次检测：${new Date(snapshot.at).toLocaleString('zh-CN')}　${netVerdict().text}`
 				: '还没有检测记录。';
 		}
 
 		const setDialog = $('setDialog') as DialogEl;
+		/*
+		 * 弹窗**互斥**：开一个就把另一个关上。
+		 * mdui-dialog 之间没有这层约定，同时开两个会叠在一起 ——
+		 * 后开的盖住前一个，而前一个的遮罩还在，看起来像卡死了。
+		 * close-on-overlay-click 又让点任何一处遮罩都可能命中下面那个，
+		 * 行为完全没法预测。所以在每一处 open = true 前先清掉别的。
+		 */
+		const closeOtherDialogs = (keep: string): void => {
+			for (const id of ['setDialog', 'tileDialog', 'ioDialog', 'warnDialog']) {
+				if (id === keep) continue;
+				const el = document.getElementById(id);
+				if (el && (el as unknown as { open: boolean }).open) {
+					(el as unknown as { open: boolean }).open = false;
+				}
+			}
+		};
 		const openSettings = (): void => {
+			closeOtherDialogs('setDialog');
 			syncSettings();
 			setDialog.open = true;
 		};
-		$('setButton').addEventListener('click', openSettings);
+		/*
+		 * 编辑与设置的唯一入口。原来这个 FAB 是「编辑磁贴」的开关，
+		 * 设置齿轮在搜索行右侧；现在两者合成一个面板，入口只有这一处。
+		 */
+		$('guideFab').addEventListener('click', openSettings);
 		$('setDone').addEventListener('click', () => {
 			setDialog.open = false;
 		});
@@ -1616,17 +1957,43 @@ import { guideTabs } from '../data/guide';
 			await runNetCheck();
 			syncSettings();
 		});
+
+		/*
+		 * 「默认在校园网环境下」。
+		 *
+		 * 用 change 而不是 click：mdui-switch 的状态由键盘（空格）也能切，
+		 * click 事件照样会派发，但 change 语义更准，少一层「点的是 label 文字
+		 * 也算点开关」的歧义。开关本身是 controlled 组件，状态由 assumeCampus 说话。
+		 */
+		$('setAssume').addEventListener('change', async (event: Event) => {
+			const on = (event.currentTarget as unknown as { checked: boolean }).checked;
+			applyCampusAssumption(on);
+			if (on) {
+				showHint('已按校园网环境处理，校内站点不再提示。');
+			} else {
+				/*
+				 * 关掉就得重新探：快照里的 campus 可能还是开关开着时留下的
+				 * 陈旧结论（或者 checking），直接拿它给人看是误导。
+				 * 顺手把界面切到「检测中」，跟手动重测一个体验。
+				 */
+				$('setNetState').textContent = '检测中…';
+				await runNetCheck();
+				syncSettings();
+				showHint('恢复按实际探测结果处理。');
+			}
+		});
 		// 设置里的导入/导出与编辑态共用同一套逻辑
-		$('setExport').addEventListener('click', () => exportConfig());
-		$('setImport').addEventListener('click', () => pickConfigFile());
 		$('setReset').addEventListener('click', () => {
 			for (const key of [PREF.color, PREF.mode, PREF.wall, PREF.scrub, PREF.customWall]) {
 				writePref(key, null);
 			}
+			writeAssumeCampus(false);
 			themeMode = 'auto';
 			themeColor = THEME_COLORS[0].value;
 			wallpaper = 'none';
 			scrubLight = sanitizeScrub(null);
+			assumeCampus = false;
+			snapshot = applyAssumeCampus(snapshot, false);
 			tiles = [...defaultTiles];
 			chosenEngineId = null;
 			try {
@@ -1640,8 +2007,51 @@ import { guideTabs } from '../data/guide';
 			renderEngine();
 			render();
 			syncSettings();
-			showHint('已恢复默认链接与外观。');
+			showHint('已恢复默认磁贴与外观。');
 		});
+
+		/** 当前外观设置的快照，导出时整份带走 */
+		function currentAppearance(): AppearanceConfig {
+			const custom = customWall();
+			return {
+				color: themeColor,
+				mode: themeMode,
+				wallpaper,
+				scrub: scrubLight,
+				assumeCampus,
+				...(wallpaper === 'custom' && custom ? { customWall: custom } : {}),
+			};
+		}
+
+		/** 按导入的外观设置整套应用下来 */
+		function applyAppearance(a: AppearanceConfig): void {
+			themeColor = THEME_COLORS.some((c) => c.value === a.color) ? a.color : THEME_COLORS[0].value;
+			writePref(PREF.color, themeColor === THEME_COLORS[0].value ? null : themeColor);
+			themeMode = THEME_MODES.some((m) => m.value === a.mode) ? a.mode : 'auto';
+			writePref(PREF.mode, themeMode === 'auto' ? null : themeMode);
+			/*
+			 * 壁纸要跟 WALLPAPERS 对一遍：内置的几个 id 直接认，
+			 * 'custom' 还得同时有 data 才算数（否则留着一个加载不出图的壁纸位）。
+			 * ⚠️ 不能写成 `=== 'custom' && customWall ? 'custom' : 'none'` ——
+			 * 那会把内置的 dawn / night 一起扫成纯色（实测就是这么错的，
+			 * 导入后壁纸全丢）。
+			 */
+			wallpaper = WALLPAPERS.some((w) => w.value === a.wallpaper)
+				? a.wallpaper
+				: a.wallpaper === 'custom' && a.customWall
+					? 'custom'
+					: 'none';
+			writePref(PREF.wall, wallpaper === 'none' ? null : wallpaper);
+			if (wallpaper === 'custom' && a.customWall) writePref(PREF.customWall, a.customWall);
+			else writePref(PREF.customWall, null);
+			scrubLight = sanitizeScrub(a.scrub);
+			writePref(PREF.scrub, String(scrubLight));
+			assumeCampus = a.assumeCampus === true;
+			writeAssumeCampus(assumeCampus);
+			snapshot = applyAssumeCampus(snapshot, assumeCampus);
+			applyTheme();
+			applyWallpaper();
+		}
 
 		// 首次进入就把偏好应用到页面（主题脚本在 <head> 里已跑过，这里补齐壁纸）
 		applyTheme();
@@ -1658,6 +2068,7 @@ import { guideTabs } from '../data/guide';
 			$('warnText').textContent =
 				accessNotice(tileAccess(tile.url), tile.title) ??
 				`「${tile.title}」现在可能打不开。要试试吗？`;
+			closeOtherDialogs('warnDialog');
 			warnDialog.open = true;
 		}
 
@@ -1680,7 +2091,7 @@ import { guideTabs } from '../data/guide';
 		let pendingImport: Extract<ReturnType<typeof parseConfig>, { tiles: TileConfig[] }> | null = null;
 
 		function exportConfig(): void {
-			const json = serializeConfig(tiles, chosenEngineId, new Date());
+			const json = serializeConfig(tiles, chosenEngineId, currentAppearance(), new Date());
 			// Blob + 临时 <a download>，全程本地，不上传任何东西
 			const url = URL.createObjectURL(new Blob([json], { type: 'application/json' }));
 			const link = document.createElement('a');
@@ -1689,15 +2100,20 @@ import { guideTabs } from '../data/guide';
 			link.click();
 			// 立刻 revoke 会让部分浏览器来不及开始下载
 			setTimeout(() => URL.revokeObjectURL(url), 10_000);
-			showHint(`已导出 ${tiles.length} 条链接（不含图标文件，导入方按网址匹配本地图标）。`);
+			showHint(`已导出 ${tiles.length} 条磁贴与全部外观设置（不含图标文件，按网址匹配本地图标）。`);
 		}
 
 		function pickConfigFile(): void {
 			($('ioFile') as unknown as HTMLInputElement).click();
 		}
 
-		$('ioExport').addEventListener('click', exportConfig);
-		$('ioImport').addEventListener('click', pickConfigFile);
+		/*
+		 * 入口在「编辑与设置」面板里（setExport / setImport）。
+		 * 原来起始页上还有一组悬浮的导入导出按钮，随编辑态显隐 ——
+		 * 编辑态整个取消后那组按钮也一起没了，入口只留面板这一处。
+		 */
+		$('setExport').addEventListener('click', exportConfig);
+		$('setImport').addEventListener('click', pickConfigFile);
 
 		const ioFile = $('ioFile') as unknown as HTMLInputElement;
 		ioFile.addEventListener('change', async () => {
@@ -1726,12 +2142,25 @@ import { guideTabs } from '../data/guide';
 				? new Date(result.exportedAt).toLocaleString('zh-CN')
 				: '未知时间';
 			$('ioSummary').textContent =
-				`将用「${when}」导出的 ${result.tiles.length} 条链接，` +
-				`**整份替换**掉当前的 ${tiles.length} 条（含顺序）。此操作不可撤销。`;
-			$('ioDetail').textContent = result.dropped.length
-				? `有 ${result.dropped.length} 条被丢弃：\n${result.dropped.slice(0, 8).join('\n')}` +
-					(result.dropped.length > 8 ? `\n…… 另有 ${result.dropped.length - 8} 条` : '')
+				`将用「${when}」导出的 ${result.tiles.length} 条磁贴，` +
+				`**整份替换**掉当前的 ${tiles.length} 条（含顺序）。` +
+				(result.appearance
+					? '主题色、外观模式、壁纸、遮罩和校园网设置也会一起替换。'
+					: '这份文件不含外观设置，外观保持现状。') +
+				'此操作不可撤销。';
+			const notes = [...result.dropped];
+			/*
+			 * 自定义壁纸超过体积上限时导出端就把它丢了，这里得说一声 ——
+			 * 否则用户只会看到「壁纸变回纯色了」而不知道为什么。
+			 */
+			if (result.appearance?.wallpaper === 'custom' && !result.appearance.customWall) {
+				notes.push('自定义壁纸没有随文件带过来（可能太大），已退回纯色背景。');
+			}
+			$('ioDetail').textContent = notes.length
+				? `有 ${notes.length} 处被丢弃或调整：\n${notes.slice(0, 8).join('\n')}` +
+					(notes.length > 8 ? `\n…… 另有 ${notes.length - 8} 处` : '')
 				: '没有条目被丢弃。';
+			closeOtherDialogs('ioDialog');
 			ioDialog.open = true;
 		});
 
@@ -1751,11 +2180,14 @@ import { guideTabs } from '../data/guide';
 			} catch {
 				// 存不住也先把界面更新，刷新后会回到旧数据
 			}
+			// 外观：v1 文件里没有这块，此时保持现状不动
+			if (pendingImport.appearance) applyAppearance(pendingImport.appearance);
 			pendingImport = null;
 			ioDialog.open = false;
 			renderEngine();
 			render();
-			showHint(`已导入 ${tiles.length} 条链接。`);
+			syncSettings();
+			showHint('已导入。');
 		});
 
 		// ─────────────────────────────────────────────── 搜索 / 输网址
@@ -1776,15 +2208,26 @@ import { guideTabs } from '../data/guide';
 		const NET_KEY = 'jwwl:net';
 
 		/** 当前网络快照。render() 要读它给磁贴打「需校园网 / 境外」标记 */
-		let snapshot: NetSnapshot = parseSnapshot(
-			((): string | null => {
-				try {
-					return localStorage.getItem(NET_KEY);
-				} catch {
-					return null;
-				}
-			})(),
+		let snapshot: NetSnapshot = applyAssumeCampus(
+			parseSnapshot(
+				((): string | null => {
+					try {
+						return localStorage.getItem(NET_KEY);
+					} catch {
+						return null;
+					}
+				})(),
+			),
+			readAssumeCampus(),
 		);
+
+		/**
+		 * 「默认在校园网环境下」。
+		 *
+		 * 打开时 campus 一律当 ok：校内系统不再被提示，也不再探校内域名。
+		 * GitHub / Google 照旧探 —— 那层跟在不在校园网无关。
+		 */
+		let assumeCampus = readAssumeCampus();
 
 		function saveSnapshot(): void {
 			try {
@@ -1843,16 +2286,42 @@ import { guideTabs } from '../data/guide';
 			return describeOverall(snapshot);
 		}
 
+		/** 把开关状态叠到探测结果上，存盘并重画 */
+		function applyCampusAssumption(on: boolean): void {
+			assumeCampus = on;
+			writeAssumeCampus(on);
+			snapshot = applyAssumeCampus(snapshot, on);
+			syncSettings();
+			render();
+		}
+
 		async function runNetCheck(): Promise<void> {
+			/*
+			 * 声明了默认在校园网就**跳过** campus 那一项。
+			 *
+			 * 探了也没用：判据是「校内域名解析不出就连不上」，而换过公共 DNS 的
+			 * 机器在校内校外都解析不出，结论恒为 fail。既然用户已经自己声明了，
+			 * 再发那三个请求只是浪费和误导。
+			 */
+			const targets = assumeCampus
+				? netTargets.filter((target) => target.id !== 'campus')
+				: netTargets;
 			for (const target of netTargets) snapshot[target.id] = 'checking';
 			const settled = await Promise.all(
-				netTargets.map(async (target) => {
+				targets.map(async (target) => {
 					const ok = await probeTarget(target);
 					return [target.id, ok ? ('ok' as const) : ('fail' as const)] as const;
 				}),
 			);
 			for (const [id, state] of settled) snapshot[id] = state;
 			snapshot.at = Date.now();
+			/*
+			 * 声明了校内时，campus 那一项这次根本没探，快照里留着的是**上一次**
+			 * 的结果（甚至还是 checking）。必须就地叠上假设再存，否则
+			 * localStorage 里会永远存着一个假的 checking —— 用户回头把开关关掉，
+			 * 会立刻看到一个陈旧的结论，而不是重新探一次。
+			 */
+			snapshot = applyAssumeCampus(snapshot, assumeCampus);
 			saveSnapshot();
 			// 引擎默认值取决于国际互联网通不通，得跟着更新
 			renderEngine();
@@ -1869,24 +2338,204 @@ import { guideTabs } from '../data/guide';
 		if (isStale(snapshot, Date.now())) void runNetCheck();
 
 
-		// ─────────────────────────────────────────────── 编辑态
+		// ─────────────────────────────────────── 磁贴编辑（右键）
 
-		const fab = $('guideFab') as FabEl;
-		const ioBar = $('guideIo');
-		fab.addEventListener('click', () => {
-			editing = !editing;
-			// 导入/导出跟着编辑态一起显隐
-			ioBar.toggleAttribute('hidden', !editing);
-			fab.innerHTML = editing
-				? '<mdui-icon-done-all slot="icon"></mdui-icon-done-all>'
-				: '<mdui-icon-edit slot="icon"></mdui-icon-edit>';
-			fab.setAttribute('aria-label', editing ? '完成编辑' : '编辑磁贴');
+		const tileDialog = $('tileDialog') as DialogEl;
+		const tileDelete = $('tileDelete') as ButtonEl;
+		/** 正在编辑的磁贴 id；null 表示没开编辑框 */
+		let editingId: string | null = null;
+
+		function openTileEditor(tile: Tile): void {
+			editingId = tile.id;
+			($('tileTitle') as unknown as TextField).value = tile.title;
+			($('tileUrl') as unknown as TextField).value = tile.url;
+			($('tileGroup') as unknown as SelectEl).value = tile.group;
+
+			const mode = tile.iconMode ?? 'site';
+			($('tileIconMode') as unknown as SelectEl).value = mode;
+
+			($('tileIconUrl') as unknown as TextField).value = mode === 'url' ? tile.icon : '';
+			($('tileIconText') as unknown as TextField).value = mode === 'text' ? tile.icon : '';
+
+			const materialSelect = $('tileIconMaterial') as unknown as SelectEl;
+			if (mode === 'material') {
+				// 选项在初始化时构建；选中值必须匹配已有 option
+				materialSelect.value = /^[a-z0-9-]{1,40}$/.test(tile.icon) ? tile.icon : '';
+			}
+
+			tileIconModeChanged(mode);
+			// 输入框的值在 dialog 首次升级后才稳定，延迟再同步一次
+			requestAnimationFrame(() => tileIconModeChanged(mode));
+			closeOtherDialogs('tileDialog');
+			tileDialog.open = true;
+			hideTileError();
+		}
+
+		function tileIconModeChanged(mode: string): void {
+			const urlWrap = $('tileIconUrlWrap');
+			const materialWrap = $('tileIconMaterialWrap');
+			const textWrap = $('tileIconTextWrap');
+			urlWrap.toggleAttribute('hidden', mode !== 'url');
+			materialWrap.toggleAttribute('hidden', mode !== 'material');
+			textWrap.toggleAttribute('hidden', mode !== 'text');
+		}
+
+		// 填充 Material Icons 下拉选项
+		const materialSelect = $('tileIconMaterial') as unknown as SelectEl;
+		const materialIcons: Array<[string, string]> = [
+			['home', '首页'],
+			['article', '文章'],
+			['apps', '应用'],
+			['rss-feed', '订阅'],
+			['image', '图片'],
+			['video-file', '视频'],
+			['audio-file', '音频'],
+			['picture-as-pdf', 'PDF'],
+			['code', '代码'],
+			['functions', '函数'],
+			['calculate', '计算'],
+			['translate', '翻译'],
+			['calendar-month', '日历'],
+			['color-lens', '颜色'],
+			['light-mode', '浅色'],
+			['dark-mode', '深色'],
+			['swap-horiz', '交换'],
+			['memory', '内存'],
+			['monitor-weight', '体重'],
+			['qr-code-scanner', '二维码'],
+			['font-download', '字体'],
+			['account-tree', '账户树'],
+			['water-drop', '水滴'],
+			['arrow-back', '返回'],
+			['arrow-downward', '向下'],
+			['arrow-upward', '向上'],
+			['arrow-drop-down', '下拉'],
+			['check-circle', '完成'],
+			['close', '关闭'],
+			['delete', '删除'],
+			['download', '下载'],
+			['upload', '上传'],
+			['content-copy', '复制'],
+			['info', '信息'],
+			['lock', '锁定'],
+			['play-arrow', '播放'],
+			['rotate-right', '旋转'],
+			['stop', '停止'],
+			['warning', '警告'],
+		];
+		for (const [value, label] of materialIcons) {
+			const item = document.createElement('mdui-menu-item');
+			item.value = value;
+			item.textContent = label;
+			materialSelect.appendChild(item);
+		}
+
+		// 模式切换
+		($('tileIconMode') as unknown as SelectEl).addEventListener('change', (e) => {
+			tileIconModeChanged((e.target as unknown as SelectEl).value);
+		});
+
+		function hideTileError(): void {
+			const el = $('tileError');
+			el.toggleAttribute('hidden', true);
+			el.textContent = '';
+		}
+
+		function showTileError(text: string): void {
+			const el = $('tileError');
+			el.textContent = text;
+			el.toggleAttribute('hidden', false);
+		}
+
+		$('tileCancel').addEventListener('click', () => {
+			editingId = null;
+			tileDialog.open = false;
+		});
+
+		tileDelete.addEventListener('click', () => {
+			if (!editingId) return;
+			const gone = tiles.find((t) => t.id === editingId);
+			tiles = tiles.filter((t) => t.id !== editingId);
+			editingId = null;
+			tileDialog.open = false;
+			save(tiles);
 			render();
-			showHint(
-				editing
-					? '编辑中：点磁贴右上角的 × 删除，按住磁贴可以拖动排序。'
-					: '',
+			showHint(`已删除「${gone?.title ?? ''}」。`);
+		});
+
+		$('tileSave').addEventListener('click', () => {
+			if (!editingId) return;
+			const title = ($('tileTitle') as unknown as TextField).value.trim();
+			const url = ($('tileUrl') as unknown as TextField).value.trim();
+			const iconMode = ($('tileIconMode') as unknown as SelectEl).value;
+			const group = ($('tileGroup') as unknown as SelectEl).value;
+
+			let icon = '';
+			if (iconMode === 'url') {
+				icon = ($('tileIconUrl') as unknown as TextField).value.trim();
+			} else if (iconMode === 'text') {
+				icon = ($('tileIconText') as unknown as TextField).value.trim();
+			} else if (iconMode === 'material') {
+				icon = ($('tileIconMaterial') as unknown as SelectEl).value.trim();
+			}
+
+			/*
+			 * 校验跟 parseConfig 同一套标准（见 isUsableUrl / MAX_TITLE）：
+			 * 手填的网址会直接变成磁贴的 href，而 href 是用户可点的东西，
+			 * `javascript:` 开头的地址足够在别人浏览器里跑脚本。
+			 */
+			if (!title) {
+				showTileError('名称不能为空。');
+				return;
+			}
+			if (title.length > 60) {
+				showTileError('名称太长（最多 60 个字符）。');
+				return;
+			}
+			if (!url) {
+				showTileError('网址不能为空。');
+				return;
+			}
+			if (!isUsableUrl(url)) {
+				showTileError('网址不合法，只支持 http(s) 或站内路径（/ 开头）。');
+				return;
+			}
+			if (iconMode === 'url' && icon && !/^https?:\/\//i.test(icon)) {
+				showTileError('图片 URL 必须以 http(s):// 开头。');
+				return;
+			}
+			if (iconMode === 'text' && icon.length > 8) {
+				showTileError('文字 / emoji 最多 8 个字符。');
+				return;
+			}
+			if (iconMode === 'material' && !/^[a-z0-9-]{1,40}$/.test(icon)) {
+				showTileError('请选择图标。');
+				return;
+			}
+			if (!knownGroup(group)) {
+				showTileError('分类不存在。');
+				return;
+			}
+
+			tiles = tiles.map((t) =>
+				t.id === editingId
+					? ({
+							...t,
+							title,
+							url,
+							iconMode: (iconMode === 'site' ? undefined : iconMode) as Tile['iconMode'],
+							icon,
+							group: group as LinkGroup,
+							// 网址换了，原来按域名匹配到的图标就不再作数
+							...(!icon && t.materialIcon ? { materialIcon: undefined } : {}),
+						} as Tile)
+					: t,
 			);
+			editingId = null;
+			tileDialog.open = false;
+			save(tiles);
+			render();
+			showHint(`已保存「${title}」。`);
 		});
 
 		// ─────────────────────────────────────────────── 拖动排序
@@ -1923,7 +2572,7 @@ import { guideTabs } from '../data/guide';
 		for (const grid of grids.values()) {
 			grid.addEventListener('dragstart', (event) => {
 				const tile = (event.target as HTMLElement | null)?.closest('.guide-tile') as HTMLElement | null;
-				if (!editing || !tile) return;
+				if (!tile) return;
 				dragId = tile.dataset.id ?? null;
 				tile.classList.add('is-dragging');
 				event.dataTransfer?.setData('text/plain', dragId ?? '');
@@ -1931,7 +2580,7 @@ import { guideTabs } from '../data/guide';
 			});
 
 			grid.addEventListener('dragover', (event) => {
-				if (!editing || !dragId) return;
+				if (!dragId) return;
 				event.preventDefault();
 				const over = (event.target as HTMLElement | null)?.closest('.guide-tile') as HTMLElement | null;
 				for (const el of grid.querySelectorAll('.is-dropzone')) el.classList.remove('is-dropzone');
@@ -1942,7 +2591,7 @@ import { guideTabs } from '../data/guide';
 			});
 
 			grid.addEventListener('drop', (event) => {
-				if (!editing || !dragId) return;
+				if (!dragId) return;
 				event.preventDefault();
 				const over = (event.target as HTMLElement | null)?.closest('.guide-tile') as HTMLElement | null;
 				const targetId = over?.dataset.id;
@@ -1959,15 +2608,6 @@ import { guideTabs } from '../data/guide';
 				}
 			});
 		}
-
-		// 离开页面时如果还在编辑态，滚回去会看到半屏删除按钮，先复位
-		window.addEventListener('pagehide', () => {
-			if (!editing) return;
-			editing = false;
-			ioBar.setAttribute('hidden', '');
-			fab.innerHTML = '<mdui-icon-edit slot="icon"></mdui-icon-edit>';
-			render();
-		});
 
 		render();
 	</script>

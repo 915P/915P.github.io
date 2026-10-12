@@ -482,7 +482,6 @@ export const navLinks: NavLink[] = [
 		desc: '物理、数学、计算机预印本',
 		url: 'https://arxiv.org/',
 		icon: '📄',
-		intl: true,
 		group: 'academic',
 	},
 

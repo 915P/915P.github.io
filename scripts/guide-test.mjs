@@ -180,19 +180,54 @@ eq('非法网址原样返回', guide.tileLabel('::::', ''), '::::');
 		ok(`探针 ${probe.url} 用 no-cors`, probe.mode === 'no-cors');
 	}
 	ok('校园网有多个候选（单站宕机不至于误报）', guide.CAMPUS_TARGET.probes.length >= 2);
-	// 校园网探测必须全是**域名**：裸 IP 没法区分「没接校园网」和「那台机器没开机」
+	// 走域名的前提是「校内解析得出」，换公共 DNS 就不成立 —— 所以必须有兜底开关
 	ok(
-		'校园网探针不含裸 IP（不保证在线的机器不能当判定依据）',
-		guide.CAMPUS_TARGET.probes.every((p) => !/\/\d{1,3}(\.\d{1,3}){3}/.test(p.url)),
+		'校园网探测仍走域名（裸 IP 会把内网地址写进公开仓库）',
+		guide.CAMPUS_TARGET.probes.every((p) => /^https:\/\/[a-z][a-z0-9.-]+\/$/.test(p.url)),
 		guide.CAMPUS_TARGET.probes.map((p) => p.url).join(','),
 	);
-	// 注意：它也不在默认磁贴里 —— 内网地址不随站点公开发布（见下方合规防线断言）
 	ok(
-		'高程作业不在探测目标里（它不保证在线）',
-		!guide.netTargets.some((t) =>
-			t.probes.some((p) => p.url.includes('192.0.2.10')),
-		),
+		'探测目标里没有裸 IP',
+		guide.netTargets.every((t) => !t.probes.some((p) => /\/\d{1,3}(\.\d{1,3}){3}/.test(p.url))),
 	);
+}
+
+// 「默认在校园网环境下」兜底：解析器换成公共 DNS 后探测恒失败，只能用户自己声明
+{
+	const off = { campus: 'fail', github: 'ok', google: 'ok', at: 1700000000000 };
+	const access = guide.tileAccess('https://software.tongji.edu.cn/');
+
+	// 探测说校外时，校内资源照样被提示
+	eq('探测校外会提示校园网', guide.accessWarning(access, off), '需校园网');
+
+	// 打开开关后：campus 直接当 ok，校内资源不再被提示
+	const on = guide.applyAssumeCampus(off, true);
+	eq('开关打开后判为已接入', on.campus, 'ok');
+	eq('开关打开后不再提示', guide.accessWarning(access, on), null);
+	// 时间戳照旧：github / google 那两项是真探过的，时间戳对它们成立。
+	// 归零会让 isStale() 永远为真，每次打开页面都重跑一遍探测。
+	eq('开关生效时保留检测时间', on.at, off.at);
+	// github / google 不受影响：那是国际连通性，跟在不在校园网无关
+	eq('国际连通性照旧', on.github, 'ok');
+	eq('国际连通性照旧（Google）', on.google, 'ok');
+
+	// 关掉开关时原样返回，不多改一个字段
+	const untouched = guide.applyAssumeCampus(off, false);
+	eq('关掉开关时不改结果', untouched.campus, 'fail');
+	eq('关掉开关时保留时间戳', untouched.at, off.at);
+
+	// 表达式与总览文案也要跟着变，否则设置面板里显示的还是「国际互联网不畅」
+	const overall = guide.describeOverall(on);
+	ok('总览说已接入校园网', overall.text.includes('已接入校园网'), overall.text);
+
+	// 已经在校内时开关不改变结论（幂等）
+	const already = guide.applyAssumeCampus({ campus: 'ok', github: 'ok', google: 'ok', at: 5 }, true);
+	eq('已在校内时开关无副作用', already.campus, 'ok');
+	// unknown / checking 也都当已接入：宁可少提示，不要误报
+	for (const state of ['unknown', 'checking']) {
+		const s = guide.applyAssumeCampus({ campus: state, github: 'ok', google: 'ok', at: 5 }, true);
+		eq(`${state} 时开关也当已接入`, s.campus, 'ok');
+	}
 }
 
 // 目标表结构
@@ -270,6 +305,7 @@ eq('非法网址原样返回', guide.tileLabel('::::', ''), '::::');
 					},
 				],
 				null,
+				{ color: '#66ccff', mode: 'auto', wallpaper: 'none', scrub: 0.72, assumeCampus: false },
 				new Date(),
 			),
 		).tiles.length === 1,
@@ -334,7 +370,7 @@ eq('非法网址原样返回', guide.tileLabel('::::', ''), '::::');
 	ok('订购库文案说清订阅前提', subText.includes('机构订阅'));
 	ok('订购库文案提到 VPN', subText.includes('VPN'));
 	const intlText = guide.accessNotice(intl, 'Google Scholar');
-	ok('境外文案说清在境外', intlText.includes('境外'));
+	ok('境外文案按网络环境措辞', intlText.includes('在当前网络环境下可能无法打开'));
 	eq('无限制的资源没有提醒', guide.accessNotice(plain, '必应'), null);
 	// 三种说法必须互不相同 —— 分具体情况写的前提是确实分开了
 	ok('三类文案互不相同', new Set([campusText, subText, intlText]).size === 3);
@@ -361,7 +397,7 @@ eq('非法网址原样返回', guide.tileLabel('::::', ''), '::::');
 	// 之前踩的坑：所有工具都在同一域名下，按 host 取 favicon 会全变成同一个图标
 	ok('小工具不再是同一个主站域名', new Set(tools.map((tile) => new URL(tile.url, 'https://915p.github.io').host)).size >= 1);
 	// 导出的磁贴配置要把 materialIcon 带出去，否则导入回来就退回 favicon 了
-	const exported = guide.serializeConfig(tools, null, new Date(2026, 0, 2));
+	const exported = guide.serializeConfig(tools, null, { color: '#66ccff', mode: 'auto', wallpaper: 'none', scrub: 0.72, assumeCampus: false }, new Date(2026, 0, 2));
 	const parsed = guide.parseConfig(exported);
 	ok(
 		'导入导出保留 materialIcon',
@@ -395,7 +431,7 @@ eq('非法网址原样返回', guide.tileLabel('::::', ''), '::::');
 	eq('相对路径没有 hostname', guide.urlHost('/tools/radix/'), null);
 	ok('绝对地址照常取 hostname', guide.urlHost('https://github.com/') === 'github.com');
 	// 站内相对路径也要能导入导出（之前这里会整份配置被判非法）
-	const roundTrip = guide.parseConfig(guide.serializeConfig(tools, null, new Date(2026, 0, 2)));
+	const roundTrip = guide.parseConfig(guide.serializeConfig(tools, null, { color: '#66ccff', mode: 'auto', wallpaper: 'none', scrub: 0.72, assumeCampus: false }, new Date(2026, 0, 2)));
 	ok(
 		'小工具配置能原样导出再导入',
 		!('error' in roundTrip) && roundTrip.tiles.length === tools.length,
@@ -595,7 +631,7 @@ eq('非法网址原样返回', guide.tileLabel('::::', ''), '::::');
 	];
 
 	// 导出 → 导入 应当无损往返
-	const json = guide.serializeConfig(tiles, 'scholar', new Date('2026-10-07T03:04:05Z'));
+	const json = guide.serializeConfig(tiles, 'scholar', { color: '#66ccff', mode: 'auto', wallpaper: 'none', scrub: 0.72, assumeCampus: false }, new Date('2026-10-07T03:04:05Z'));
 	const round = guide.parseConfig(json);
 	ok('往返解析成功', !('error' in round), round.error ?? '');
 	eq('条目数一致', round.tiles.length, 2);
@@ -604,12 +640,44 @@ eq('非法网址原样返回', guide.tileLabel('::::', ''), '::::');
 	eq('分类保真', round.tiles[1].group, 'course');
 	eq('引擎保真', round.engine, 'scholar');
 	eq('版本号', JSON.parse(json).version, guide.CONFIG_VERSION);
-	eq('导出文件名', guide.configFilename(new Date('2026-10-07T00:00:00')), '起始页-链接-2026-10-07.json');
+	eq('导出文件名', guide.configFilename(new Date('2026-11-07T00:00:00')), '起始页-配置-2026-11-07.json');
+
+	// ---- iconMode：三种自定义图标模式 ----
+	const iconTiles = [
+		{ id: 'a', title: '图片图标', url: 'https://a.cn', icon: 'https://a.cn/i.png', iconMode: 'url', group: 'tools' },
+		{ id: 'b', title: 'MDUI 图标', url: 'https://b.cn', icon: 'home', iconMode: 'material', group: 'tools' },
+		{ id: 'c', title: '文字图标', url: 'https://c.cn', icon: '🚀', iconMode: 'text', group: 'tools' },
+		{ id: 'd', title: '自动站点图标', url: 'https://d.cn', icon: '', group: 'tools' },
+	];
+	const iconJson = guide.serializeConfig(iconTiles, null, { color: '#66ccff', mode: 'auto', wallpaper: 'none', scrub: 0.72, assumeCampus: false }, new Date());
+	const iconRound = guide.parseConfig(iconJson);
+	ok('iconMode 往返成功', !('error' in iconRound), iconRound.error ?? '');
+	eq('url 模式保真', iconRound.tiles[0].iconMode, 'url');
+	eq('url 图标值保真', iconRound.tiles[0].icon, 'https://a.cn/i.png');
+	eq('material 模式保真', iconRound.tiles[1].iconMode, 'material');
+	eq('material 图标名保真', iconRound.tiles[1].icon, 'home');
+	eq('text 模式保真', iconRound.tiles[2].iconMode, 'text');
+	eq('text 图标值保真', iconRound.tiles[2].icon, '🚀');
+	eq('无 iconMode 时省略', iconRound.tiles[3].iconMode, undefined);
+
+	// 无效 iconMode 被丢弃（不崩溃、不保留）
+	const badMode = guide.parseConfig(JSON.stringify({
+		version: 2,
+		tiles: [{ id: 'x', title: 'x', url: 'https://a.cn', icon: 'y', iconMode: 'hacker', group: 'tools' }],
+	}));
+	ok('无效 iconMode 被丢弃', !('error' in badMode) && badMode.tiles[0].iconMode === undefined);
+
+	// 旧版配置（无 iconMode）仍能解析
+	const legacy = guide.parseConfig(JSON.stringify({
+		version: 1,
+		tiles: [{ id: 'x', title: '旧磁贴', url: 'https://a.cn', icon: '🔗', group: 'tools' }],
+	}));
+	ok('旧版无 iconMode 可解析', !('error' in legacy) && legacy.tiles[0].iconMode === undefined);
 
 	// 引擎为 null（自动模式）也要能往返
 	eq(
 		'自动模式导出为 null',
-		guide.parseConfig(guide.serializeConfig(tiles, null, new Date())).engine,
+		guide.parseConfig(guide.serializeConfig(tiles, null, { color: '#66ccff', mode: 'auto', wallpaper: 'none', scrub: 0.72, assumeCampus: false }, new Date())).engine,
 		null,
 	);
 
@@ -679,6 +747,158 @@ eq('非法网址原样返回', guide.tileLabel('::::', ''), '::::');
 		version: 1,
 		tiles: [{ id: 'x', title: '没网址', icon: '🔗', group: 'tools' }],
 	}));
+}
+
+// ---------------------------------------------------- 导入导出：全部设置
+
+{
+	const tiles = [{ id: 'a', title: '图书馆', url: 'https://a.cn/', icon: '📚', group: 'academic' }];
+	const full = {
+		color: '#ee0000',
+		mode: 'dark',
+		wallpaper: 'sea',
+		scrub: 0.5,
+		assumeCampus: true,
+	};
+
+	const json = guide.serializeConfig(tiles, 'bing', full, new Date('2026-11-07T00:00:00Z'));
+	eq('格式版本', JSON.parse(json).version, guide.CONFIG_VERSION);
+	const back = guide.parseConfig(json);
+	ok('解析成功', !('error' in back), back.error ?? '');
+	ok('外观整体带过来了', 'appearance' in back && !!back.appearance);
+	eq('主题色保真', back.appearance.color, '#ee0000');
+	eq('外观模式保真', back.appearance.mode, 'dark');
+	eq('壁纸保真', back.appearance.wallpaper, 'sea');
+	eq('遮罩保真', back.appearance.scrub, 0.5);
+	eq('校园网假设保真', back.appearance.assumeCampus, true);
+
+	// v1 文件没有 appearance：导入**不碰**现有外观，而不是把外观清空
+	const v1 = guide.parseConfig(JSON.stringify({
+		version: 1, exportedAt: '2026-10-01T00:00:00.000Z', engine: null, tiles,
+	}));
+	ok('v1 仍能导入', !('error' in v1));
+	eq('v1 没有外观字段', v1.appearance, undefined);
+
+	// 畸形外观：哪个字段认得出来就用哪个，认不出来的一律回落默认值
+	const dirty = guide.parseConfig(JSON.stringify({
+		version: guide.CONFIG_VERSION,
+		exportedAt: '2026-10-01T00:00:00.000Z',
+		engine: null,
+		appearance: { color: 'not-a-color', mode: 'sideways', wallpaper: '火星', scrub: 'abc', assumeCampus: 'yes' },
+		tiles,
+	}));
+	ok('畸形外观不报错', !('error' in dirty), dirty.error ?? '');
+	eq('颜色回落默认', dirty.appearance.color, '#66ccff');
+	eq('模式回落自动', dirty.appearance.mode, 'auto');
+	eq('壁纸回落纯色', dirty.appearance.wallpaper, 'none');
+	eq('遮罩回落默认', dirty.appearance.scrub, guide.SCRUB_RANGE.defaultValue);
+	// 字符串 'yes' 不算 true —— 布尔字段只认真布尔
+	eq('校园网假设不真就不启用', dirty.appearance.assumeCampus, false);
+	// 整个 appearance 不是对象时整块丢掉
+	const notObj = guide.parseConfig(JSON.stringify({
+		version: guide.CONFIG_VERSION, exportedAt: 'x', engine: null, appearance: [], tiles,
+	}));
+	eq('appearance 不是对象时忽略', notObj.appearance, undefined);
+
+	// 自定义壁纸：小的带走，太大的整个不带（对方导入时退回纯色）
+	const small = guide.serializeConfig(
+		tiles, null, { ...full, wallpaper: 'custom', customWall: 'data:image/png;base64,AAAA' }, new Date(),
+	);
+	eq('小自定义壁纸带得走', guide.parseConfig(small).appearance.wallpaper, 'custom');
+	ok(
+		'自定义壁纸内容也带走',
+		(guide.parseConfig(small).appearance.customWall ?? '').startsWith('data:image/png'),
+	);
+	const big = guide.serializeConfig(
+		tiles,
+		null,
+		{ ...full, wallpaper: 'custom', customWall: 'x'.repeat(guide.MAX_CUSTOM_WALL_IN_CONFIG + 10) },
+		new Date(),
+	);
+	eq('超大自定义壁纸不带', guide.parseConfig(big).appearance.customWall, undefined);
+	// 声称是 custom 但没有 data：退回纯色，不能留下一个加载不出图的壁纸位
+	const orphan = guide.parseConfig(JSON.stringify({
+		version: guide.CONFIG_VERSION, exportedAt: 'x', engine: null,
+		appearance: { color: '#66ccff', mode: 'auto', wallpaper: 'custom', scrub: 0.72, assumeCampus: false },
+		tiles,
+	}));
+	eq('只有 custom 标记没有图时退回纯色', orphan.appearance.wallpaper, 'none');
+}
+
+// ------------------------------------------------- 壁纸：分组 + 按季节随机
+
+{
+	// 照片壁纸全部按季节分好了组，且每组至少一张
+	for (const season of guide.PHOTO_WALLS) {
+		ok(`${season.label} 组有照片`, season.photos.length >= 1);
+		for (const photo of season.photos) {
+			ok(`${season.label}·${photo.label} 有文件名`, photo.file.startsWith('/images/walls/'));
+		}
+	}
+	ok('总表里带上了所有照片', guide.WALLPAPERS.length >= 15);
+	// 「纯色」和「随机」在最前面，用户一眼能看到
+	eq('第一项是纯色', guide.WALLPAPERS[0].value, 'none');
+	eq('第二项是随机', guide.WALLPAPERS[1].value, 'random');
+	// 分组渲染要用的 group 字段必须有值，且不重名到看不出区别
+	const groups = new Set(guide.WALLPAPERS.map((w) => w.group));
+	ok('分组有区分度', groups.has('基础') && groups.has('渐变') && groups.size >= 6, String(groups.size));
+	// 每个分组下的壁纸都得能掏出 css（照片是 url(...)，渐变是 linear-gradient）
+	for (const w of guide.WALLPAPERS) {
+		ok(`${w.label} 有背景值`, typeof w.css === 'string');
+	}
+	// 缩略图用的 wallCss 要能查到每一项
+	eq('查纯色为空串', guide.wallCss('none'), '');
+	ok('查照片有 url', guide.wallCss('spring-lib').startsWith('url('));
+	eq('查不到返回空串', guide.wallCss('不存在的壁纸'), '');
+
+	// 时段：19 点后、7 点前走「夜」
+	for (const hour of [19, 20, 23, 0, 3, 6]) {
+		const picked = guide.pickWallByTime(new Date(2026, 0, 15, hour, 0, 0));
+		eq(`${hour} 点抽到夜组`, picked.split('-')[0], 'night');
+	}
+	// 白天按季节：3-5 春 / 6-8 夏 / 9-11 秋 / 12-2 冬
+	for (const [month, season] of [[3, 'spring'], [4, 'spring'], [5, 'spring'], [6, 'summer'], [8, 'summer'],
+		[9, 'autumn'], [11, 'autumn'], [12, 'winter'], [1, 'winter'], [2, 'winter']]) {
+		const picked = guide.pickWallByTime(new Date(2026, month - 1, 15, 10, 0, 0));
+		eq(`${month} 月抽到 ${season}`, picked.split('-')[0], season);
+	}
+	// 白天 7 点整和 18 点整都还算白天（边界）
+	const at7 = guide.pickWallByTime(new Date(2026, 3, 15, 7, 0, 0));
+	const at18 = guide.pickWallByTime(new Date(2026, 3, 15, 18, 0, 0));
+	eq('7 点算白天', at7.split('-')[0], 'spring');
+	eq('18 点算白天', at18.split('-')[0], 'spring');
+
+	// 抽出来的一定是那个组里真实存在的一张，不能落到组外
+	for (let i = 0; i < 60; i += 1) {
+		const picked = guide.pickWallByTime(new Date(2026, i % 12, 15, i % 24, 0, 0));
+		ok('抽到的壁纸在总表里', guide.WALLPAPERS.some((w) => w.value === picked), picked);
+	}
+	// 分布：夜里抽到的应该全在夜组内，别抽到别的组
+	for (let i = 0; i < 40; i += 1) {
+		const hour = 19 + (i % 5);
+		eq(`${hour} 点仍在夜组`, guide.pickWallByTime(new Date(2026, 3, 15, hour, 0, 0)).split('-')[0], 'night');
+	}
+}
+
+// ------------------------------------------------------ 遮罩：照片要更厚
+
+{
+	// 照片壁纸的遮罩默认值必须比渐变更厚，否则亮照片上文字读不清
+	ok('照片默认遮罩更厚', guide.PHOTO_SCRUB_DEFAULT > guide.SCRUB_RANGE.defaultValue);
+	eq('樱花大道用厚遮罩', guide.defaultScrubFor('spring-sakura'), guide.PHOTO_SCRUB_DEFAULT);
+	eq('夜照片也用厚遮罩', guide.defaultScrubFor('night-lib'), guide.PHOTO_SCRUB_DEFAULT);
+	// 渐变和纯色维持原默认
+	eq('渐变用常规遮罩', guide.defaultScrubFor('dawn'), guide.SCRUB_RANGE.defaultValue);
+	eq('纯色用常规遮罩', guide.defaultScrubFor('none'), guide.SCRUB_RANGE.defaultValue);
+	// 认不出的值退回常规，别把遮罩悄悄改厚
+	eq('未知壁纸退回常规', guide.defaultScrubFor('不存在的'), guide.SCRUB_RANGE.defaultValue);
+	// 用户手动调过的值永远优先（sanitizeScrub 负责收敛范围）
+	eq('手动值优先', guide.sanitizeScrub(0.5), 0.5);
+	// 遮罩不跟主题走：浓度只由壁纸决定，两档默认值都落在可调区间内
+	ok('照片默认在区间内', guide.PHOTO_SCRUB_DEFAULT <= guide.SCRUB_RANGE.max);
+	ok('渐变默认在区间内', guide.SCRUB_RANGE.defaultValue >= guide.SCRUB_RANGE.min);
+	// 自定义壁纸不按照片算 —— data URL 无法预知亮度，用常规档
+	eq('自定义壁纸用常规遮罩', guide.defaultScrubFor('custom'), guide.SCRUB_RANGE.defaultValue);
 }
 
 // ---------------------------------------------------------------- 收尾
