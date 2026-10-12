@@ -57,17 +57,17 @@ const current = links.find((l) => l.key === active);
 
 	<!-- divider：文档 §显示分割线。没有它 rail 与内容区视觉上黏在一起 -->
 	<mdui-navigation-rail value={current?.key} class="site-rail" divider>
-		<mdui-navigation-rail-item href="/" value="home" title="首页">
+		<mdui-navigation-rail-item href="/" value="home" title="首页" aria-current={active === 'home' ? 'page' : undefined}>
 			<mdui-icon-home--outlined slot="icon"></mdui-icon-home--outlined>
 			<mdui-icon-home slot="active-icon"></mdui-icon-home>
 			首页
 		</mdui-navigation-rail-item>
-		<mdui-navigation-rail-item href="/blog/" value="blog" title="博客">
+		<mdui-navigation-rail-item href="/blog/" value="blog" title="博客" aria-current={active === 'blog' ? 'page' : undefined}>
 			<mdui-icon-article--outlined slot="icon"></mdui-icon-article--outlined>
 			<mdui-icon-article slot="active-icon"></mdui-icon-article>
 			博客
 		</mdui-navigation-rail-item>
-		<mdui-navigation-rail-item href="/tools/" value="tools" title="工具与应用">
+		<mdui-navigation-rail-item href="/tools/" value="tools" title="工具与应用" aria-current={active === 'tools' ? 'page' : undefined}>
 			<mdui-icon-apps--outlined slot="icon"></mdui-icon-apps--outlined>
 			<mdui-icon-apps slot="active-icon"></mdui-icon-apps>
 			工具
@@ -87,17 +87,17 @@ const current = links.find((l) => l.key === active);
 		scroll-behavior="hide"
 		scroll-threshold="30"
 	>
-		<mdui-navigation-bar-item href="/" value="home">
+		<mdui-navigation-bar-item href="/" value="home" aria-current={active === 'home' ? 'page' : undefined}>
 			<mdui-icon-home--outlined slot="icon"></mdui-icon-home--outlined>
 			<mdui-icon-home slot="active-icon"></mdui-icon-home>
 			首页
 		</mdui-navigation-bar-item>
-		<mdui-navigation-bar-item href="/blog/" value="blog">
+		<mdui-navigation-bar-item href="/blog/" value="blog" aria-current={active === 'blog' ? 'page' : undefined}>
 			<mdui-icon-article--outlined slot="icon"></mdui-icon-article--outlined>
 			<mdui-icon-article slot="active-icon"></mdui-icon-article>
 			博客
 		</mdui-navigation-bar-item>
-		<mdui-navigation-bar-item href="/tools/" value="tools">
+		<mdui-navigation-bar-item href="/tools/" value="tools" aria-current={active === 'tools' ? 'page' : undefined}>
 			<mdui-icon-apps--outlined slot="icon"></mdui-icon-apps--outlined>
 			<mdui-icon-apps slot="active-icon"></mdui-icon-apps>
 			工具
