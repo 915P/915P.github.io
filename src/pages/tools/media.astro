@@ -1423,14 +1423,15 @@ import Page from '../../layouts/Page.astro';
 			log(`输出名与输入文件重名，已改为 ${finalOutput}`);
 		}
 
-		instance.on('log', ({ message }) => {
+		const logHandler = ({ message }: { message: string }) => {
 			infoBuffer += message + '\n';
 			log(message, /error|Error|Invalid/.test(message) ? 'error' : 'info');
 			// ffmpeg 的进度行含 frame= 与 time=，用它做不确定态进度
 			if (/frame=|time=/.test(message)) {
 				setProgress(0, 0, `${label}… ${message.trim()}`);
 			}
-		});
+		};
+		instance.on('log', logHandler);
 
 		await instance.createDir('/in').catch(() => undefined);
 		await instance.mount('WORKERFS', { files }, '/in');
@@ -1452,6 +1453,7 @@ import Page from '../../layouts/Page.astro';
 			}
 			return { output: finalOutput, bytes: data };
 		} finally {
+			instance.off('log', logHandler);
 			await instance.unmount('/in').catch(() => undefined);
 			// concat 清单写在内存 FS 的根目录，卸载后仍要清掉
 			await instance.deleteFile(ops.CONCAT_LIST).catch(() => undefined);
@@ -1471,11 +1473,12 @@ import Page from '../../layouts/Page.astro';
 		ops.assertSizeOk(files);
 		setProgress(0, 0, `${label}…`);
 		infoBuffer = '';
-		instance.on('log', ({ message }) => {
+		const logHandler = ({ message }: { message: string }) => {
 			infoBuffer += message + '\n';
 			log(message, /error|Error|Invalid/.test(message) ? 'error' : 'info');
 			if (/frame=|time=/.test(message)) setProgress(0, 0, `${label}… ${message.trim()}`);
-		});
+		};
+		instance.on('log', logHandler);
 
 		const names = new Set(files.map(mountedName));
 		await instance.createDir('/in').catch(() => undefined);
@@ -1503,6 +1506,7 @@ import Page from '../../layouts/Page.astro';
 				results.push({ output: finalOutput, bytes });
 			}
 		} finally {
+			instance.off('log', logHandler);
 			await instance.unmount('/in').catch(() => undefined);
 		}
 		return results;
@@ -1816,11 +1820,16 @@ import Page from '../../layouts/Page.astro';
 			const instance = await ensureFfmpeg();
 			setProgress(0, 0, '正在读取 ffmpeg 的编码器清单…');
 			infoBuffer = '';
-			instance.on('log', ({ message }) => {
+			const logHandler = ({ message }: { message: string }) => {
 				infoBuffer += message + '\n';
-			});
-			// 同「文件信息」页：只查询不给输出，ffmpeg 会打印清单后自行退出
-			await instance.exec(['-encoders']);
+			};
+			instance.on('log', logHandler);
+			try {
+				// 同「文件信息」页：只查询不给输出，ffmpeg 会打印清单后自行退出
+				await instance.exec(['-encoders']);
+			} finally {
+				instance.off('log', logHandler);
+			}
 			encoderSet = ops.parseEncoderList(infoBuffer);
 			const missing = [
 				...ops.videoAvailability(encoderSet),
@@ -1883,7 +1892,8 @@ import Page from '../../layouts/Page.astro';
 			infoBuffer += message + '\n';
 			log(message, /error|Error|Invalid|Failed/.test(message) ? 'error' : 'info');
 		};
-		instance.on('log', ({ message }) => sink(message));
+		const logHandler = ({ message }: { message: string }) => sink(message);
+		instance.on('log', logHandler);
 
 		await instance.createDir('/in').catch(() => undefined);
 		await instance.mount('WORKERFS', { files: [file] }, '/in');
@@ -1916,6 +1926,7 @@ import Page from '../../layouts/Page.astro';
 				reason: ops.explainUndecodable(infoBuffer) ?? describeError(error),
 			};
 		} finally {
+			instance.off('log', logHandler);
 			await instance.unmount('/in').catch(() => undefined);
 			hideProgress();
 		}
@@ -2733,9 +2744,10 @@ import Page from '../../layouts/Page.astro';
 			ops.assertSizeOk([infoFile]);
 			setProgress(0, 0, '读取文件信息…');
 			infoBuffer = '';
-			instance.on('log', ({ message }) => {
+			const logHandler = ({ message }: { message: string }) => {
 				infoBuffer += message + '\n';
-			});
+			};
+			instance.on('log', logHandler);
 
 			await instance.createDir('/in').catch(() => undefined);
 			await instance.mount('WORKERFS', { files: [infoFile] }, '/in');
@@ -2747,6 +2759,7 @@ import Page from '../../layouts/Page.astro';
 				 */
 				await instance.exec(['-i', `/in/${mountedName(infoFile)}`]);
 			} finally {
+				instance.off('log', logHandler);
 				await instance.unmount('/in').catch(() => undefined);
 			}
 
