@@ -20,6 +20,7 @@ const { title, description, image, type, active } = Astro.props;
 	layout-main 内部 —— 写在 Nav 之外会脱离布局定位（曾导致页脚置顶）。
 */}
 <Base title={title} description={description} image={image} type={type}>
+	<slot name="head" slot="head" />
 	<Nav active={active}>
 		<div class="page" slot="content">
 			<slot />
