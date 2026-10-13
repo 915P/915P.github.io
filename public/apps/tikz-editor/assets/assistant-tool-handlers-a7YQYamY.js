@@ -1,0 +1,27 @@
+import{P as c}from"./__vite-browser-external--Ne8FRAu.js";import"./index-BiSHb62H.js";function _(i,n){var r,a;const o=((r=n.parseResult)==null?void 0:r.diagnostics)??[],e=((a=n.semanticResult)==null?void 0:a.diagnostics)??[],s=[...o,...e];if(s.length===0)return null;const l=i.split(`
+`),t=u=>{let d=1;for(let f=0;f<u&&f<i.length;f++)i[f]===`
+`&&d++;return d};return s.map(u=>{const d=t(u.span.from),f=u.code?` [${u.code}]`:"",m=l[d-1],p=m?` | ${m.trimStart()}`:"";return`${u.severity} (line ${d})${f}: ${u.message}${p}`}).join(`
+`)}function b(i,n){const o=n.figures;if(o.length<=1)return null;const e=n.activeRootId,s=o.findIndex(d=>d.id===e);if(s<0)return null;const l=o[s],t=i.slice(l.span.from,l.span.to),r=i.slice(0,l.span.from).split(`
+`).length,a=t.split(`
+`).map((d,f)=>`${r+f}: ${d}`).join(`
+`),u=o.map((d,f)=>{const m=f===s?" (active)":"";return`  Figure ${f+1}: lines ${d.startLine}–${d.endLine}${m}`}).join(`
+`);return`This document contains ${o.length} figures:
+${u}
+
+The user is currently editing figure ${s+1}.
+
+Active figure source (with line numbers from the full document):
+\`\`\`tex
+${a}
+\`\`\`
+
+The full document source is in the file you will edit. Only modify the active figure unless the user asks otherwise. All tools accept a \`figure_index\` parameter (1-indexed) to query any figure; omit it to use the active figure.`}function C(i,n){const o=n.scene;if(!o||o.elements.length===0)return"当前场景中没有元素。";const e=i.split(`
+`),s=t=>{let r=1;for(let a=0;a<t&&a<i.length;a++)i[a]===`
+`&&r++;return r},l=o.elements.map(t=>{const r=s(t.sourceRef.sourceSpan.from),a=s(t.sourceRef.sourceSpan.to),u=r===a?`line ${r}`:`lines ${r}–${a}`,d=t.style.stroke??"none",f=t.style.fill??"none";let m=`  sourceId: ${t.sourceRef.sourceId}, kind: ${t.kind}, ${u}, stroke: ${d}, fill: ${f}`;if(t.kind==="Text"){const $=F(i,t.sourceRef.sourceSpan.from,t.sourceRef.sourceSpan.to),h=(t.position.x/c).toFixed(2),g=(t.position.y/c).toFixed(2);m+=`, center: (${h}, ${g})`,$&&(m+=`, name: "${$}"`),t.text&&(m+=`, text: "${t.text}"`)}else if(t.kind==="Circle"){const $=(t.center.x/c).toFixed(2),h=(t.center.y/c).toFixed(2),g=(t.radius/c).toFixed(2);m+=`, center: (${$}, ${h}), radius: ${g}`}else if(t.kind==="Ellipse"){const $=(t.center.x/c).toFixed(2),h=(t.center.y/c).toFixed(2);m+=`, center: (${$}, ${h})`}const p=e[r-1];if(p){const $=p.trimStart();$.length<=80?m+=`
+    ${$}`:m+=`
+    ${$.slice(0,77)}...`}return m});return`${o.elements.length} element(s):
+${l.join(`
+`)}`}function F(i,n,o){const e=i.slice(n,o),s=/\(([a-zA-Z_][\w.-]*)\)/.exec(e);return(s==null?void 0:s[1])??null}function P(i,n){var l;const o=((l=i.semanticResult)==null?void 0:l.nodeAnchorTargets)??[],e=o.filter(t=>t.nodeName===n);if(e.length===0)return`No node named "${n}" found. Available nodes: ${[...new Set(o.map(t=>t.nodeName))].join(", ")||"none"}`;const s=e.map(t=>{const r=(t.world.x/c).toFixed(3),a=(t.world.y/c).toFixed(3);return`  ${t.anchor}: (${r}, ${a})`});return`Anchors for node "${n}" (in cm):
+${s.join(`
+`)}`}function j(i){var a;const n=(a=i.scene)==null?void 0:a.bounds;if(!n)return"没有可用的场景边界（场景可能为空）。";const o=(n.minX/c).toFixed(3),e=(n.minY/c).toFixed(3),s=(n.maxX/c).toFixed(3),l=(n.maxY/c).toFixed(3),t=((n.maxX-n.minX)/c).toFixed(3),r=((n.maxY-n.minY)/c).toFixed(3);return`Scene bounds (cm): x: [${o}, ${s}], y: [${e}, ${l}], size: ${t} × ${r}`}function v(i,n){return n.y+n.height-(i-n.y)}function M(i,n){return n.y+n.height-i+n.y}function A(i,n){let{svg:o,viewBox:e}=i;const s=e;if(n.zoomRegion){const t=n.zoomRegion,r=t.min_x*c,a=t.max_x*c,u=v(t.max_y*c,s),d=v(t.min_y*c,s);e={x:r,y:u,width:a-r,height:d-u}}let l="";if(n.showGrid){const t=n.showGrid.spacing??1,r=n.showGrid.color??"#cccccc",a=e.x/c,u=(e.x+e.width)/c,d=M(e.y,s)/c,f=M(e.y+e.height,s)/c,m=Math.floor(a/t)*t,p=Math.ceil(u/t)*t,$=Math.floor(f/t)*t,h=Math.ceil(d/t)*t,g=[],k=[],w=Math.max(4,Math.min(10,t*c*.3));for(let x=m;x<=p;x=T(x+t,t)){const y=x*c;g.push(`<line x1="${y}" y1="${e.y}" x2="${y}" y2="${e.y+e.height}" stroke="${r}" stroke-width="0.4" />`);const z=e.y+e.height-w*.3;k.push(`<text x="${y+w*.15}" y="${z}" font-size="${w}" fill="${r}" font-family="sans-serif">${Y(x)}</text>`)}for(let x=$;x<=h;x=T(x+t,t)){const y=v(x*c,s);g.push(`<line x1="${e.x}" y1="${y}" x2="${e.x+e.width}" y2="${y}" stroke="${r}" stroke-width="0.4" />`),k.push(`<text x="${e.x+w*.15}" y="${y-w*.15}" font-size="${w}" fill="${r}" font-family="sans-serif">${Y(x)}</text>`)}l=`<g class="assistant-grid" opacity="0.6">${g.join("")}${k.join("")}</g>`}return(l||n.zoomRegion)&&(o=o.replace(/viewBox="[^"]*"/,`viewBox="${e.x} ${e.y} ${e.width} ${e.height}"`),l&&(o=o.replace(/<\/svg>\s*$/,`${l}</svg>`))),{...i,svg:o,viewBox:e,model:I(i.model,e,l)}}function T(i,n){return Math.round(i/n)*n}function Y(i){const n=Math.round(i*1e3)/1e3;return Number.isInteger(n)?String(n):n.toFixed(1)}function I(i,n,o){const e=[...i.parts];if(o){const l={partId:L(e),sourceId:"__assistant_tool__",elementId:null,order:e.length,markup:o,fingerprint:o};e.push(l)}return{...i,viewBox:n,parts:e}}function L(i){const n="assistant-grid",o=new Set(i.map(s=>s.partId));if(!o.has(n))return n;let e=2;for(;o.has(`${n}#${e}`);)e+=1;return`${n}#${e}`}function B(i,n,o){const e=o?i.slice(o.from,o.to):i,s=o?o.from:0,l=/\\end\{tikzpicture\*?\}/g;let t=null,r;for(;(r=l.exec(e))!==null;)t=r;if(!t)return i;const a=s+t.index;return i.slice(0,a)+n+`
+`+i.slice(a)}export{A as applyPreviewEnhancements,j as buildBoundsText,_ as buildDiagnosticsText,C as buildElementList,b as buildFigureContext,P as buildNodeAnchors,B as injectOverlayCode};
