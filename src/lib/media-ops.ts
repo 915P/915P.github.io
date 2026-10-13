@@ -10,7 +10,8 @@
  * （kind: 'transcode'），但页面默认不暴露，避免用户点一下等半小时。
  */
 
-export { formatBytes } from './format';
+import { formatBytes } from './format';
+export { formatBytes };
 
 /* ------------------------------------------------------------------ 类型 */
 
