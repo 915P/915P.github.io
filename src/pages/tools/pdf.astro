@@ -1711,7 +1711,7 @@ display: flex;
 				updateProgress: fromOps(),
 			});
 			pagesBytes = bytes;
-			await reloadPagesAfterEdit();
+			await reloadPagesAfterEdit({ preserveState: true });
 			download(bytes, `${baseName(pagesName)}-裁剪.pdf`);
 			endProgress('裁剪完成');
 		} catch (error) {
@@ -1733,7 +1733,7 @@ display: flex;
 				updateProgress: fromOps(),
 			});
 			pagesBytes = bytes;
-			await reloadPagesAfterEdit();
+			await reloadPagesAfterEdit({ preserveState: true });
 			download(bytes, `${baseName(pagesName)}-${$<HTMLElement & { value: string }>('normSize').value.toUpperCase()}.pdf`);
 			endProgress('尺寸归一完成');
 		} catch (error) {
@@ -1742,17 +1742,19 @@ display: flex;
 	}
 
 	/** 裁剪 / 归一之后把新的字节重新载入缩略图网格 */
-	async function reloadPagesAfterEdit(): Promise<void> {
+	async function reloadPagesAfterEdit(options: { preserveState?: boolean } = {}): Promise<void> {
 		if (!pagesBytes) return;
 		if (pagesPreview) {
 			stopThumbnails();
 			await pagesPreview.close().catch(() => undefined);
 		}
 		pagesPreview = await openForPreview(pagesBytes, pagesName);
-		pageState = Array.from({ length: pagesPreview.doc.numPages }, (_, i) => ({
-			origin: i + 1,
-			rotation: 0,
-		}));
+		if (!options.preserveState) {
+			pageState = Array.from({ length: pagesPreview.doc.numPages }, (_, i) => ({
+				origin: i + 1,
+				rotation: 0,
+			}));
+		}
 		$('pagesInfo').textContent = `${pagesName} · ${pagesPreview.doc.numPages} 页 · ${ops.formatBytes(pagesBytes.length)}`;
 		renderPageGrid();
 	}
@@ -1845,12 +1847,14 @@ display: flex;
 		beginProgress('绘制图片水印…');
 		try {
 			await prepareFonts();
+			const range = $<HTMLElement & { value: string }>('markRange').value;
+			const total = (await PDFDocumentProxyOf(markBytes)) ?? 0;
 			const bytes = await ops.applyWatermark(markBytes, {
 				kind: 'image',
 				image: markImage,
 				position: $<HTMLElement & { value: string }>('markPos').value as ops.WatermarkPosition,
 				opacity: Number($<HTMLElement & { value: string }>('markOpacity').value),
-				pages: watermarkPageFilter($<HTMLElement & { value: string }>('markRange').value, 0),
+				pages: watermarkPageFilter(range, total),
 				updateProgress: fromOps(),
 			});
 			download(bytes, `${markBaseName()}-图片水印.pdf`);
@@ -1902,9 +1906,11 @@ display: flex;
 	async function PDFDocumentProxyOf(bytes: Uint8Array): Promise<number | null> {
 		try {
 			const pdfjs = await loadPdfJs();
-			const doc = await pdfjs.getDocument({ data: bytes.slice(), useWasm: false, isEvalSupported: false }).promise;
+			const task = pdfjs.getDocument({ data: bytes.slice(), useWasm: false, isEvalSupported: false });
+			const doc = await task.promise;
 			const count = doc.numPages;
 			doc.cleanup();
+			await task.destroy();
 			return count;
 		} catch {
 			return null;
@@ -2079,14 +2085,16 @@ display: flex;
 		beginProgress('渲染页面…');
 		try {
 			const pdfjs = await loadPdfJs((loaded, total, label) => setProgress(loaded, total, `${label}…`));
-			const doc = await pdfjs.getDocument({
+			const task = pdfjs.getDocument({
 				data: exportBytes.slice(),
 				cMapUrl: '/vendor/pdfjs/cmaps/',
 				cMapPacked: true,
 				standardFontDataUrl: '/vendor/pdfjs/standard_fonts/',
 				useWasm: false,
 				isEvalSupported: false,
-			}).promise;
+				password: pdfPassword,
+			});
+			const doc = await task.promise;
 			const format = $<HTMLElement & { value: string }>('imgFormat').value as 'png' | 'jpeg';
 			const scale = Number($<HTMLElement & { value: string }>('imgScale').value);
 			const wantTransparent = $<HTMLElement & { value: string }>('imgBackground').value === 'transparent';
@@ -2102,6 +2110,7 @@ display: flex;
 				await new Promise((resolve) => setTimeout(resolve, 0));
 			}
 			doc.cleanup();
+			await task.destroy();
 			await downloadParts(files, exportName, '页面图片');
 			$('imgSummary').textContent = `已导出 ${files.length} 张图片`;
 		} catch (error) {
@@ -2112,14 +2121,16 @@ display: flex;
 	async function extractText(): Promise<string> {
 		if (!exportBytes) throw new Error('请先选择 PDF');
 		const pdfjs = await loadPdfJs((loaded, total, label) => setProgress(loaded, total, `${label}…`));
-		const doc = await pdfjs.getDocument({
+		const task = pdfjs.getDocument({
 			data: exportBytes.slice(),
 			cMapUrl: '/vendor/pdfjs/cmaps/',
 			cMapPacked: true,
 			standardFontDataUrl: '/vendor/pdfjs/standard_fonts/',
 			useWasm: false,
 			isEvalSupported: false,
-		}).promise;
+			password: pdfPassword,
+		});
+		const doc = await task.promise;
 		const parts: string[] = [];
 		for (let i = 1; i <= doc.numPages; i++) {
 			setProgress(i - 1, doc.numPages, `读取第 ${i} / ${doc.numPages} 页文字…`);
@@ -2140,6 +2151,7 @@ display: flex;
 			await new Promise((resolve) => setTimeout(resolve, 0));
 		}
 		doc.cleanup();
+		await task.destroy();
 		return parts
 			.map((part, index) => (index === 0 ? part : `——— 第 ${index + 1} 页 ———\n${part}`))
 			.join('\n\n')

@@ -159,7 +159,10 @@ export function loadPdfJs(onProgress?: LoadProgress): Promise<PdfJsModule> {
 		mod.GlobalWorkerOptions.workerSrc = `${VENDOR}pdfjs/pdf.worker.min.mjs`;
 		return mod;
 	})();
-	return pdfJsTask;
+	return pdfJsTask.catch((error) => {
+		pdfJsTask = null;
+		throw error;
+	});
 }
 /**
  * 准备「可内嵌中文字体」的环境：确保 pdf-lib 与 fontkit 都已加载。

@@ -313,8 +313,8 @@ import Page from '../../layouts/Page.astro';
 
 	function params(c: ChEls): SourceParams {
 		return {
-			fn1: c.fn.value,
-			fn2: 'return 0',
+			fn1: c1.fn.value,
+			fn2: c2.fn.value,
 			freq: Number(c.freq.value) || 440,
 			shape: c.shape.value as WaveShape,
 		};

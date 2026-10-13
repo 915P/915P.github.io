@@ -273,9 +273,11 @@ export async function applyPageEdits(bytes: Uint8Array, options: PageEditOptions
 		}
 	}
 	for (let i = 0; i < order.length; i++) {
-		const angle = rotation[order[i]];
-		if (!angle) continue;
-		out.getPage(i).setRotation(degrees(angle));
+		const userAngle = rotation[order[i]];
+		if (!userAngle) continue;
+		const page = out.getPage(i);
+		const originalAngle = page.getRotation().angle;
+		page.setRotation(degrees((originalAngle + userAngle) % 360));
 	}
 	report(options.updateProgress, total, total, '写出结果…');
 	return out.save();

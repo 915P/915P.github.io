@@ -100,8 +100,9 @@ export function createMath(
 	const ch = buf.getChannelData(0);
 	for (let i = 0; i < len; i++) {
 		const x = i / len;
+		const t = i / ctx.sampleRate;
 		// 两路相加，各占一半增益，避免叠加后削顶
-		ch[i] = (f1(x, 0) + f2(x, 0)) * 0.5;
+		ch[i] = (f1(x, t) + f2(x, t)) * 0.5;
 	}
 
 	const src = ctx.createBufferSource();
@@ -130,7 +131,6 @@ export async function createLocal(ctx: AudioContext, file: File): Promise<Source
 	const src = ctx.createBufferSource();
 	src.buffer = buf;
 	src.loop = true;
-	src.connect(ctx.destination);
 	src.start();
 	return {
 		node: src,
@@ -148,6 +148,9 @@ export async function createLocal(ctx: AudioContext, file: File): Promise<Source
 
 /** 麦克风源 */
 export async function createMic(ctx: AudioContext): Promise<Source> {
+	if (!navigator.mediaDevices) {
+		throw new Error('当前环境不支持麦克风访问（需要 HTTPS 或 localhost）');
+	}
 	const stream = await navigator.mediaDevices.getUserMedia({
 		audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
 	});

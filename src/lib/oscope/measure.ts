@@ -12,8 +12,16 @@ import type { Measurements } from './types';
 /** 过零检测：找出所有相邻上升沿的间距 */
 function risingEdges(s: Float32Array): number[] {
 	const edges: number[] = [];
+	// 滞后阈值：避免噪声在零附近反复穿越产生虚假过零点
+	const hysteresis = 0.02;
+	let wasBelow = s[0] < -hysteresis;
 	for (let i = 1; i < s.length; i++) {
-		if (s[i - 1] < 0 && s[i] >= 0) edges.push(i);
+		if (wasBelow && s[i] >= hysteresis) {
+			edges.push(i);
+			wasBelow = false;
+		} else if (s[i] < -hysteresis) {
+			wasBelow = true;
+		}
 	}
 	return edges;
 }
@@ -32,6 +40,9 @@ function median(values: number[]): number {
  * @param sampleRate AudioContext 采样率（Hz）
  */
 export function measure(samples: Float32Array, sampleRate: number): Measurements {
+	if (samples.length === 0) {
+		return { frequency: null, pp: 0, rms: 0, offset: 0, period: null, duty: null };
+	}
 	let min = Infinity;
 	let max = -Infinity;
 	let sum = 0;
