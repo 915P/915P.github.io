@@ -158,7 +158,12 @@ export function loadPdfJs(onProgress?: LoadProgress): Promise<PdfJsModule> {
 		const mod = await loadModule<PdfJsModule>('pdfJs', onProgress);
 		mod.GlobalWorkerOptions.workerSrc = `${VENDOR}pdfjs/pdf.worker.min.mjs`;
 		return mod;
-	})();
+	})().catch((error) => {
+		// 加载失败（多半是网络中断）必须清掉缓存，否则后续调用永远拿到同一个
+		// 已 reject 的 promise，刷新页面前再无重试机会。
+		pdfJsTask = null;
+		throw error;
+	});
 	return pdfJsTask;
 }
 /**
