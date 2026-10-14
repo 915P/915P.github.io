@@ -479,11 +479,11 @@ export function planSplit(input: string, atSeconds: number): { steps: MediaPlan[
 	return {
 		steps: [
 			{
-				args: ['-t', String(atSeconds), '-i', quote(input), '-c', 'copy', '-y', quote(head)],
+				args: ['-t', String(atSeconds), '-i', quote(input), '-c', 'copy', '-avoid_negative_ts', 'make_zero', '-y', quote(head)],
 				output: head,
 			},
 			{
-				args: ['-ss', String(atSeconds), '-i', quote(input), '-c', 'copy', '-y', quote(tail)],
+				args: ['-ss', String(atSeconds), '-i', quote(input), '-c', 'copy', '-avoid_negative_ts', 'make_zero', '-y', quote(tail)],
 				output: tail,
 			},
 		],
@@ -509,10 +509,11 @@ export function planSubtitle(
 	if (!options.subtitleFile) throw new Error('请先选择要封装的字幕文件');
 	const ext = extOf(input) || 'mp4';
 	const output = `${stem(input)}-带字幕.${ext}`;
-	const args = ['-i', quote(input), '-i', quote(options.subtitleFile), '-map', '0', '-map', '1'];
-	// mov_text 只认 SRT/ASS，VTT 需先转码成 SRT
+	const args = ['-i', quote(input), '-i', quote(options.subtitleFile), '-map', '0', '-map', '1', '-c', 'copy'];
+	// mov_text 只认 SRT/ASS，VTT 需先转码成 SRT。
+	// -c:s 必须写在 -c copy 之后：ffmpeg 取最后一次赋值，反序会被 copy 覆盖掉。
 	if (extOf(options.subtitleFile) === 'vtt') args.push('-c:s', 'srt');
-	args.push('-c', 'copy', '-y', quote(output));
+	args.push('-y', quote(output));
 	return { args, output };
 }
 
