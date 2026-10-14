@@ -566,6 +566,30 @@ ffmpeg.wasm 的 `exec()` 只在 worker 本身死掉时才 reject；ffmpeg 自己
   - 它是整页的第三方应用；与本站自研工具「完全本地运行」的定位不同（它确实只在
     访客浏览器里执行，但毕竟是第三方代码）
 
+## 18. TikZ 编辑器（TikZ 图形编辑器）—— 第三方，MIT
+
+- **位置**：`public/apps/tikz-editor/`（本站自托管的构建产物）
+- **入口**：`/apps/tikz-editor/index.html`（单页应用，工具列表中状态为 `app`；
+  不是 Astro 页面）
+- **上游**：<https://github.com/DominikPeters/tikz-editor> ·
+  <https://tikz.dev/editor>
+- **版本**：0.6.0（commit `9ce06770a3bcbade71a7eb27f4e14e8423d02ebb`）
+- **许可**：**MIT**，Copyright (c) 2026 Dominik Peters。全文原样保留在
+  `public/apps/tikz-editor/LICENSE`
+- **署名**：上游版权与许可声明随副本一同分发（`LICENSE` 文件与应用内
+  「帮助 → 关于」对话框）；工具列表中标注为第三方
+- **核实来源**：上游仓库的 `LICENSE`（MIT）及其发布信息
+- **本站改动**：由上游源码重新构建并汉化 —— 汉化（932 处 / 78 个文件）、
+  资源基路径（`/editor/web/` → `/apps/tikz-editor/`）、`lang` 与标题（`zh-CN`）；
+  未改动任何功能逻辑。完整清单见 `public/apps/tikz-editor/NOTICE.md`
+- **说明**：
+  - 属第三方应用（MIT），**绝不按本站 MIT 重新许可**。MIT 为宽松许可：
+    无著佐权、无商用限制
+  - 体量：约 59 MB、101 个文件。绝大部分是一个 16.5 MB 的 Computer Modern
+    字体度量数据文件，上游构建把它打进了三份产物（主包与两个 worker）
+  - Codex 助手仅桌面版可用，TikZJax / arXiv 相关功能需外网；绘图、编辑核心
+    完全在浏览器本地完成
+
 
 
 以下内容为本站原创，采用根目录 [LICENSE](LICENSE) 中的 MIT 许可：
