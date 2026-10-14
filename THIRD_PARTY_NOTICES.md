@@ -677,6 +677,34 @@ forever.
     site's "runs entirely locally" claim in the same way the first-party tools are
     (it executes only in the visitor's browser, but it is third-party code)
 
+## 18. TikZ Editor (TikZ graphics editor) — third-party, MIT
+
+- **Location**: `public/apps/tikz-editor/` (self-hosted build output)
+- **Entry point**: `/apps/tikz-editor/index.html` (single-page app, linked from the
+  tool index with status `app`; not an Astro page)
+- **Upstream**: <https://github.com/DominikPeters/tikz-editor> ·
+  <https://tikz.dev/editor>
+- **Version**: 0.6.0 (commit `9ce06770a3bcbade71a7eb27f4e14e8423d02ebb`)
+- **License**: **MIT**, Copyright (c) 2026 Dominik Peters. Full text kept verbatim
+  at `public/apps/tikz-editor/LICENSE`
+- **Attribution**: the upstream copyright and permission notice ship with the copy
+  (`LICENSE`, and the in-app "Help → About" dialog); the tool index labels the
+  entry as third-party
+- **Verified from**: the upstream repository's `LICENSE` (MIT) and its release
+  metadata
+- **Site modifications**: rebuilt from upstream source and localized — the Chinese
+  translation (932 strings across 78 files), the asset base path
+  (`/editor/web/` → `/apps/tikz-editor/`) and `lang`/title (`zh-CN`). No functional
+  logic was changed. Recorded in full in `public/apps/tikz-editor/NOTICE.md`
+- **Notes**:
+  - A third-party application (MIT), **never relicensed under this site's MIT
+    license**. MIT is permissive: no copyleft and no non-commercial restriction
+  - Footprint: ~59 MB, 101 files. Most of it is a 16.5 MB Computer Modern font
+    metrics data file that the upstream build emits into three chunks (the main
+    bundle and two workers)
+  - The Codex assistant is desktop-only, and the TikZJax / arXiv features need the
+    public internet; the drawing/editing core runs entirely in the browser
+
 
 
 The following is original to this site and is covered by the MIT license in the
