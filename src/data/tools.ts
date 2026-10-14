@@ -132,6 +132,15 @@ export const builtinTools: Tool[] = [
 		href: '/tools/latex/',
 	},
 	{
+		slug: 'tikz',
+		name: 'TikZ 图形编辑器',
+		desc: '所见即所得地画 TikZ 图形，画布与源码双向同步（第三方，MIT，已汉化）',
+		icon: 'architecture',
+		category: '开发',
+		status: 'app',
+		href: '/apps/tikz-editor/index.html',
+	},
+	{
 		slug: 'pdf',
 		name: 'PDF 工具箱',
 		desc: '合并、拆分、页面管理与图片转 PDF，全部本地完成',

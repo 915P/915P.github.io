@@ -33,6 +33,7 @@ import '@mdui/icons/font-download.js';
 import '@mdui/icons/code.js';
 import '@mdui/icons/functions.js';
 import '@mdui/icons/account-tree.js';
+import '@mdui/icons/architecture.js';
 import '@mdui/icons/water-drop.js';
 
 // 导航
