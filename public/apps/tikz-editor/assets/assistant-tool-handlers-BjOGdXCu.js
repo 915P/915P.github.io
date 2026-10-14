@@ -1,4 +1,4 @@
-import{P as c}from"./__vite-browser-external--Ne8FRAu.js";import"./index-BiSHb62H.js";function _(i,n){var r,a;const o=((r=n.parseResult)==null?void 0:r.diagnostics)??[],e=((a=n.semanticResult)==null?void 0:a.diagnostics)??[],s=[...o,...e];if(s.length===0)return null;const l=i.split(`
+import{P as c}from"./__vite-browser-external-DHfjLkpJ.js";import"./index-t6WL6sWU.js";function _(i,n){var r,a;const o=((r=n.parseResult)==null?void 0:r.diagnostics)??[],e=((a=n.semanticResult)==null?void 0:a.diagnostics)??[],s=[...o,...e];if(s.length===0)return null;const l=i.split(`
 `),t=u=>{let d=1;for(let f=0;f<u&&f<i.length;f++)i[f]===`
 `&&d++;return d};return s.map(u=>{const d=t(u.span.from),f=u.code?` [${u.code}]`:"",m=l[d-1],p=m?` | ${m.trimStart()}`:"";return`${u.severity} (line ${d})${f}: ${u.message}${p}`}).join(`
 `)}function b(i,n){const o=n.figures;if(o.length<=1)return null;const e=n.activeRootId,s=o.findIndex(d=>d.id===e);if(s<0)return null;const l=o[s],t=i.slice(l.span.from,l.span.to),r=i.slice(0,l.span.from).split(`

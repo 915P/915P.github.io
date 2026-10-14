@@ -1,12 +1,16 @@
 # TikZ Editor — 许可与改动说明
 
 本目录是 **TikZ Editor** 网页版的自托管构建产物，由本站重新编译并汉化后分发。
+软件的功能介绍见同目录的 [`README.md`](README.md)。
 
 - 上游仓库：<https://github.com/DominikPeters/tikz-editor>
 - 上游版本：`0.6.0`（master 分支，commit `9ce06770a3bcbade71a7eb27f4e14e8423d02ebb`，2026-10-07）
 - 在线原版：<https://tikz.dev/editor>
 - 许可证：**MIT**，全文见 [`LICENSE`](LICENSE)
-- 版权：Copyright (c) Dominik Peters
+- 版权：Copyright (c) 2026 Dominik Peters
+
+按 MIT 的要求，上述版权声明与许可全文随本副本一同分发，未作任何删改。
+应用内的「帮助 → 关于」对话框同样保留了作者、许可证与上游网址的署名。
 
 TikZ Editor 是一个所见即所得的 TikZ 编辑器：它自带 TeX/TikZ 解析器与渲染器，
 在浏览器里把 TikZ 源码画成图形，画布上的拖拽编辑也会反向写回源码，
@@ -17,11 +21,13 @@ TikZ Editor 是一个所见即所得的 TikZ 编辑器：它自带 TeX/TikZ 解�
 产物由上游源码重新构建，构建前对源码做了以下修改：
 
 1. **界面汉化**。上游没有任何 i18n 机制，所有文案都是硬编码的英文字面量，
-   因此汉化是直接改源码，共替换 881 处：
+   因此汉化是直接改源码。改完后源码里含中文的文案共 **932 处，分布在 78 个文件**
+   （字符串字面量 791、JSX 文本节点 128、模板串 13）：
    - 菜单栏（`app-menu/default-menu.ts`）、画布右键菜单（`context-menu/canvas-context-menu.ts`）
    - 工具栏与工具提示、检查器 / 样式 / 对象 / 图形 / 叠加层 / 源码等面板
-   - 设置、各类导出对话框、示例目录的名称与说明
-   - 撤销历史标签、状态栏、错误提示与失败原因
+     （面板标签在 `DockLayout.tsx` 的 flexlayout `name:` 字段里）
+   - 设置、各类导出对话框、示例目录的名称与说明、关于对话框
+   - 撤销历史标签（`store/reducer.ts`）、状态栏、错误提示与失败原因
    - 开发者面板与能力清单
 
    **刻意保留英文**的部分：
@@ -54,11 +60,16 @@ TikZ Editor 是一个所见即所得的 TikZ 编辑器：它自带 TeX/TikZ 解�
 # ——示例预览的生成物 packages/app/src/ui/examples/generated-open-example-previews.ts
 #   上游已经提交在仓库里，无需重新生成（那一步要用 Playwright 截图）。
 npm install
-cd apps/web && npx vite build     # 产物在 apps/web/dist
+cd apps/web && npm run build     # 产物在 apps/web/dist
 ```
 
 `vite.config.ts` 用 alias 把 `@tikz-editor/*` 直接指向各包的 `src`，
 所以不需要先对每个包跑 `tsc`。
+
+⚠️ **必须经 `npm run build` 而不是直接 `npx vite build`**：配置里
+`import.meta.env.TIKZ_EDITOR_VERSION` 取的是 `process.env.npm_package_version`，
+只有 npm 会从 `package.json` 注入它。绕过 npm 直接调 vite 会让「关于」对话框
+里的版本号退回默认的 `0.1.0`（实际应为 `0.6.0`）。
 
 ## 体积
 
@@ -82,6 +93,7 @@ cd apps/web && npx vite build     # 产物在 apps/web/dist
 index.html          应用入口（lang=zh-CN，标题已汉化）
 assets/             Vite 构建产物（JS / CSS / worker）
 docs/               上游随包的 TikZ 键位文档 JSON（供编辑器内查询）
-LICENSE             上游 MIT 许可证全文
+README.md           本站撰写的中文功能介绍（上游 README 的改写，未热链其截图）
+LICENSE             上游 MIT 许可证全文，未作删改
 NOTICE.md           本文件
 ```

@@ -709,6 +709,15 @@ export const navLinks: NavLink[] = [
 		group: 'toolbox',
 	},
 	{
+		id: 'tool-tikz',
+		title: 'TikZ 图形编辑器',
+		desc: '所见即所得地画 TikZ 图形，画布与源码双向同步',
+		url: '/apps/tikz-editor/index.html',
+		icon: '🔧',
+		materialIcon: 'architecture',
+		group: 'toolbox',
+	},
+	{
 		id: 'tool-editor',
 		title: 'HTML 编辑器',
 		desc: '边写边预览，渲染在沙箱 iframe 中',
