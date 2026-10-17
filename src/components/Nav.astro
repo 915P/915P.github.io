@@ -40,6 +40,19 @@ const current = links.find((l) => l.key === active);
 
 		<ThemeControl />
 
+		{/*
+			PWA 安装按钮。默认隐藏，由 lib/pwa-client 在可安装时（beforeinstallprompt）
+			或 iOS Safari（无该事件，点击后弹手动引导）时显示。
+		*/}
+		<mdui-button-icon
+			id="pwa-install"
+			aria-label="安装应用"
+			title="安装到本机"
+			style="display: none"
+		>
+			<mdui-icon-install-mobile></mdui-icon-install-mobile>
+		</mdui-button-icon>
+
 		<mdui-button-icon href="/rss.xml" aria-label="RSS 订阅" title="RSS 订阅">
 			<mdui-icon-rss-feed></mdui-icon-rss-feed>
 		</mdui-button-icon>
@@ -104,3 +117,23 @@ const current = links.find((l) => l.key === active);
 		</mdui-navigation-bar-item>
 	</mdui-navigation-bar>
 </mdui-layout>
+
+<script>
+	import { initPwa, onPwaState, promptInstall } from '../lib/pwa-client';
+
+	const button = document.getElementById('pwa-install');
+
+	if (button) {
+		void initPwa();
+
+		onPwaState((state) => {
+			// 桌面 Chrome/Edge 等靠 beforeinstallprompt；iOS Safari 没有该事件，只能手动引导
+			const visible = state.installAvailable || (state.ios && !state.standalone);
+			button.style.display = visible ? '' : 'none';
+		});
+
+		button.addEventListener('click', () => {
+			void promptInstall();
+		});
+	}
+</script>

@@ -218,6 +218,14 @@ import { guideTabs } from '../data/guide';
 			</p>
 		</div>
 
+		<div class="set-group">
+			<p class="set-group-title">版本</p>
+			<p class="set-note faint text-xs" id="setVersionNote">正在获取…</p>
+			<div class="set-row">
+				<mdui-button id="setVersionCheck" variant="text" size="small">检查更新</mdui-button>
+			</div>
+		</div>
+
 		<div class="set-group set-danger">
 			<mdui-button id="setReset" variant="text" size="small">恢复默认链接与外观</mdui-button>
 		</div>
@@ -819,6 +827,28 @@ import { guideTabs } from '../data/guide';
 	}
 
 		/*
+		 * 标签**不许折行、不许压缩**，窄屏下改成横向滚动。
+		 *
+		 * mdui-tabs 没有 scrollable 之类的属性，但它内部那个容器
+		 * （shadow DOM 里 part="container"）本来就是 overflow: auto，
+		 * 所以滚动能力是现成的。出问题的只是标签自己：mdui-tab 是
+		 * flex: 0 1 auto + white-space: normal，而中文的 min-content 只有
+		 * **一个字宽** —— 窄屏上于是被压成一列竖排的字（实测每个标签缩到 1 字宽）。
+		 * 把折行关掉、再禁止收缩，容器就装不下，横向滚动自然出现。
+		 */
+	.guide-tabs mdui-tab {
+		flex: 0 0 auto;
+		white-space: nowrap;
+	}
+
+	.guide-tabs::part(container) {
+		scrollbar-width: thin;
+		scrollbar-color: rgb(var(--mdui-color-outline-variant)) transparent;
+		/* 滚到头时别把整个页面一起带着弹 */
+		overscroll-behavior-x: contain;
+	}
+
+		/*
 		 * 8 列上限、整体居中 —— 和 Firefox 一致。磁贴尺寸用固定值而不是
 		 * minmax()，否则宽屏上会被拉得参差不齐。
 		 */
@@ -1283,6 +1313,13 @@ import { guideTabs } from '../data/guide';
 			MAX_TAB_LABEL,
 		} from '../data/guide';
 		import { siteIconMasks } from '../data/site-icons';
+		import {
+			formatVersionTime,
+			getPwaState,
+			initPwa,
+			manualUpdate,
+			onPwaState,
+		} from '../lib/pwa-client';
 
 		const $ = <T extends HTMLElement = HTMLElement>(id: string): T => {
 			const el = document.getElementById(id);
@@ -2124,6 +2161,61 @@ import { guideTabs } from '../data/guide';
 		});
 
 		/*
+		 * 版本 / 更新。
+		 *
+		 * 复用 lib/pwa-client（与页脚同一套逻辑）：/guide/ 走的是 Base 布局，
+		 * Service Worker 在这里同样会注册，所以「本机版本」问得到 ——
+		 * 起始页本身不进预缓存清单（未公开），离线时自然拿不到最新版本。
+		 */
+		const versionNote = $('setVersionNote');
+		const versionCheck = $('setVersionCheck') as HTMLElement & { disabled: boolean };
+		let versionState = getPwaState();
+		let versionBusy = false;
+
+		const renderVersion = (): void => {
+			const latest = versionState.latest
+				? formatVersionTime(versionState.latest.time)
+				: null;
+			const installed = versionState.installed
+				? formatVersionTime(versionState.installed.time)
+				: null;
+
+			if (!versionState.supported) {
+				versionNote.textContent = '本机浏览器不支持离线缓存。';
+			} else if (!latest && !installed) {
+				versionNote.textContent = '还没拿到版本信息（离线或首次访问）。';
+			} else {
+				versionNote.textContent = `最新 ${latest ?? '—'} · 本机 ${installed ?? '未缓存'}`;
+			}
+			versionNote.title = versionState.latest ? `最新构建 ${versionState.latest.id}` : '';
+
+			if (!versionBusy) {
+				versionCheck.textContent = versionState.updateReady ? '立即更新' : '检查更新';
+			}
+			versionCheck.disabled = versionBusy || !versionState.supported;
+		};
+
+		void initPwa();
+		onPwaState((state) => {
+			versionState = state;
+			renderVersion();
+		});
+
+		versionCheck.addEventListener('click', async () => {
+			if (versionBusy) return;
+
+			versionBusy = true;
+			versionCheck.disabled = true;
+			versionCheck.textContent = '检查中…';
+
+			// 有等待中的新版本会直接切换并刷新，否则查一次并弹结果提示
+			await manualUpdate();
+
+			versionBusy = false;
+			renderVersion();
+		});
+
+		/*
 		 * 「默认在校园网环境下」。
 		 *
 		 * 用 change 而不是 click：mdui-switch 的状态由键盘（空格）也能切，
@@ -2873,6 +2965,14 @@ import { guideTabs } from '../data/guide';
 			}
 			tabsEl.addEventListener('change', () => {
 				activeTab = tabsEl.value;
+				/*
+				 * 窄屏下标签栏是横向滚动的（见 .guide-tabs mdui-tab 那段注释），
+				 * 切到被滚出视野的标签时把它带进来。block: 'nearest' 保证
+				 * 标签本来就在视野里时页面不会被纵向带着跳。
+				 */
+				tabsEl
+					.querySelector<HTMLElement>(`mdui-tab[value="${CSS.escape(activeTab)}"]`)
+					?.scrollIntoView({ inline: 'nearest', block: 'nearest' });
 			});
 
 			renderTileGroupOptions();

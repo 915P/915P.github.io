@@ -7,7 +7,7 @@
   },
   "scripts": {
     "dev": "astro dev",
-    "build": "astro build",
+    "build": "astro build && node scripts/build-sw.mjs",
     "preview": "astro preview",
     "check": "astro check",
     "astro": "astro",
@@ -15,7 +15,8 @@
     "test:pdf": "node scripts/pdf-test.mjs",
     "test:media": "node scripts/media-test.mjs",
     "test:guide": "node scripts/guide-test.mjs",
-    "icons:sites": "node scripts/fetch-site-icons.mjs"
+    "icons:sites": "node scripts/fetch-site-icons.mjs",
+    "icons:pwa": "node scripts/gen-pwa-icons.mjs"
   },
   "dependencies": {
     "@astrojs/mdx": "^8.0.2",

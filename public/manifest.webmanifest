@@ -1,0 +1,38 @@
+{
+	"id": "/",
+	"name": "915P的小站",
+	"short_name": "915P",
+	"description": "915P的小站 — 博客、小工具与折腾记录",
+	"lang": "zh-CN",
+	"start_url": "/",
+	"scope": "/",
+	"display": "standalone",
+	"orientation": "any",
+	"background_color": "#fef7ff",
+	"theme_color": "#fef7ff",
+	"categories": ["utilities", "productivity"],
+	"icons": [
+		{
+			"src": "/icons/pwa/icon-192.png",
+			"sizes": "192x192",
+			"type": "image/png",
+			"purpose": "any"
+		},
+		{
+			"src": "/icons/pwa/icon-512.png",
+			"sizes": "512x512",
+			"type": "image/png",
+			"purpose": "any"
+		},
+		{
+			"src": "/icons/pwa/icon-512-maskable.png",
+			"sizes": "512x512",
+			"type": "image/png",
+			"purpose": "maskable"
+		}
+	],
+	"shortcuts": [
+		{ "name": "工具", "short_name": "工具", "url": "/tools/" },
+		{ "name": "博客", "short_name": "博客", "url": "/blog/" }
+	]
+}

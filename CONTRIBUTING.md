@@ -61,7 +61,7 @@ npm run preview # 预览 dist/ / preview the built output
 
 ```bash
 npm run check       # astro check，必须 0 error / must be 0 errors
-npm run build       # astro build，必须成功 / must succeed
+npm run build       # astro build + 生成 PWA 的 sw.js / version.json，必须成功 / must succeed
 npm run test:eval
 npm run test:pdf
 npm run test:media

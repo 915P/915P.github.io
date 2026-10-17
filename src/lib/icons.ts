@@ -41,6 +41,7 @@ import '@mdui/icons/home.js';
 import '@mdui/icons/article.js';
 import '@mdui/icons/apps.js';
 import '@mdui/icons/rss-feed.js';
+import '@mdui/icons/install-mobile.js';
 
 // 外观设置
 import '@mdui/icons/color-lens.js';

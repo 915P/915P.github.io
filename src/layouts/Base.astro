@@ -82,6 +82,19 @@ const siteName = SITE_NAME;
 		/>
 
 		{/*
+			PWA：可安装到桌面/主屏幕，并由 Service Worker 做离线缓存。
+			manifest 与图标是静态文件；sw.js 由 scripts/build-sw.mjs 在构建后生成，
+			所以开发环境没有它（pwa-client 在 DEV 下不注册）。
+			图标改动后跑 npm run icons:pwa 重新生成。
+		*/}
+		<link rel="manifest" href="/manifest.webmanifest" />
+		<link rel="apple-touch-icon" sizes="180x180" href="/icons/pwa/apple-touch-icon.png" />
+		<meta name="apple-mobile-web-app-capable" content="yes" />
+		<meta name="mobile-web-app-capable" content="yes" />
+		<meta name="apple-mobile-web-app-status-bar-style" content="default" />
+		<meta name="apple-mobile-web-app-title" content="915P" />
+
+		{/*
 			mdui 的组件样式由组件 JS 经 lit 注入 shadow DOM，
 			仅引入 mdui.css 拿不到任何组件样式，必须同时加载全局 JS 构建。
 			用 is:inline 避免被 Astro 打包器处理。
@@ -163,6 +176,17 @@ const siteName = SITE_NAME;
 	</head>
 	<body>
 		<slot />
+
+		{/*
+			Service Worker 注册。全部逻辑在 lib/pwa-client.ts —— 页脚（版本与更新）
+			和顶栏（安装按钮）各自 import 同一模块读取状态，模块只会被打包一份。
+		*/}
+		<script>
+			import { initPwa } from '../lib/pwa-client';
+
+			void initPwa();
+		</script>
+
 		<slot name="scripts" />
 	</body>
 </html>

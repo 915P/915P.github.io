@@ -29,6 +29,18 @@ const days = Math.floor((Date.now() - new Date('2019-08-22').getTime()) / 86_400
 			<a href="/sitemap-index.xml" class="footer-link">网站地图</a>
 			<a href="/rss.xml" class="footer-link">RSS</a>
 			<span class="faint">建站 {days.toLocaleString('zh-CN')} 天</span>
+
+			{/*
+				PWA 版本信息（时间戳即版本号）。内容由 lib/pwa-client 填充：
+				「版本」取自 /version.json（服务器上的最新构建），
+				「本机」取自当前控制页面的 Service Worker（已缓存/已安装的那份）。
+				拿不到最新版本时（开发环境没有 version.json、或离线首访）整块不显示。
+			*/}
+			<span class="pwa-version" data-pwa-version>
+				<span class="faint" title="服务器上的最新构建">版本 <b data-pwa-latest>—</b></span>
+				<span class="faint" title="本机已缓存的版本">本机 <b data-pwa-installed>—</b></span>
+				<button type="button" class="pwa-update" data-pwa-action>检查更新</button>
+			</span>
 		</div>
 	</div>
 
@@ -79,6 +91,42 @@ const days = Math.floor((Date.now() - new Date('2019-08-22').getTime()) / 86_400
 		text-decoration: underline;
 	}
 
+	/* PWA 版本信息：默认隐藏，拿到版本数据后由脚本加 data-ready 显示 */
+	.pwa-version {
+		display: none;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 0.35rem 0.75rem;
+	}
+
+	.pwa-version[data-ready] {
+		display: inline-flex;
+	}
+
+	.pwa-version b {
+		font-weight: 600;
+		/* 数字等宽，版本号变化时不会左右跳动 */
+		font-variant-numeric: tabular-nums;
+	}
+
+	.pwa-update {
+		font: inherit;
+		color: rgb(var(--mdui-color-primary));
+		background: none;
+		border: 0;
+		padding: 0;
+		cursor: pointer;
+	}
+
+	.pwa-update:hover:not(:disabled) {
+		text-decoration: underline;
+	}
+
+	.pwa-update:disabled {
+		color: rgb(var(--mdui-color-outline));
+		cursor: default;
+	}
+
 
 	.disclaimer {
 		margin: 1rem 0 0;
@@ -87,3 +135,65 @@ const days = Math.floor((Date.now() - new Date('2019-08-22').getTime()) / 86_400
 		color: rgb(var(--mdui-color-outline));
 	}
 </style>
+
+<script>
+	import {
+		formatVersionTime,
+		getPwaState,
+		initPwa,
+		manualUpdate,
+		onPwaState,
+	} from '../lib/pwa-client';
+
+	const root = document.querySelector<HTMLElement>('[data-pwa-version]');
+	const latestEl = root?.querySelector<HTMLElement>('[data-pwa-latest]');
+	const installedEl = root?.querySelector<HTMLElement>('[data-pwa-installed]');
+	const action = root?.querySelector<HTMLButtonElement>('[data-pwa-action]');
+
+	if (root && latestEl && installedEl && action) {
+		let current = getPwaState();
+		let busy = false;
+
+		const render = () => {
+			root.toggleAttribute('data-ready', Boolean(current.latest));
+
+			latestEl.textContent = current.latest ? formatVersionTime(current.latest.time) : '—';
+			latestEl.title = current.latest ? `构建 ${current.latest.id}` : '';
+
+			if (current.installed) {
+				installedEl.textContent = formatVersionTime(current.installed.time);
+				installedEl.title = `构建 ${current.installed.id}`;
+			} else {
+				installedEl.textContent = current.supported ? '未缓存' : '不支持';
+				installedEl.title = current.supported ? '本机还没有缓存任何版本' : '浏览器不支持离线缓存';
+			}
+
+			if (!busy) {
+				action.textContent = current.updateReady ? '立即更新' : '检查更新';
+			}
+			action.disabled = busy || !current.supported;
+		};
+
+		void initPwa();
+
+		onPwaState((state) => {
+			current = state;
+			render();
+		});
+
+		action.addEventListener('click', async () => {
+			if (busy) return;
+
+			busy = true;
+			action.disabled = true;
+			action.textContent = '检查中…';
+
+			// 有等待中的新版本会直接切换并刷新，否则查一次并弹结果提示
+			await manualUpdate();
+
+			busy = false;
+			render();
+		});
+	}
+</script>
+
