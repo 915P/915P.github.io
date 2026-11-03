@@ -77,4 +77,4 @@ docker stop mineru-webui         # 用完停掉
 
 API 在 8000 端口，任何程序按 V1 Tasks 契约就能调：POST 提交文件清单，PUT 上传原始字节，GET 轮询状态，`result_url` 下载产物 ZIP，里面 Markdown、DOCX、HTML、LaTeX 按所选格式平铺。
 
-中途还包过一个 PySide6 桌面端，打成了 67MB 的 AppImage，能跑，但交互打磨不理想，先搁置了。容器加 WebUI 这条路对日常用量够用，脚本放在 `mineru-engine/` 下，容器丢了可以一键重建。
+中途还包过一个 PySide6 桌面端，打成了 67MB 的 AppImage，能跑，但交互打磨不理想，先搁置了。容器加 WebUI 这条路对日常用量够用，部署脚本开源在 [915P/mineru-docker-onnx](https://github.com/915P/mineru-docker-onnx)，容器丢了可以 clone 下来一键重建。
