@@ -73,7 +73,7 @@ docker start mineru-webui        # 启动，10~20 秒就绪
 docker stop mineru-webui         # 用完停掉
 ```
 
-容器挂了 `--restart unless-stopped`，开机自动恢复，多数时候直接开浏览器就行。模型约 1.9GB（OCR 小模型加 1.2B VLM），放在宿主机目录挂载进容器，重建容器不丢。
+容器挂了 `--restart unless-stopped`，开机自动恢复，多数时候直接开浏览器就行。模型约 1.9GB（OCR 小模型加 1.2B VLM）直接烤进镜像，镜像共约 5.8GB，重建容器和分发镜像都不用再下模型。烤入方式做了两版：先是从 ModelScope 下载（2.5MB/s，跑完要十几分钟），后来改成 `--build-context` 从本地模型目录 COPY，1.9GB 只花了 16 秒，Dockerfile 里两种模式都留着（`MODELS=local` / `MODELS=download`），谁用谁选。
 
 API 在 8000 端口，任何程序按 V1 Tasks 契约就能调：POST 提交文件清单，PUT 上传原始字节，GET 轮询状态，`result_url` 下载产物 ZIP，里面 Markdown、DOCX、HTML、LaTeX 按所选格式平铺。
 
