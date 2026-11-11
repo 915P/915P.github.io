@@ -92,6 +92,23 @@ const fmt = (d: Date) =>
 			<a href="/rss.xml" class="more-link">RSS 订阅</a>
 		</div>
 	</section>
+
+	{/*
+		彩蛋「开发者模式」：连点头像 5 次触发（见下方 script）。
+		表格展示 /cdn-cgi/trace 的全部字段 —— 那是 Cloudflare 在边缘生成的
+		同源调试端点，返回 key=value 逐行文本；再补一节本机状态，
+		这样本地开发/断网时彩蛋照样有内容，而不是弹个空框。
+		数据只在本机解析渲染，不外发。
+	*/}
+	<mdui-dialog id="traceDialog" class="trace-dialog" close-on-esc close-on-overlay-click>
+		<div slot="headline">开发者模式 · 边缘追踪</div>
+		<div slot="description" id="traceDesc">数据取自 /cdn-cgi/trace</div>
+		<div class="trace-wrap" id="traceWrap"></div>
+		<div slot="action">
+			<mdui-button variant="tonal" id="traceClearSW">清除 SW 与缓存</mdui-button>
+			<mdui-button variant="filled" id="traceClose">关闭</mdui-button>
+		</div>
+	</mdui-dialog>
 </Page>
 
 <style is:global>
@@ -178,4 +195,209 @@ const fmt = (d: Date) =>
 	.about-list li + li {
 		margin-top: 0.35rem;
 	}
+
+	/* 彩蛋弹窗：内容偏数据表，窄一点、可滚动 */
+	.trace-dialog {
+		width: min(92vw, 30rem);
+	}
+
+	.trace-wrap {
+		max-height: 55vh;
+		overflow: auto;
+		padding-right: 0.25rem;
+	}
+
+	.trace-table {
+		width: 100%;
+		border-collapse: collapse;
+		font-size: var(--mdui-typescale-body-small-size);
+	}
+
+	.trace-table th,
+	.trace-table td {
+		padding: 0.4rem 0.2rem;
+		text-align: left;
+		vertical-align: top;
+		border-bottom: 1px solid rgb(var(--mdui-color-outline-variant));
+	}
+
+	.trace-table tr:last-child th,
+	.trace-table tr:last-child td {
+		border-bottom: 0;
+	}
+
+	/* 左列字段名弱化，右列值等宽并允许折行（UA 那种长串） */
+	.trace-table th {
+		width: 7.5rem;
+		font-weight: 500;
+		color: rgb(var(--mdui-color-on-surface-variant));
+	}
+
+	.trace-table td {
+		font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+		word-break: break-all;
+		color: rgb(var(--mdui-color-on-surface));
+	}
 </style>
+
+<script>
+	/*
+	 * 彩蛋：连点头像 5 次进入「开发者模式」。
+	 * 1.2 秒内没继续点就重新计数 —— 防止把平时的正常点击攒成一次误触发。
+	 * trace 拿不到（本地开发 404、没走 CDN、断网）时如实说明，
+	 * 表格仍然给出本机状态那一节，所以彩蛋在任何环境下都打得开。
+	 */
+	const avatar = document.querySelector<HTMLElement>('.hero-avatar');
+	const dialog = document.getElementById('traceDialog') as
+		| (HTMLElement & { open: boolean })
+		| null;
+	const wrap = document.getElementById('traceWrap');
+	const desc = document.getElementById('traceDesc');
+	const closeBtn = document.getElementById('traceClose');
+
+	/* trace 里各字段的中文名；没列到的键原样显示 */
+	const FIELD_NAMES: Record<string, string> = {
+		fl: 'Ray ID',
+		h: '主机名',
+		ip: '访问 IP',
+		ts: '时间戳',
+		visit_scheme: '访问协议',
+		uag: 'User-Agent',
+		colo: '边缘节点',
+		sliver: '骨干分流',
+		http: 'HTTP 版本',
+		loc: '地理位置',
+		tls: 'TLS 版本',
+		sni: 'SNI',
+		warp: 'WARP',
+		gateway: '网关',
+		rbi: '限速隔离',
+		kex: '密钥交换',
+	};
+
+	const parseTrace = (text: string): [string, string][] =>
+		text
+			.split('\n')
+			.map((line) => line.trim())
+			.filter(Boolean)
+			.map((line) => {
+				const i = line.indexOf('=');
+				return (i > 0 ? [line.slice(0, i), line.slice(i + 1)] : [line, '']) as [
+					string,
+					string,
+				];
+			});
+
+	const row = (label: string, value: string) =>
+		`<tr><th scope="row">${label}</th><td>${value}</td></tr>`;
+
+	let clicks = 0;
+	let resetTimer: ReturnType<typeof setTimeout> | undefined;
+
+	avatar?.addEventListener('click', () => {
+		clicks += 1;
+		if (resetTimer) clearTimeout(resetTimer);
+		resetTimer = setTimeout(() => {
+			clicks = 0;
+		}, 1200);
+
+		if (clicks < 5) return;
+		clicks = 0;
+		void openDevMode();
+	});
+
+	async function openDevMode() {
+		if (!wrap || !dialog) return;
+
+		const rows: string[] = [];
+		let note = '数据取自同源端点 /cdn-cgi/trace（由 Cloudflare 在边缘生成）。';
+
+		try {
+			const res = await fetch('/cdn-cgi/trace', { cache: 'no-store' });
+			const text = res.ok ? await res.text() : '';
+			if (text) {
+				for (const [key, value] of parseTrace(text)) {
+					rows.push(row(FIELD_NAMES[key] ?? key, value));
+				}
+			} else {
+				note = `拿不到 /cdn-cgi/trace（HTTP ${res.status}），当前多半没在走 CDN。下面是本机状态：`;
+			}
+		} catch {
+			note = '拿不到 /cdn-cgi/trace（离线或被拦截）。下面是本机状态：';
+		}
+
+		const nav = performance.getEntriesByType('navigation')[0] as
+			| PerformanceNavigationTiming
+			| undefined;
+
+		rows.push(
+			row('在线状态', navigator.onLine ? '在线' : '离线'),
+			row('本机时间', new Date().toLocaleString('zh-CN')),
+			row('页面地址', location.href),
+			row('视口', `${window.innerWidth} × ${window.innerHeight}`),
+			row('像素比', String(window.devicePixelRatio)),
+			row('界面语言', navigator.language),
+			row('Service Worker', navigator.serviceWorker?.controller ? '已接管' : '未接管'),
+			row(
+				'DOM 就绪',
+				nav ? `${Math.round(nav.domContentLoadedEventEnd - nav.startTime)} ms` : '—',
+			),
+		);
+
+		if (desc) desc.textContent = note;
+		wrap.innerHTML = `<table class="trace-table"><tbody>${rows.join('')}</tbody></table>`;
+		dialog.open = true;
+	}
+
+	closeBtn?.addEventListener('click', () => {
+		if (dialog) dialog.open = false;
+	});
+
+	/*
+	 * 开发者模式里的运维按钮：注销 Service Worker + 清掉全部 Cache Storage。
+	 * 排障用 —— 本地部署后 SW 还攥着旧壳、或者怀疑缓存脏了时，一个按钮全清。
+	 * 两步都如实回报：unregister 只对"下次导航"生效（当场的 controller 不变），
+	 * 所以提示里写明要刷新；缓存逐个删并数出删了几个。
+	 */
+	const clearBtn = document.getElementById('traceClearSW') as
+		| (HTMLElement & { disabled: boolean })
+		| null;
+
+	clearBtn?.addEventListener('click', async () => {
+		if (!wrap || !dialog) return;
+
+		clearBtn.disabled = true;
+		try {
+			// 1) 注销注册（根作用域，影响整站）
+			const registration = await navigator.serviceWorker?.getRegistration?.();
+			const unregistered = registration ? await registration.unregister() : false;
+
+			// 2) 清 Cache Storage（模板里的 915p-* 缓存都在这里）
+			let cleared = 0;
+			if (typeof caches !== 'undefined') {
+				for (const name of await caches.keys()) {
+					if (await caches.delete(name)) cleared += 1;
+				}
+			}
+
+			if (desc) {
+				desc.textContent =
+					`已注销 Service Worker：${unregistered ? '成功' : '没有注册项'}` +
+					` · 已清除缓存 ${cleared} 个。` +
+					`SW 要到下次刷新才真正停止控制，建议刷新一次。`;
+			}
+
+			// 表里那行同步成现状（controller 不会当场变，所以写"待刷新"）
+			const swRow = [...document.querySelectorAll('.trace-table th')].find(
+				(th) => th.textContent === 'Service Worker',
+			)?.nextElementSibling;
+			if (swRow) swRow.textContent = unregistered ? '已注销（待刷新）' : '无注册项';
+		} catch (error) {
+			if (desc) {
+				desc.textContent = `清理失败：${error instanceof Error ? error.message : String(error)}`;
+			}
+		} finally {
+			clearBtn.disabled = false;
+		}
+	});
+</script>

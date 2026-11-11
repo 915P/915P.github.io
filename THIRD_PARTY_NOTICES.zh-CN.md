@@ -21,6 +21,7 @@
 | CC BY 3.0 | 内容 | ✅ | ✅（需说明是否修改） | 无（4.0 衍生需同许可） |
 | Unicode License v3 | 数据 | ✅ | ✅（需保留 Unicode 版权声明、不得暗示背书） | 无 |
 | EUPL-1.2 | 著佐权 | ✅ | ✅（需保留声明、说明是否修改） | 有（衍生作品须沿用 EUPL-1.2，或落入兼容许可清单） |
+| GPL-3.0 | 著佐权 | ✅ | ✅（保留许可、说明修改、提供对应源码） | 有（修改版及其所依据的作品须保持 GPL-3.0） |
 | CC BY-NC-SA 4.0 | 内容 | ❌ | ✅（需说明是否修改） | 有（相同方式共享 + 非商业） |
 
 ---
@@ -591,6 +592,82 @@ ffmpeg.wasm 的 `exec()` 只在 worker 本身死掉时才 reject；ffmpeg 自己
     完全在浏览器本地完成
 
 
+
+## 19. IT-Tools（开发者小工具合集）⚠️ **GPL-3.0，强著佐权**
+
+- **位置**：`public/apps/it-tools/`（本站自托管的构建产物）
+- **入口**：`/apps/it-tools/index.html`（单页应用，工具列表中状态为 `app`；
+  不是 Astro 页面）
+- **上游**：<https://github.com/CorentinTh/it-tools> · <https://it-tools.tech>
+- **版本**：`package.json` `2024.10.22-7ca5933`，构建自 `main` 分支 commit
+  `d505845f918e946ec300af7b36efc107e2f66e9e`（2026-02-12）
+- **许可**：**GNU GPLv3**，© Corentin Th 及贡献者（上游 `package.json` 声明
+  `GNU GPLv3`，**不是 MIT**）。全文原样保留在
+  `public/apps/it-tools/LICENSE`
+- **署名**：许可全文随应用目录一同分发；工具列表中标注「第三方，GPLv3」；
+  应用页脚保留指向上游的链接
+- **核实来源**：上游仓库的 `LICENSE` 文件（GPLv3 全文）与 `package.json`
+  的 `license` 字段
+- **内容**：10 个分类共 86 个小工具（加密、转换、Web、图片、视频、数学、
+  编程、网络、数据、其他），按需分块懒加载
+- **本站改动**：共 169 个文件，完整记录于 `public/apps/it-tools/NOTICE.md`，
+  并以 GPLv3 补丁形式随附（`station-mods.patch`）：
+  1. 移除 PWA / Service Worker（站点自有根作用域 SW，嵌套的自动更新 SW 会争抢导航控制），
+     相应移除 `registerSW()` 调用
+  2. 路由改为 hash 模式（纯静态托管无 SPA 回退，否则深链刷新 404）
+  3. 主题级对齐站点 mdui / MD3 设计令牌，分三层落地：Naive UI 主题
+     （`src/themes.ts`：浅色主色 `#006689`、深色 `#79d1ff` 配 on-primary
+     `#003549`，圆角、字体栈）、应用自用的 `c-*` 组件令牌
+     （`src/ui/theme/themes.ts`、c-select / c-input-text 焦点底色）与
+     UnoCSS（`theme.colors.primary` → `var(--it-primary)`）；另将侧栏 logo
+     渐变、「赞助」按钮渐变与 pin 图标由上游绿色改为站内蓝系；新增
+     `src/assets/station.css` 承载共享令牌与排版、`::selection`、聚焦轮廓对齐
+  4. **中文化补全（走 i18n 双语层，非字面量替换）**：新增 **901 个
+     `station.*` 消息键**（str 448 / lbl 411 / err 28 / cmd 14）+ 8 个此前
+     没有任何语言条目的工具的 `tools.<slug>.title/description`，全源码约
+     **1160 处** `translate()` / `$t()` 调用，覆盖模板字符串、script 层
+     标签、og-schema 字段、cron 帮助表，以及 **http-status-codes 全量**
+     （62 个状态短语、63 条描述、5 个分类头、搜索结果与 `For {type}` 模板
+     串）；en/zh 叶子键完全对称，并用脚本反向核验「源码引用的 key 在两份
+     yml 中都存在」。cronstrue 换用 `cronstrue-i18n` 全语言包，表达式的
+     自然语言说明随界面语言切换；修正上游 zh 中仅有的 2 处英文残留；对
+     `@` 与 `{0}` 做 vue-i18n 消息语法转义（`{'@'}`、`{'{'}`），否则会被
+     解析成 linked/插值消息导致构建失败；**回退两处被批量替换误判为标签的
+     结构性字段**（hash-text 的 URL query 参数名 `encoding`、http-status
+     的模糊搜索字段名 `code`，误翻会让功能失效）
+  5. 默认语言 `en` → `zh`
+  6. `index.html`：`lang="zh-CN"`、加 `noindex,nofollow`、移除指向上游
+     `it-tools.tech` 的 `canonical` / `og:url` / `og:image` / `twitter:image`
+  7. **原生 mdui 界面重建（分阶段进行中）**：外壳（布局、侧栏导航、工具卡、顶栏、
+     代码高亮区）与整套 `c-*` 封装层已改为以 mdui Web 组件为内部实现，对外
+     props/插槽一字未改；新增原生页面骨架（`src/ui/native/`——公共样式、
+     `NativeToolPage`、迁移约定）与两个已迁移工具（base64-string-converter、
+     case-converter），作为其余工具的样板。图标经统一的 `StationIcon` 包装收敛
+     尺寸（上游三套图标库对尺寸口径不一致）；emoji 选择器在 `/cdn-cgi/trace`
+     报告 `loc=CN` 时过滤 🇹🇼（仅本地判定，不发外部请求）
+  构建参数：`BASE_URL=/apps/it-tools/ VITE_VERCEL_ENV=production`。
+  **未改动任何工具的功能逻辑**；颜色转换工具自身展示的色板保留上游原色
+  （属工具内容，非主题）；品牌名（IT-Tools / GitHub / 作者名）与数据表
+  （MIME 类型、表情名称）按原样保留
+- **说明**：
+  - 这是 **GPLv3 分发**：该许可约束 `public/apps/it-tools/` 内的全部内容
+    （含本站对它的修改，同样按 GPLv3 发布）以及 `NOTICE.md`
+    「对应源码」一节指向的源码；**不向站点其余部分扩散** ——
+    站点的 MIT 代码只是把该目录聚合在旁边。IT-Tools
+    **绝不按本站 MIT 重新许可**
+  - 对应源码义务通过「上游 commit 归档 + `station-mods.patch`」履行，
+    二者均在 `NOTICE.md` 中给出链接
+  - 体量：约 14 MB、280 个文件。最大的两块（3.3 MB MAC 查询、3.2 MB 文本 diff）
+    按需加载
+  - 上游的统计上报已关闭：`VITE_TRACKER_ENABLED` 未设置，plausible
+    插件保持禁用；所有工具完全在访客浏览器内运行（站点侧零数据上传），
+    与站点隐私声明一致
+  - 属整页第三方应用，站点「全部在浏览器本地运行」的说法对它仅在
+    「数据不离开浏览器」这一意义上成立
+  - 与站内自研工具（进制转换、BMI、条码等）重叠：按维护者决定两者都保留，
+    卡片描述中以「第三方」区分
+
+---
 
 以下内容为本站原创，采用根目录 [LICENSE](LICENSE) 中的 MIT 许可：
 

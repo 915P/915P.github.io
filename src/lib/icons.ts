@@ -75,6 +75,9 @@ import '@mdui/icons/upload.js';
 
 // 音视频工具箱（movie-edit 在 @mdui/icons 里没有，改用 video-file）
 import '@mdui/icons/video-file.js';
+
+// IT-Tools 工具集（第三方应用卡片）
+import '@mdui/icons/handyman.js';
 import '@mdui/icons/audio-file.js';
 import '@mdui/icons/image.js';
 import '@mdui/icons/warning.js';

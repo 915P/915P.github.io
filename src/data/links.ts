@@ -673,6 +673,15 @@ export const navLinks: NavLink[] = [
 		group: 'toolbox',
 	},
 	{
+		id: 'tool-ittools',
+		title: 'IT-Tools',
+		desc: '86 个开发者小工具合集：编解码、哈希、时间戳、二维码、正则…全在本地跑',
+		url: '/apps/it-tools/index.html',
+		icon: '🔧',
+		materialIcon: 'handyman',
+		group: 'toolbox',
+	},
+	{
 		id: 'tool-morse',
 		title: '摩尔斯电码',
 		desc: '摩尔斯互转、音频发报，含《标准电码本》中文四码',

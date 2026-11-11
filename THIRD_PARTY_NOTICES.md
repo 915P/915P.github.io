@@ -25,6 +25,7 @@ package metadata, not merely against claims in the local copies.
 | CC BY 3.0 | Content | Yes | Yes (state whether modified) | No (4.0 derivatives must use the same license) |
 | Unicode License v3 | Data | Yes | Yes (keep Unicode copyright, do not imply endorsement) | No |
 | EUPL-1.2 | Copyleft | Yes | Yes (keep notices; state modifications) | Yes (derivative Works stay EUPL-1.2; covered by a compatibility list) |
+| GPL-3.0 | Copyleft | Yes | Yes (keep license, state modifications, provide corresponding source) | Yes (modified versions and the work they are based on must stay GPL-3.0) |
 | CC BY-NC-SA 4.0 | Content | **No** | Yes (state whether modified) | Yes (ShareAlike + NonCommercial) |
 
 ---
@@ -706,6 +707,92 @@ forever.
     public internet; the drawing/editing core runs entirely in the browser
 
 
+
+## 19. IT-Tools (developer tool collection) ⚠️ **GPL-3.0, strong copyleft**
+
+- **Location**: `public/apps/it-tools/` (self-hosted build output)
+- **Entry point**: `/apps/it-tools/index.html` (single-page app, linked from the
+  tool index with status `app`; not an Astro page)
+- **Upstream**: <https://github.com/CorentinTh/it-tools> · <https://it-tools.tech>
+- **Version**: `package.json` `2024.10.22-7ca5933`, built from `main` commit
+  `d505845f918e946ec300af7b36efc107e2f66e9e` (2026-02-12)
+- **License**: **GNU GPLv3**, © Corentin Th and contributors (the upstream
+  `package.json` declares `GNU GPLv3`; **not MIT**). Full text kept verbatim at
+  `public/apps/it-tools/LICENSE`
+- **Attribution**: the license text ships in the app directory; the tool index
+  labels the entry 「第三方，GPLv3」; the app's own footer links back to upstream
+- **Verified from**: the upstream repository's `LICENSE` file (GPLv3 full text)
+  and `package.json` `license` field
+- **Contents**: 86 tools in 10 categories (crypto, converter, web, images,
+  video, maths, programming, network, data, misc), bundled as lazy-loaded chunks
+- **Site modifications**: 169 files, all recorded in
+  `public/apps/it-tools/NOTICE.md` and distributable as a patch
+  (`station-mods.patch`, GPLv3):
+  1. PWA/service worker removed (the site has its own root-scope service
+     worker), `registerSW()` dropped accordingly
+  2. router switched to hash history (static hosting has no SPA fallback)
+  3. theme-level alignment with the site's mdui / MD3 design tokens, applied
+     at three levels: the Naive UI theme (`src/themes.ts`: primary
+     `#006689` light / `#79d1ff` dark with on-primary `#003549`, radii, font
+     stack), the app's own `c-*` component tokens (`src/ui/theme/themes.ts`,
+     c-select/c-input-text focus tints) and UnoCSS (`theme.colors.primary`
+     → `var(--it-primary)`), plus the sidebar hero gradient, the sponsor
+     button gradient and the pinned-tab favicon recolored from the upstream
+     greens to station blues; new `src/assets/station.css` holds the shared
+     tokens and the typography / `::selection` / focus-ring alignment
+  4. **Chinese localization completed through the i18n layer (bilingual, not
+     literals)**: **901 new `station.*` message keys** (str 448 / lbl 411 /
+     err 28 / cmd 14) plus `tools.<slug>.title/description` for the 8 tools
+     that had no locale entry at all — ~1,160 `translate()` / `$t()` call
+     sites across templates, script-level labels, og-schema fields, the cron
+     helper table and the entire http-status-codes dataset (62 status
+     phrases, 44 descriptions, 5 category headings). En/zh leaf keys are
+     identical and every referenced key is verified present by script.
+     cronstrue switched to its `cronstrue-i18n` bundle so the human-readable
+     cron description follows the UI language; two zh values that upstream
+     left in English fixed; vue-i18n message-syntax escapes (`{'@'}`,
+     `{'{'}`) for `@`/`{0}` characters; two structural fields reverted after
+     batch replacement misidentified them as labels (hash-text's URL query
+     param `encoding`, http-status's fuzzy-search field `code`)
+  5. default locale `en` → `zh`
+  6. `index.html`: `lang="zh-CN"`, `noindex,nofollow`, upstream
+     `canonical`/`og:url`/`og:image`/`twitter:image` removed
+  7. **Native-mdui UI rebuild (phased, in progress)**: the shell (layout, sidebar
+     navigation, tool cards, navbar, code-highlight area) and the whole `c-*`
+     wrapper layer now use mdui web components as their internal implementation
+     while every public prop/slot stays unchanged; a native page skeleton
+     (`src/ui/native/` — shell CSS, `NativeToolPage`, migration guide) plus two
+     migrated tools (base64-string-converter, case-converter) define the pattern
+     for the remaining tools. Icons are normalized through a single `StationIcon`
+     wrapper (three upstream icon libraries disagree on sizing), and the emoji
+     picker hides 🇹🇼 when `/cdn-cgi/trace` reports `loc=CN` (local-only
+     detection, no external request)
+  Build flags: `BASE_URL=/apps/it-tools/ VITE_VERCEL_ENV=production`.
+  **No tool's functional logic was modified**; the color swatches shown by
+  the color-converter tool itself keep upstream colors (tool content, not
+  theme); brand strings (IT-Tools / GitHub / author name) and data tables
+  (mime types, emoji names) remain in their original form by design
+- **Notes**:
+  - This is a **GPLv3 distribution**. The GPLv3 terms apply to everything in
+    `public/apps/it-tools/` (including our modifications to it, which are also
+    released under GPLv3) and to the corresponding source in
+    `NOTICE.md` §"Corresponding Source"; they do **not** spread to the rest of
+    the site: the station's own MIT code merely aggregates this directory
+    beside it. IT-Tools is **never relicensed under this site's MIT license**
+  - The corresponding-source obligation is met by upstream commit archive +
+    `station-mods.patch`, both linked in `NOTICE.md`
+  - Footprint: ~14 MB, 280 files. Largest chunks (3.3 MB MAC lookup,
+    3.2 MB text diff) load only on demand
+  - Analytics disabled upstream-side: `VITE_TRACKER_ENABLED` is unset, so the
+    plausible-tracker plugin stays off; all tools run entirely in the visitor's
+    browser (no station-side data upload), matching the site's privacy claim
+  - This is a full-page third-party application, so the site's first-party
+    "runs entirely locally" claim covers it only in the sense that no data
+    leaves the browser
+  - Overlap with first-party tools (base conversion, BMI, barcode, …): both are
+    kept, per the maintainer's decision to prefer upstream implementations
+
+---
 
 The following is original to this site and is covered by the MIT license in the
 root [LICENSE](LICENSE):

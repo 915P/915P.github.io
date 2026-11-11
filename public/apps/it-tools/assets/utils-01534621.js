@@ -1,0 +1,1 @@
+import{ap as s}from"./index-6b7fa7ee.js";let n=[];const t=new WeakMap;function r(){n.forEach(e=>e(...t.get(e))),n=[]}function i(e,...a){t.set(e,a),!n.includes(e)&&n.push(e)===1&&requestAnimationFrame(r)}function u(){return s()!==null}const c=typeof window<"u";export{i as b,u as h,c as i};

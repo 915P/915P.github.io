@@ -80,6 +80,10 @@ self.addEventListener('fetch', (event) => {
 	const url = new URL(request.url);
 	if (url.origin !== self.location.origin) return;
 	if (PASSTHROUGH.includes(url.pathname)) return;
+	// Cloudflare 自有端点（/cdn-cgi/trace 等）永远直连网络：
+	// 页脚要读实时的边缘节点代码（colo=…），缓存会让它在换节点后失真，
+	// 而且这类响应不属于站点内容，也没有缓存价值
+	if (url.pathname.startsWith('/cdn-cgi/')) return;
 	// Range 请求（音视频拖动进度、部分 wasm 加载）不做缓存，直接交给网络
 	if (request.headers.has('range')) return;
 

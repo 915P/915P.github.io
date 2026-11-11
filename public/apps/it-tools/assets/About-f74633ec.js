@@ -1,0 +1,1 @@
+import{d as o,u as e,t as n,o as s,c,_ as m}from"./index-6b7fa7ee.js";const u=o({__name:"About",setup(r){return e({title:n("station.lbl.about-page-title")}),(t,_)=>{const a=m;return s(),c(a,{markdown:t.$t("about.content"),"mx-auto":"","mt-50px":"","max-w-600px":""},null,8,["markdown"])}}});export{u as default};

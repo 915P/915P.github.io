@@ -1,0 +1,1 @@
+import{aG as u,ax as a,F as o}from"./index-6b7fa7ee.js";function n(r){return r.some(e=>u(e)?!(e.type===a||e.type===o&&!n(e.children)):!0)?r:null}function s(r,e){return r&&n(r())||e()}function f(r,e,t){return r&&n(r(e))||t(e)}function l(r,e){const t=r&&n(r());return e(t||null)}function m(r){return!(r&&n(r()))}export{s as a,f as b,m as i,l as r};

@@ -31,6 +31,21 @@ const days = Math.floor((Date.now() - new Date('2019-08-22').getTime()) / 86_400
 			<span class="faint">建站 {days.toLocaleString('zh-CN')} 天</span>
 
 			{/*
+				边缘节点：**运行时**从 Cloudflare 的同源端点 /cdn-cgi/trace 读 colo
+				（随访问者接入的机房变化），SW 已对 /cdn-cgi/ 放行，不会读到陈旧缓存。
+				取不到时（开发服务器、绕过 CDN 直连源站、断网）整段隐藏，不摆假数据。
+				完整的链路说明放进 title，正文只留最要紧的节点代码。
+				隐私：trace 里的访问者 IP 只在本地解析，不写进页面。
+			*/}
+			<span
+				class="faint cdn-info cdn-colo"
+				data-cdn-colo
+				title="Cloudflare 边缘节点（取自 /cdn-cgi/trace）；回源 GitHub Pages（Fastly 边缘），源站 915p.github.io"
+			>
+				节点 <b data-cdn-colo-code></b>
+			</span>
+
+			{/*
 				PWA 版本信息（时间戳即版本号）。内容由 lib/pwa-client 填充：
 				「版本」取自 /version.json（服务器上的最新构建），
 				「本机」取自当前控制页面的 Service Worker（已缓存/已安装的那份）。
@@ -89,6 +104,27 @@ const days = Math.floor((Date.now() - new Date('2019-08-22').getTime()) / 86_400
 
 	.footer-link:hover {
 		text-decoration: underline;
+	}
+
+	/*
+		CDN 节点：默认整段隐藏，拿到 /cdn-cgi/trace 的 colo 才显示；
+		本地开发、直连源站、断网时都不会出现空占位。
+		与建站天数同级的运行信息，仅比 faint 多一点权重。
+		不做成链接 —— 915p.github.io 会 301 回本域，点了也只是绕一圈。
+	*/
+	.cdn-info b {
+		font-weight: 600;
+		color: rgb(var(--mdui-color-on-surface-variant));
+		font-variant-numeric: tabular-nums;
+		letter-spacing: 0.02em;
+	}
+
+	.cdn-colo {
+		display: none;
+	}
+
+	.cdn-colo[data-ready] {
+		display: inline;
 	}
 
 	/* PWA 版本信息：默认隐藏，拿到版本数据后由脚本加 data-ready 显示 */
@@ -194,6 +230,39 @@ const days = Math.floor((Date.now() - new Date('2019-08-22').getTime()) / 86_400
 			busy = false;
 			render();
 		});
+	}
+
+	/*
+		Cloudflare 边缘节点：从同源端点 /cdn-cgi/trace 读实时值。
+		它返回 `key=value` 逐行文本，我们只取 colo（边缘机房的 IATA 代码）和
+		fl（本次请求的 ray id，放进 title 当排障线索）——访问者 IP 不写进页面。
+		开发服务器上没有这个端点、直连源站时也会 404，一律静默隐藏该段。
+	*/
+	const coloRoot = document.querySelector<HTMLElement>('[data-cdn-colo]');
+
+	if (coloRoot) {
+		const readField = (text: string, key: string) =>
+			new RegExp(`^${key}=(.*)$`, 'm').exec(text)?.[1]?.trim();
+
+		fetch('/cdn-cgi/trace', { cache: 'no-store' })
+			.then((response) => (response.ok ? response.text() : ''))
+			.then((text) => {
+				const code = text && readField(text, 'colo');
+				if (!code) return;
+
+				const codeEl = coloRoot.querySelector<HTMLElement>('[data-cdn-colo-code]');
+				if (codeEl) codeEl.textContent = code;
+
+				const ray = text && readField(text, 'fl');
+				if (ray) {
+					coloRoot.title = `Cloudflare 边缘节点 ${code} · ray ${ray}（取自 /cdn-cgi/trace）`;
+				}
+
+				coloRoot.setAttribute('data-ready', '');
+			})
+			.catch(() => {
+				/* 静默：没有 CDN 或离线时保持隐藏 */
+			});
 	}
 </script>
 

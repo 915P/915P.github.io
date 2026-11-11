@@ -82,6 +82,13 @@ import Page from '../../layouts/Page.astro';
 					<mdui-slider id="size" min="100" max="600" value="240" step="10"></mdui-slider>
 				</div>
 				<div class="field">
+					<span style="display: block; margin-bottom: 0.35rem">前景 / 背景色</span>
+					<div class="row" style="gap: 0.75rem">
+						<input type="color" id="qrColor" value="#000000" style="height: 2.5rem; flex: 1" />
+						<input type="color" id="qrBg" value="#ffffff" style="height: 2.5rem; flex: 1" />
+					</div>
+				</div>
+				<div class="field">
 					<label for="mode">输入模式</label>
 					<mdui-select id="mode" variant="outlined" value="">
 						<mdui-menu-item value="">自动</mdui-menu-item>
@@ -109,6 +116,10 @@ import Page from '../../layouts/Page.astro';
 				<div class="field">
 					<label for="color">前景色</label>
 					<input type="color" id="color" value="#000000" style="height: 2.5rem" />
+				</div>
+				<div class="field">
+					<label for="barBg">背景色</label>
+					<input type="color" id="barBg" value="#ffffff" style="height: 2.5rem" />
 				</div>
 			</div>
 		</div>
@@ -153,6 +164,9 @@ import Page from '../../layouts/Page.astro';
 	const mode = $<Select>('mode');
 	const h = $<Slider>('h');
 	const color = $<HTMLInputElement>('color');
+	const qrColor = $<HTMLInputElement>('qrColor');
+	const qrBg = $<HTMLInputElement>('qrBg');
+	const barBg = $<HTMLInputElement>('barBg');
 	const dv = $<RadioGroup>('dv');
 
 	const EC = ['L', 'M', 'Q', 'H'];
@@ -186,8 +200,8 @@ import Page from '../../layouts/Page.astro';
 
 			svg.innerHTML =
 				`<g shape-rendering="crispEdges">` +
-				`<rect width="${count + quiet * 2}" height="${count + quiet * 2}" fill="#fff"/>` +
-				`<path d="${d}" fill="#000"/></g>`;
+				`<rect width="${count + quiet * 2}" height="${count + quiet * 2}" fill="${qrBg.value}"/>` +
+				`<path d="${d}" fill="${qrColor.value}"/></g>`;
 			svg.setAttribute('viewBox', `0 0 ${count + quiet * 2} ${count + quiet * 2}`);
 			svg.setAttribute('width', String(s));
 			svg.setAttribute('height', String(s));
@@ -205,6 +219,7 @@ import Page from '../../layouts/Page.astro';
 			height: Number(h.value),
 			displayValue: dv.value !== 'no',
 			lineColor: color.value,
+			background: barBg.value,
 			width: 2,
 		};
 		if (format.value === 'ITF' || format.value === 'ITF14') opts.margin = 0;
@@ -280,6 +295,9 @@ import Page from '../../layouts/Page.astro';
 	});
 	mode.addEventListener('change', render);
 	color.addEventListener('input', render);
+	qrColor.addEventListener('input', render);
+	qrBg.addEventListener('input', render);
+	barBg.addEventListener('input', render);
 	dv.addEventListener('change', render);
 
 	/**
@@ -324,7 +342,7 @@ import Page from '../../layouts/Page.astro';
 			c.width = Math.max(1, Math.round(size2.width * 2));
 			c.height = Math.max(1, Math.round(size2.height * 2));
 			const ctx = c.getContext('2d')!;
-			ctx.fillStyle = '#fff';
+			ctx.fillStyle = format.value === 'QRCode' ? qrBg.value : barBg.value;
 			ctx.fillRect(0, 0, c.width, c.height);
 			ctx.drawImage(img, 0, 0, c.width, c.height);
 			c.toBlob((b) => {

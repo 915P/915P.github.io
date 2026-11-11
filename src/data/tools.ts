@@ -98,7 +98,7 @@ export const builtinTools: Tool[] = [
 	{
 		slug: 'barcode',
 		name: '条码 / 二维码',
-		desc: 'QR 码与 20 种一维条码，可下载 SVG/PNG',
+		desc: 'QR 码与 20 种一维条码，前景/背景色与纠错等级可调，可下载 SVG/PNG',
 		icon: 'qr-code-scanner',
 		category: '工具',
 		status: 'live',
@@ -193,6 +193,15 @@ export const builtinTools: Tool[] = [
 		category: '影音',
 		status: 'app',
 		href: '/apps/3dweb/index.html',
+	},
+	{
+		slug: 'ittools',
+		name: 'IT-Tools 工具集',
+		desc: '86 个开发者小工具合集：JSON、时间戳、编解码、密码生成等（第三方，GPLv3）',
+		icon: 'handyman',
+		category: '工具',
+		status: 'app',
+		href: '/apps/it-tools/index.html',
 	},
 ];
 
