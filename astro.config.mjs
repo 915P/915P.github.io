@@ -4,7 +4,7 @@ import sitemap from '@astrojs/sitemap';
 
 // https://astro.build/config
 export default defineConfig({
-	site: 'https://915p.github.io',
+	site: 'https://915p.bbhc.cn',
 	// 仓库为 <user>.github.io 根域部署，base 保持 '/'；若迁到子路径部署改为 '/<repo>/'
 	base: '/',
 	trailingSlash: 'ignore',

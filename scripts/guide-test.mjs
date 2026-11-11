@@ -445,7 +445,9 @@ eq('非法网址原样返回', guide.tileLabel('::::', ''), '::::');
 		tools.every((tile) => tile.url.startsWith('/')),
 	);
 	// 之前踩的坑：所有工具都在同一域名下，按 host 取 favicon 会全变成同一个图标
-	ok('小工具不再是同一个主站域名', new Set(tools.map((tile) => new URL(tile.url, 'https://915p.github.io').host)).size >= 1);
+	// （tile.url 是相对路径，这里随便给个基准即可，断言只看解析出的 host 集合，
+	//  刻意不写真实域名，免得以后换域名还得动测试）
+	ok('小工具不再是同一个主站域名', new Set(tools.map((tile) => new URL(tile.url, 'https://example.com').host)).size >= 1);
 	// 导出的磁贴配置要把 materialIcon 带出去，否则导入回来就退回 favicon 了
 	const exported = guide.serializeConfig(tools, null, { color: '#66ccff', mode: 'auto', wallpaper: 'none', scrub: 0.72, assumeCampus: false }, new Date(2026, 0, 2));
 	const parsed = guide.parseConfig(exported);

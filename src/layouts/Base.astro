@@ -18,7 +18,7 @@ const {
 	type = 'website',
 } = Astro.props;
 
-const SITE = 'https://915p.github.io';
+const SITE = Astro.site!;
 const canonical = new URL(Astro.url.pathname, SITE);
 const abs = (p: string) => new URL(p, SITE).href;
 const SITE_NAME = '915P的小站';

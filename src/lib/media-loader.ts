@@ -271,7 +271,7 @@ async function fetchCached(
  * 浏览器**禁止跨域创建 Worker**（Worker 脚本必须同源或 blob:），
  * 所以哪怕 <script src> 从 CDN 加载成功，这里也会报
  * "Failed to construct 'Worker': Script at 'https://cdn…' cannot be accessed
- * from origin 'https://915p.github.io'"。
+ * from origin '<本站 origin>'"。
  *
  * 解决办法：把 814 worker 本身也缓存成 blob URL，再改写 UMD 源码里的
  * 这段解析逻辑，让它指向我们的 blob。正则按结构匹配而非写死变量名，
