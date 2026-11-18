@@ -1,0 +1,937 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<meta name="referrer" content="no-referrer">
+<title>钓鱼邮件工作原理 · Titan Bio / 51 View Row</title>
+<style>
+:root{
+  --bg:#0e1116; --panel:#161b22; --panel2:#1c232c; --line:#2a323d;
+  --fg:#d7dee8; --dim:#8b98a8; --accent:#58c4ff; --danger:#ff5d5d;
+  --warn:#ffb454; --ok:#4bd07f; --mono:ui-monospace,"SF Mono",Menlo,Consolas,"Noto Sans Mono CJK SC",monospace;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.75 -apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",Segoe UI,sans-serif}
+.wrap{max-width:1080px;margin:0 auto;padding:32px 20px 80px}
+header h1{font-size:27px;margin:0 0 6px;letter-spacing:.5px}
+header .sub{color:var(--dim);font-size:14px}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin:14px 0 0}
+.chip{font-size:12px;padding:3px 10px;border:1px solid var(--line);border-radius:999px;color:var(--dim)}
+.chip b{color:var(--accent);font-weight:600}
+h2{font-size:19px;margin:46px 0 6px;padding-left:11px;border-left:4px solid var(--accent)}
+h2 .n{color:var(--accent);font-family:var(--mono);margin-right:8px}
+h3{font-size:15px;margin:22px 0 8px;color:#a9c7dd}
+p{margin:8px 0}
+.lead{color:var(--dim);font-size:14px;margin-bottom:14px}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px;margin-top:20px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px}
+.card .num{font:700 26px/1.2 var(--mono);color:var(--accent)}
+.card .num.r{color:var(--danger)}
+.card .lbl{font-size:12.5px;color:var(--dim);margin-top:4px}
+.flow{display:flex;flex-direction:column;gap:0;margin-top:16px}
+.step{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 16px;position:relative}
+.step .tag{display:inline-block;font:600 11px/1 var(--mono);padding:4px 8px;border-radius:5px;background:#22303f;color:var(--accent);margin-bottom:6px}
+.step.bad .tag{background:#3a1f1f;color:#ff8a8a}
+.step.good .tag{background:#1c3326;color:var(--ok)}
+.step b{color:#fff}
+.step .why{color:var(--dim);font-size:13.5px;margin-top:5px}
+.arrow{text-align:center;color:var(--dim);font-size:18px;line-height:1.5;padding:2px 0}
+pre{background:#0a0d11;border:1px solid var(--line);border-radius:10px;padding:13px 15px;overflow:auto;font:12.5px/1.7 var(--mono);color:#b9c6d4;margin:10px 0}
+pre .k{color:var(--accent)} pre .v{color:var(--warn)} pre .r{color:var(--danger)} pre .c{color:#5d6b7a}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px 20px;margin-top:14px}
+.toggles{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:12px}
+.tg{display:flex;align-items:center;gap:7px;background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:7px 11px;font-size:13px;cursor:pointer;user-select:none}
+.tg input{accent-color:var(--accent);cursor:pointer}
+.tg .cnt{font-family:var(--mono);color:var(--warn);font-size:12px}
+.tglsep{width:1px;align-self:stretch;background:var(--line);margin:0 4px}
+.tg.hl{border-color:#7a5a24;background:#241a0e}
+.tg.hl input{accent-color:#ff8a3d}
+.zwnote{display:inline-block;font-size:11.5px;color:#8a6a12;background:#fff8e1;border:1px solid #f0e0b0;padding:1px 8px;border-radius:4px;margin-left:6px}
+/* 标记关闭时的"正常显示"样式：零边框、零底色，与正文完全一致 */
+.hidn{display:block;background:none;border:none;padding:0;margin:10px 0 0;color:inherit;font-size:inherit;line-height:inherit}
+.ptext{display:block;margin:10px 0 0;white-space:pre-wrap;font-size:13.5px;line-height:1.9;color:inherit;background:none;border:none;padding:0}
+.ptext .hidlab{color:#c0392b;font-weight:700;font-size:12px}
+.ptext .hidm{background:#ffecec;color:#9b4b4b;border-radius:3px;padding:0 2px;box-decoration-break:clone}
+.tbline{white-space:pre;font-size:14px;overflow-x:hidden;line-height:1.9;transform-origin:left top}
+.tbblank{min-height:110px;white-space:pre-wrap;word-break:break-all}
+.hid table{background:#fff;margin:9px 0;max-width:100%}
+.hid .hidraw{white-space:pre-wrap}
+includetail{display:block}
+.hid::before{word-break:keep-all}
+.viewbtns{display:flex;flex-wrap:wrap;gap:8px;margin:4px 0 14px}
+.btn{background:#22303f;color:#cfe6f7;border:1px solid #2f4356;border-radius:8px;padding:7px 14px;font-size:13.5px;cursor:pointer}
+.btn:hover{border-color:var(--accent);color:#fff}
+.btn.on{background:var(--accent);color:#04121c;border-color:var(--accent);font-weight:600}
+#preview{background:#fbfbf8;color:#222;border-radius:10px;padding:16px;font-size:14.5px;line-height:2.1;min-height:120px;overflow-wrap:anywhere}
+#preview.tight{min-height:0}
+#preview .zw{background:repeating-linear-gradient(45deg,#ffe9a8 0 6px,#fff3d0 6px 12px);color:#a07a12;font-size:12px;padding:1px 4px;border-radius:3px}
+#preview .hid{display:block;background:#ffecec;border:1px dashed #e08a8a;border-radius:6px;padding:6px 9px;margin:6px 0;font-size:12.5px;color:#9b4b4b;line-height:1.7}
+#preview .hid::before{content:"[.visually-hidden · 1px 裁剪 · 人眼不可见] ";color:#c0392b;font-weight:700}
+#preview .jp{color:#ff8a3d;background:#fff2e8;border-radius:3px;padding:0 3px;font-size:13px}
+#preview .pl{font-weight:700;color:#111}
+#preview .qr{display:inline-block;background:#111;color:#fff;font-size:12px;padding:4px 9px;border-radius:5px;margin-left:4px;font-family:var(--mono)}
+#preview .img{display:inline-block;background:#1d3a6b;color:#fff;font-size:12px;padding:4px 9px;border-radius:5px;margin-left:6px;font-family:var(--mono)}
+#preview .qrn{display:inline;background:none;border:none;padding:0;margin-left:4px;color:inherit;font-size:inherit;font-family:inherit}
+#viewnote{font-size:13.5px;color:var(--dim);margin-top:10px;border-left:3px solid var(--warn);padding-left:10px}
+#viewnote b{color:var(--warn)}
+.twocol{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+@media(max-width:760px){.twocol{grid-template-columns:1fr}}
+.box{border:1px solid var(--line);border-radius:12px;padding:14px 16px;background:var(--panel)}
+.box h4{margin:0 0 8px;font-size:14px;color:var(--accent)}
+.box.bad{border-color:#5c2b2b} .box.bad h4{color:var(--danger)}
+table{width:100%;border-collapse:collapse;font-size:13.5px;margin-top:10px}
+th,td{border:1px solid var(--line);padding:8px 10px;text-align:left;vertical-align:top}
+th{background:var(--panel2);color:#a9c7dd;font-weight:600}
+/* 页面主题不许渗进预览区里邮件自带的表格（原样式是行内给的，行内优先） */
+#preview table{font-size:12.5px;margin:8px 0;width:100%}
+#preview th,#preview td{border:none;padding:0;background:none;color:inherit;font-weight:inherit;text-align:left;vertical-align:top}
+td code{font-family:var(--mono);font-size:12.5px;color:var(--warn)}
+.risk-h{color:var(--danger)} .risk-m{color:var(--warn)} .risk-l{color:var(--ok)}
+.tl{list-style:none;padding:0;margin:14px 0 0;border-left:2px solid var(--line);margin-left:8px}
+.tl li{position:relative;padding:0 0 16px 20px;font-size:14px}
+.tl li::before{content:"";position:absolute;left:-6px;top:8px;width:10px;height:10px;border-radius:50%;background:var(--accent)}
+.tl li.bad::before{background:var(--danger)}
+.tl .d{font-family:var(--mono);color:var(--accent);font-size:12.5px;margin-right:8px}
+.ioc{background:#0a0d11;border:1px solid var(--line);border-radius:10px;padding:14px 16px;font-family:var(--mono);font-size:12.8px;line-height:2;color:#b9c6d4;overflow:auto}
+.ioc .lab{color:#5d6b7a;display:inline-block;width:112px}
+.ioc .val{color:var(--warn);cursor:pointer;border-bottom:1px dotted #666}
+.ioc .val:hover{color:var(--accent)}
+ul.check{list-style:none;padding:0;margin:12px 0}
+ul.check li{padding:7px 0 7px 30px;position:relative;border-bottom:1px dashed var(--line);font-size:14.5px}
+ul.check li::before{content:"☑";position:absolute;left:4px;color:var(--ok)}
+ul.check li.no::before{content:"☐";color:var(--dim)}
+.callout{background:#211a10;border:1px solid #5c451f;border-radius:10px;padding:12px 16px;font-size:14px;color:#f0d9a8;margin-top:14px}
+.callout b{color:#ffce6a}
+footer{margin-top:56px;padding-top:18px;border-top:1px solid var(--line);color:#5d6b7a;font-size:12.5px;line-height:1.9}
+kbd{background:#22303f;border:1px solid var(--line);border-radius:5px;padding:1px 6px;font:12px var(--mono)}
+
+/* ── 01 邮件头元信息条 ── */
+.mailmeta{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:10px;margin:16px 0 4px}
+.mailmeta>div{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:11px 13px;font-size:13px;word-break:break-all;line-height:1.6}
+.mailmeta>div>span{display:block;color:var(--dim);font-size:11px;letter-spacing:.6px;margin-bottom:3px;font-family:var(--mono)}
+.mailmeta b{color:var(--danger);font-weight:600}
+.mailmeta .mm-note{display:block;color:var(--warn);font-size:11.5px;letter-spacing:0;margin-top:3px}
+
+/* ── 02 开源/隐私声明条 ── */
+.safeline{background:#11201a;border:1px solid #2e5c45;border-radius:10px;padding:11px 15px;font-size:13.5px;color:#b9e4c9;line-height:1.8;margin-top:12px}
+.safeline b{color:#7ee2a8}
+.safeline kbd{background:#16302a;border-color:#2e5c45;color:#9ff0c4}
+.safeline code{color:#9ff0c4;background:#16302a;padding:1px 5px;border-radius:4px;font-size:12.5px}
+.safeline::after{content:"";display:block;clear:both}
+/* 开源：可展开的源码块 */
+/* ── 02 钓鱼站仿制品 + 骗子后台 ── */
+.demo2{display:grid;grid-template-columns:1.05fr 1fr;gap:14px;margin-top:14px;align-items:start}
+@media(max-width:820px){.demo2{grid-template-columns:1fr}}
+.fsite{background:#fff;color:#333;border:1px solid var(--line);border-radius:12px;overflow:hidden;position:relative}
+.fsite .bar{display:flex;align-items:center;gap:8px;background:#eef1f5;color:#5f6b78;font:12px var(--mono);padding:9px 12px;border-bottom:1px solid #dde3ea}
+.fsite .dot{width:9px;height:9px;border-radius:50%;background:#ff5f57;box-shadow:15px 0 0 #febc2e,30px 0 0 #28c840;display:inline-block;margin-right:30px}
+.fsite .bod{padding:26px 26px 22px;text-align:center;position:relative}
+.fsite .stamp{position:absolute;top:12px;right:14px;transform:rotate(-8deg);border:2px solid var(--danger);color:var(--danger);border-radius:6px;padding:3px 9px;font:700 12px var(--mono);letter-spacing:1px;background:#fff}
+.fsite .logo{font-size:23px;font-weight:700;color:#12b7f5;letter-spacing:1px}
+.fsite .tip{font-size:12.5px;color:#8a94a0;margin:5px 0 18px}
+.fsite .row{display:flex;align-items:center;gap:8px;background:#f7f9fb;border:1px solid #dfe4ea;border-radius:7px;padding:10px 12px;margin-bottom:10px;text-align:left}
+.fsite .row span{font-size:13px;color:#8a94a0;width:46px;flex:none}
+.fsite .row input{border:0;background:transparent;outline:none;font-size:14px;width:100%;color:#111;font-family:inherit}
+.fsite .go{width:100%;background:#12b7f5;color:#fff;border:0;border-radius:7px;padding:11px;font-size:15.5px;font-weight:600;letter-spacing:6px;text-indent:6px;cursor:pointer;font-family:inherit}
+.fsite .go:hover{background:#0ea5dd}
+.fsite .go[disabled]{opacity:.65;cursor:not-allowed}
+.fsite .aux{display:flex;justify-content:space-between;align-items:center;font-size:12.5px;color:#12b7f5;margin-top:11px}
+.fsite .msg{min-height:20px;margin-top:9px;font-size:12.5px;color:var(--danger);font-weight:600}
+.fsite .msg .spin{display:inline-block;width:12px;height:12px;border:2px solid #d0d6dd;border-top-color:#12b7f5;border-radius:50%;animation:sp .8s linear infinite;vertical-align:-2px;margin-right:5px}
+@keyframes sp{to{transform:rotate(360deg)}}
+/* 三屏流程 */
+.scr[hidden]{display:none}
+.scr+.scr{border-top:1px dashed #e6eaef;padding-top:14px}
+.fsite .tip2{font-size:12px;color:#7b8794;text-align:left;line-height:1.75;margin-top:11px;background:#f7f9fb;border:1px solid #e6eaef;border-radius:7px;padding:9px 11px}
+.fsite .tip2 b{color:#c0392b}
+.fsite .tip2 code{font-size:11.5px;color:#12b7f5;background:#eaf7fd;padding:1px 4px;border-radius:3px}
+.fsite .tip2.warn{background:#fff6f6;border-color:#f3c9c9;color:#a33}
+.fsite .tip2.warn b{color:#c0392b}
+.fsite .ghost{display:inline-block;background:#fff;border:1px dashed #12b7f5;color:#12b7f5;border-radius:6px;padding:4px 10px;font-size:12.5px;cursor:pointer;margin-top:8px;font-family:inherit}
+.fsite .ghost:hover{background:#eaf7fd}
+.fsite .genline{margin:-3px 0 10px;text-align:right}
+.fsite .go[disabled]{opacity:.6;cursor:not-allowed}
+/* 后台面板 */
+.caphead{display:flex;justify-content:space-between;align-items:center;margin-top:12px}
+.caphead span{font:600 11px var(--mono);color:var(--dim);letter-spacing:1.2px}
+.mini2{background:#22303f;color:#cfe6f7;border:1px solid #2f4356;border-radius:6px;padding:4px 10px;font-size:12px;cursor:pointer}
+.mini2:hover{border-color:var(--accent);color:#fff}
+.mini2[disabled]{opacity:.45;cursor:not-allowed}
+.cap .c{color:#5d6b7a}.cap .k{color:var(--accent)}.cap .v{color:var(--warn)}.cap .r{color:var(--danger)}
+.revwrap{border-top:1px solid var(--line);margin-top:12px;padding-top:10px}
+.revtitle{font:700 11px var(--mono);color:var(--danger);letter-spacing:1.4px;margin-bottom:2px}
+/* ── §02 结算弹窗（复刻真站 data.js 里的 msg() 遮罩框） ── */
+.ov{position:fixed;inset:0;background:rgba(0,0,0,.74);z-index:9999;display:flex;align-items:center;justify-content:center;padding:22px}
+.ov[hidden]{display:none}
+.ovbox{background:#12161c;border:1px solid #5c2b2b;border-radius:14px;max-width:640px;width:100%;max-height:86vh;overflow:auto;padding:24px 26px 20px;box-shadow:0 18px 64px rgba(0,0,0,.65)}
+.ovtitle{font-size:25px;font-weight:800;color:#ff5d5d;letter-spacing:1.5px}
+.ovsub{font:12.5px/1.7 var(--mono);color:var(--dim);margin-top:7px}
+.ovbody{font-size:14px;line-height:1.85;color:#cbd5e1;margin-top:14px}
+.ovbody b{color:#fff}
+.ovbody ol,.ovbody ul{margin:6px 0 12px;padding-left:22px}
+.ovbody li{margin:5px 0}
+.ovbody code{font-size:12.5px;color:var(--warn);background:#151b22;padding:1px 5px;border-radius:4px}
+.ovreal{background:#211a10;border:1px solid #5c451f;border-radius:9px;padding:11px 14px;color:#f0d9a8;margin:12px 0 0}
+.ovdemo{background:#11201a;border:1px solid #2e5c45;border-radius:9px;padding:11px 14px;color:#b9e4c9;margin:10px 0 0}
+.ovdemo code{color:#9ff0c4;background:#16302a}
+.ovbtns{margin-top:16px;text-align:right}
+.ovbtn{background:#5c2b2b;color:#ffd9d9;border:1px solid #8a3a3a;border-radius:8px;padding:9px 20px;font-size:14px;cursor:pointer;font-family:inherit}
+.ovbtn:hover{background:#7a3535;color:#fff}
+.fsite .note{font-size:11.5px;color:#93a0ae;text-align:left;line-height:1.75;margin-top:6px;border-top:1px dashed #e2e7ed;padding-top:10px}
+.fsite .note b{color:#c0392b}
+.recv{background:var(--panel);border:1px solid #5c2b2b;border-radius:12px;padding:16px 18px}
+.recv h4{margin:0 0 4px;font-size:15px;color:var(--danger)}
+.recv .sub{font-size:12.5px;color:var(--dim);line-height:1.7}
+.cap{background:#0a0d11;border:1px solid var(--line);border-radius:9px;padding:12px 14px;margin-top:11px;font:12.5px/1.75 var(--mono);color:#b9c6d4;min-height:120px;max-height:230px;overflow:auto;white-space:pre-wrap;word-break:break-all}
+.rev{list-style:none;padding:0;margin:12px 0 0;font-size:13.5px}
+.rev li{padding:8px 0 8px 0;border-top:1px dashed var(--line);line-height:1.7}
+.rev li>b{color:#ff8a8a;display:inline-block;min-width:74px}
+.rev .v{color:var(--warn);font-family:var(--mono);word-break:break-all}
+.rev .why{display:block;color:var(--dim);font-size:12.5px;padding-left:0}
+.mini{background:#3a1f1f;color:#ffb3b3;border:1px solid #5c2b2b;border-radius:7px;padding:6px 13px;font-size:13px;cursor:pointer;margin-top:12px}
+.mini:hover{border-color:var(--danger);color:#fff}
+
+/* ── 站内文章链接 ── */
+a{color:var(--accent);text-decoration:underline;text-underline-offset:3px}
+a:hover{color:#7fe1ff}
+</style>
+</head>
+<body>
+<div class="wrap">
+<div class="callout" style="margin-top:0"><b>⚠ 教学演示页，非钓鱼页：</b>本页仿制的「QQ 安全中心」登录框只在你自己的浏览器里跑，<b>零网络请求、不保存、不上传</b>；与腾讯公司无任何关联，搜索引擎已被要求不索引本页。<b>请勿在这里输入任何真实账号密码。</b></div>
+
+
+<header>
+  <h1>一封钓鱼邮件的完整工作原理</h1>
+  <div class="sub">样本：<code>.eml</code> — From「Titan Bio」/ Subject「51 View Row, Colorado Springs」· 2026-11-18 19:41 +0800</div>
+  <div class="chips">
+    <span class="chip">正文 <b>437,491</b> 字节</span>
+    <span class="chip">真话 <b>201</b> 字（占 0.05%）</span>
+    <span class="chip">隐形日文填充 <b>2,284</b> 字</span>
+    <span class="chip">&lt;style&gt; <b>1,485</b> 个</span>
+    <span class="chip">混淆规则重复 <b>4,452</b> 次</span>
+    <span class="chip">伪装层 <b>4</b> 层</span>
+    <span class="chip">域名年龄 <b>7 周</b></span>
+  </div>
+</header>
+
+<div class="callout" style="margin-top:14px">📖 <b>配套文章</b>：本页只保留「可点的部分」——<a href="/blog/20261118-phishing-email-anatomy/">科普篇 · 四层伪装与防骗指南</a>　｜　<a href="/blog/20261118-phishing-email-forensics/">技术篇 · 头字段 / DOM 统计 / 检测脚本</a><br><span style="opacity:.85">IOC、时间线、六道初检表、状态机、全链路与处置建议都在文章里，不在这一页重复。</span></div>
+
+<!-- ══════════════ 01 恶意邮件 demo ══════════════ -->
+<h2><span class="n">01</span>恶意邮件：你收到的样子</h2>
+<p class="lead">先看原件。发件人显示「Titan Bio」，主题是一个美国地址，正文自称学校教务处——<b>三者互不相干</b>，因为这封信不是写给"你"的，是批量套模板发的。</p>
+
+<div class="mailmeta">
+  <div><span>发件人</span>Titan Bio &lt;6m2nTVWEWzRdK3bMji@<b>ethnolinguistically.ren</b>&gt;<span class="mm-note">← 显示名与地址本身都可被任意伪造</span></div>
+  <div><span>主题</span>51 View Row, Colorado Springs<span class="mm-note">← 与正文毫无关系的诱饵</span></div>
+  <div><span>回复到</span>a13565220748@163.com<span class="mm-note">← 不是发件人，回信直接进骗子信箱</span></div>
+  <div><span>实际投给你</span>信封收件人 ≠ To 头写的地址<span class="mm-note">← 详见技术篇</span></div>
+</div>
+
+<div class="panel">
+  <div class="toggles">
+    <label class="tg"><input type="checkbox" id="c-zw" checked> 零宽垫片 <span class="cnt">×185</span></label>
+    <label class="tg"><input type="checkbox" id="c-hid" checked> 1px 隐藏层 <span class="cnt">10,548 字</span></label>
+    <label class="tg"><input type="checkbox" id="c-jp" checked> 隐形日文 <span class="cnt">2,284 字</span></label>
+    <span class="tglsep" aria-hidden="true"></span>
+    <label class="tg hl"><input type="checkbox" id="c-hl"> 🏷 标记特殊内容</label>
+  </div>
+  <div class="viewbtns">
+    <button class="btn on" data-view="victim">受害者视图（QQ / 微信 / QQ 邮箱）</button>
+    <button class="btn" data-view="tb">Thunderbird 常规模式</button>
+    <button class="btn" data-view="plain">纯文本 / 复制视图</button>
+    <button class="btn" data-view="all">🔑 一键看懂</button>
+  </div>
+  <div id="preview"></div>
+  <div id="viewnote"></div>
+</div>
+<p class="lead">注意正文那句「如文件过大导致<b>图片模糊看不清</b>，请扫描下方二维码打开」——二维码指向的就是下一节的钓鱼站。把上面的视图轮流点一遍：同一封信，<b>受害者视图 201 字、纯文本满屏日文垃圾、Thunderbird 只剩一个"请"字</b>；拿不准就直接点 <b>🔑 一键看懂</b>——四层伪装一次全开并逐块标注。</p>
+
+<!-- ══════════════ 02 恶意网站 demo ══════════════ -->
+<h2><span class="n">02</span>恶意网站：高仿 QQ 登录（可交互）</h2>
+<p class="lead">左边是钓鱼页 <code>zx.xmbjia.com/step_in/</code> 的<b>仿制品</b>，按真实 kit 的流程走<b>三屏：账号密码 → 验证手机号 → 短信验证码</b>。在右边实时看<b>骗子后台拿到了什么、又在怎么审你</b>。</p>
+<div class="safeline">🔓 <b>本站开源</b>：源码就是<b>当前这个 .html 文件本身</b>（右键 → 查看网页源代码，或 <kbd>Ctrl+U</kbd>），§02 的登录与校验逻辑可逐行核对——下面也把那段原文贴出来了 ｜ 🚫 <b>不会上传任何输入信息</b>：页面里没有任何 <code>fetch</code> / <code>XMLHttpRequest</code> / 表单提交，输入只存在于你自己的浏览器内存中（已实测<b>网络请求 = 0</b>）｜ 🧪 <b>仅作演示</b>，刷新即清空</div>
+<div class="callout" style="margin-top:6px"><b>建议先这么玩：</b>点「🎲 填一个故意错的」再登 录——它<b>照样收下</b>。钓鱼页的<b>前端初检只有格式</b>（账号 6–11 位、密码 6–16 位、不能为空、不能整串全是同一个字符），<b>不校验密码是否正确</b>：密码是拿到手之后才拿去真站试的，它当场根本不知道你输错没输错，"密码错误"四个字同样是它事后编的。<br>⚠ 反过来也成立：<b>格式太离谱（比如只填 3 位）会被它本地弹回，一个字节都不发</b>——所以试它要填<b>格式合规的假数据</b>（🎲 按钮生成的就是）。而每多走一屏，就多交出一样东西。</div>
+
+<div class="demo2">
+  <div class="fsite">
+    <div class="bar"><span class="dot"></span><span id="fk-url">zx.xmbjia.com/step_in/</span></div>
+    <div class="bod">
+      <div class="stamp">演示 · DEMO</div>
+
+      <div class="scr" id="scr-login">
+        <div class="logo">QQ 安全中心</div>
+        <div class="tip">登录后继续保护您的账号安全</div>
+        <div class="row"><span>QQ</span><input id="fk-u" placeholder="QQ（6–11 位）" maxlength="11" autocomplete="off"></div>
+        <div class="row"><span>密码</span><input id="fk-p" type="password" placeholder="密码（6–16 位）" maxlength="16" autocomplete="off"></div>
+        <button class="go" id="fk-go">登 录</button>
+        <div class="aux"><label><input type="checkbox" checked> 记住登录状态</label><span>找回密码</span></div>
+        <div class="tip2">💡 小测验：<b>故意输一个格式合规、但完全编造的账号密码</b>——它照样收下。真站的前端<b>只做格式检查</b>（长度 6–11 / 6–16、不能为空、不能整串同字符），<b>不校验密码是否正确</b>，所以"密码错误"这种提示也是它事后编的。<br>⚠ 反过来：格式太离谱（3 位、或 666666）会被它<b>本地弹回、一个字节都不发</b>——这正是它在"初检"的证据。
+          <button class="ghost" id="fk-fill">🎲 填一个故意错的</button></div>
+      </div>
+
+      <div class="scr" id="scr-phone" hidden>
+        <div class="logo">安全验证</div>
+        <div class="tip">为保障账号安全，请先验证手机号</div>
+        <div class="row"><span>+86</span><input id="fk-m" placeholder="手机号" maxlength="11" inputmode="numeric" autocomplete="off"></div>
+        <div class="genline"><button class="ghost" id="fk-mgen" type="button">🎲 一键生成手机号</button></div>
+        <button class="go" id="fk-go2">下一步</button>
+        <div class="tip2">← 对应 <code>step_phone/</code>。注意：<b>此刻它还不知道你密码对不对</b>，先把手机号骗到手再说。</div>
+      </div>
+
+      <div class="scr" id="scr-code" hidden>
+        <div class="logo">输入验证码</div>
+        <div class="tip">验证码已发送至你验证的手机号</div>
+        <div class="row"><span>验证码</span><input id="fk-c" placeholder="6 位数字" maxlength="6" inputmode="numeric" autocomplete="off"></div>
+        <div class="genline"><button class="ghost" id="fk-cgen" type="button">🎲 一键生成验证码</button></div>
+        <button class="go" id="fk-go3">提交验证</button>
+        <div class="tip2 warn">⚠ 真实场景里这一步收走的是你的<b>真短信验证码</b>（拦截码：他拿你的号去真站登，验证码直接发到你手机上、被他截走）。<b>演示里随便编 6 位数字，千万别去别处领真码填进来。</b></div>
+      </div>
+
+      <div id="fk-msg" class="msg"></div>
+      <div class="note">🔓 <b>本站开源</b>：本页全部登录逻辑（含下面这套格式校验）就写在这个 HTML 文件里，<b>没有任何一行代码会把输入发出去</b>——无 <code>fetch</code>、无 <code>XMLHttpRequest</code>、无表单提交，实测网络请求 = 0。<br>⚠ 仅作演示，刷新即清空。真站相反：<b>每点一次"下一步"，就多交出一样东西</b>。</div>
+    </div>
+  </div>
+
+  <div class="recv">
+    <h4>骗子后台：正在审你</h4>
+    <div class="sub">对应 <code>data.js</code>：每次提交后 <code>rs()</code> 每 2.5 s 轮询一次，<b>服务器</b>决定把你推进哪个页面。<br>它<b>当场判断不了你的密码对不对</b>——密码是拿到之后拿去真站撞的。</div>
+    <div class="caphead"><span>后台日志</span><button class="mini2" id="fk-fast" disabled>⏩ 跳过等待</button></div>
+    <div class="cap" id="fk-cap"></div>
+    <div class="revwrap" id="fk-rev" hidden>
+      <div class="revtitle">已到手</div>
+      <ul class="rev" id="fk-revlist"></ul>
+    </div>
+    <button class="mini" id="fk-reset">清空演示数据</button>
+  </div>
+</div>
+
+<!-- §02 结算弹窗：三屏全填完才出现 -->
+<div class="ov" id="fk-over" hidden>
+  <div class="ovbox" role="dialog" aria-modal="true" aria-labelledby="ov-t">
+    <div class="ovtitle" id="ov-t">恭喜你，被盗号了</div>
+    <div class="ovsub">state = 5 → step_ok/ 「验证通过」—— 在真站上，走到这一步＝盗号完成</div>
+    <div class="ovbody">
+      <p style="margin-top:0"><b>三步下来，你交出去四样东西（账号、密码、手机号、验证码）：</b></p>
+      <ol>
+        <li><b>QQ 账号 + 密码（明文）</b>——点「登 录」那一刻就发出去了，<b>比页面跳转还早</b></li>
+        <li><b>手机号</b>——第二屏 <code>step_phone/</code>，用来收/拦验证码</li>
+        <li><b>短信验证码</b>——第三屏 <code>step_code/</code>，他正拿它在真站登你的号</li>
+      </ol>
+      <p><b>拿着这四样，他现在能：</b></p>
+      <ul>
+        <li>直接登录你的真账号：改密码、改绑手机、开支付</li>
+        <li>用你的号给好友发"借钱 / 转账 / 急用钱"（社交链诈骗）</li>
+        <li>接手你的游戏装备、钱包、会员，转卖或清空</li>
+        <li>因为验证码是他收的，<b>你连"改回来"这一步都会被他先手拦截</b></li>
+      </ul>
+      <p class="ovreal"><b>如果这是真的，现在立刻做：</b>① 改密码 + 开设备锁/二次验证；② 查好友有没有收到你发出的异常消息；③ 有充值/会员的先冻结；④ 把整封 .eml 提交 <kbd>12321.cn</kbd> 举报。</p>
+      <p class="ovdemo">🧪 <b>但这是演示</b>：本页<b>没有发送任何东西</b>（实测网络请求 = 0），上面这些数据只存在你自己的浏览器内存里，关掉页面就没了。真站此刻执行的是 <code>location.href='../step_ok/'</code>。</p>
+    </div>
+    <div class="ovbtns"><button class="ovbtn" id="fk-ovclose">知道了，这只是演示</button></div>
+  </div>
+</div>
+
+<!-- ══════════════ 03 双层 Base64 ══════════════ -->
+<h2><span class="n">03</span>双层 Base64：网站如何"加密"</h2>
+<p class="lead">钓鱼页 <code>data.js</code> 里的 <code>b6()</code>：把字符串按 UTF-8 转标准 Base64，<b>连调两次，没有密钥</b>。§02 里你提交的内容，右栏显示的就是它。</p>
+
+<div class="panel">
+  <textarea id="pt" rows="3" style="width:100%;background:#0a0d11;color:#b9c6d4;border:1px solid var(--line);border-radius:8px;padding:10px;font:13px/1.7 var(--mono);resize:vertical">{"act":"sv","data":{"user":"19990203","pass":"66ccff66ccff"}}</textarea>
+  <div class="viewbtns" style="margin-top:10px">
+    <button class="btn" id="e1">编码 ×1</button>
+    <button class="btn" id="e2">编码 ×2（真实请求）</button>
+    <button class="btn" id="d1">解码 ×1</button>
+    <button class="btn" id="d2">智能解码（自动识别层数）</button>
+  </div>
+  <div style="margin-top:8px;font-size:12.5px;color:var(--dim);line-height:1.9">
+    流程：<b>明文</b> ──<b>编码×1</b>──▶ 单层 Base64 ──<b>编码×2</b>──▶ 双层（真实请求 <code>sv=</code> 参数）
+    ｜反向：双层 ──<b>解码×1</b>──▶ <b>单层</b>（这就是过滤器只解一层时看到的东西）──<b>智能解码</b>──▶ 明文
+    <br><span style="opacity:.75">↑ 编码按钮会把结果<b>回填进输入框</b>，所以顺序点下去就能看到每一层；框里是明文时点解码，只会得到"已经是明文"这个正确答案。</span>
+  </div>
+  <pre id="out">点上面任意按钮看结果</pre>
+  <div class="callout"><b>要点：</b>Base64 是<b>公开可逆的编码</b>，不是加密。叠两层只为躲开"扫到 base64 就解一层"的静态规则——真正的机密传输靠的是 HTTPS，而这里 HTTPS 里装的还是明文。你甚至能在页面源码里直接读到它自己写的示例：<code>// console.log("ds('sv',{user:'4165456',pass:'446565'});")</code></div>
+</div>
+
+<footer>
+  本页基于本地 <code>.eml</code> 样本解码生成，全部数字为实测统计（437,491 字节 / 1,485 个 &lt;style&gt; / 4,452 行 data-ogsb / 185 个 U+200B / 242 处 font-size:0 / 2,284 字日文填充 / 201 字可见载荷）。<br>
+  §02 登录框为<b>开源的本地教学仿制品</b>：登录流程与那 6 条格式校验全部写在本 HTML 内，可 <kbd>Ctrl+U</kbd> 逐行核对；所有输入仅存在于本页内存，<b>不发起任何网络请求（实测 0 次）</b>，刷新即消失。<br>
+  分析过程中仅对 <code>zx.xmbjia.com</code> 的静态页面与脚本发起过<b>只读 GET</b>，未提交任何表单数据；这些请求可能在对方服务器留下本机 IP 的访问日志。<br>
+  续读：<a href="/blog/20261118-phishing-email-anatomy/">科普篇</a> · <a href="/blog/20261118-phishing-email-forensics/">技术篇</a>（IOC、时间线与处置、复现脚本）
+</footer>
+
+</div>
+
+<div id="hid-layer" hidden>
+<!-- 隐藏层完整原文，逐字取自 .eml 的 .visually-hidden span（10,531 字节） -->
+<div class="hidraw">
+<div><br></div><div style="position: relative;"><includetail><div><br></div><div style="font-size: 12px;background:#efefef;padding:8px;"><div><b>From:</b> "土屋ひより" &lt;mail@example.jp&gt;;</div><div><b>Date:</b>&nbsp;Sun, Nov 3, 2026 7:55 PM</div><div><b>To:</b>&nbsp;"和田誠"&lt;310129546@outlook.jp&gt;;<wbr></div><div></div><div><b>Subject:</b>&nbsp;ご安心してお任せください。</div></div><div><br></div></includetail></div>开云（Kaiyun）体育网页-登录入口
+开云（Kaiyun）体育网页-登录入口
+欢迎访问Kaiyun体育官方网站
+搜索
+首页
+关于开云体育
+返回
+产品展示
+返回
+Kaiyun网址视频AI分析
+开云体育网页施工安全监管系统
+平安校园监管系统
+抢修系统
+新闻资讯
+返回
+公司新闻
+行业资讯
+合作共赢
+返回
+业务咨询
+项目合作
+联系Kaiyun体育官方网站
+返回
+联系方式
+在线留言
+首页
+关于开云体育
+产品展示
+Kaiyun网址视频AI分析
+开云体育网页施工安全监管系统
+平安校园监管系统
+抢修系统
+新闻资讯
+公司新闻
+行业资讯
+合作共赢
+业务咨询
+项目合作
+联系Kaiyun体育官方网站
+联系方式
+在线留言
+ABOUT US
+关于我们
+ABOUT US
+关于我们
+开云体育平台在上海市普陀区正式成立，开云致力推动人工智能生态圈的繁荣发展。公司以"链接、体验、共创、孵化、投资"为核心理念，为人工智能产业的发展提供全方位的支持和服务，尤其专注于为产品研发企业提供渠道、数据、供应链、投资和孵化等服务，助力其加速成长。截至2023年，Kaiyun体育官方网站已成功孵化加速8000余家智能科技企业，建立了深度合作伙伴关系超过1800家，成为我国孵化加速企业合作数量最多的人工智能产业加速器之一。AI机器时代的合作产品涵盖智能健康、教育、办公、家居等8个类目，累计超过10000种。除了人工智能产品，...
+2016        年
+公司成立
+3000  万
+注册资金
+100   余 名
+员工
+查看详情 >>
+产品中心
+Product Center
+产品中心
+Product Center
+kaiyun体育官方平台
+kaiyun网站首页
+开云人工智能监管
+kaiyun体育网页产品二
+kaiyun体育网页产品一
+kaiyun人工智能产品二
+kaiyun人工智能产品一
+Kaiyun官方网页版
+开云官网登录入口
+kaiyun体育官方登录入口
+Kaiyun官方入口
+查看更多 +
+开云资讯
+NEWS CENTER
+开云资讯
+NEWS CENTER
+13
+2026-04
+一个AI团队融资2亿倒闭了
+近日，知名AI创业公司Yupp宣布：将停止服务，于4月15日正式关闭。要知道，这距离Yupp产品上线才不到一年时间。    　　曾经，Y...
+13
+2026-04
+OpenAI女神官宣离职了！曾被誉为GPT-4o之母
+近日，被业内誉为“GPT-4o之母”的OpenAI高管Joanne Jang在X平台正式发文，宣布结束其在公司长达4年半的职业生涯。  ...
+13
+2026-04
+算力需求太猛！AI一季报全面开花探针卡龙头飙涨超7倍光模块龙头翻倍
+截至2026年4月9日，A股市场已有58家上市公司发布2026年一季度业绩预告，其中51家预喜，预喜比例超过八成。在AI算力需求持续爆发...
+13
+2026-04
+Sora关停VS可灵推出优惠AI大模型迎“性价比”之战
+3月24日，OpenAI视频生成模型Sora团队发布公告称，Sora应用即将关停，为火热全球的AI视频赛道投下一颗震撼弹。这引发了行业的...
+一个AI团队融资2亿倒闭了
+OpenAI女神官宣离职了！曾被誉为GPT-4o之母
+算力需求太猛！AI一季报全面开花探针卡龙头飙涨超7倍光模块龙
+查看更多
+关于开云体育     ·
+产品展示     ·
+新闻资讯     ·
+合作共赢     ·
+联系Kaiyun体育官方网站     ·
+地址：上海市普陀区礼泉路700弄1号805室      电话：021-60909562      传真：021-60902569
+咨询热线
+021-60909562
+Copyright © 2024 开云人工智能有限公司 版权所有  沪ICP备18041948号</div><table style="border-collapse:collapse;width:100%;"><thead><tr><th style="color:#e65100;padding:6px 10px;text-align:left;font-size:11px;border-bottom:2px solid #e65100;white-space:nowrap;">Employee</th><th style="color:#e65100;padding:6px 10px;text-align:left;font-size:11px;border-bottom:2px solid #e65100;white-space:nowrap;">Course</th><th style="color:#e65100;padding:6px 10px;text-align:left;font-size:11px;border-bottom:2px solid #e65100;white-space:nowrap;">Date</th><th style="color:#e65100;padding:6px 10px;text-align:left;font-size:11px;border-bottom:2px solid #e65100;white-space:nowrap;">Duration(h)</th><th style="color:#e65100;padding:6px 10px;text-align:left;font-size:11px;border-bottom:2px solid #e65100;white-space:nowrap;">Score</th><th style="color:#e65100;padding:6px 10px;text-align:left;font-size:11px;border-bottom:2px solid #e65100;white-space:nowrap;">Certified</th></tr></thead><tbody><tr><td style="padding:6px 10px;font-size:12px;color:#444;border-bottom:1px solid #f0f0f0;">Tiffany Gutierrez</td><td style="padding:6px 10px;font-size:12px;color:#444;border-bottom:1px solid #f0f0f0;">Safety</td><td style="padding:6px 10px;font-size:12px;color:#444;border-bottom:1px solid #f0f0f0;">2025-07-17</td><td style="padding:6px 10px;font-size:12px;color:#444;border-bottom:1px solid #f0f0f0;">12</td><td style="padding:6px 10px;font-size:12px;color:#444;border-bottom:1px solid #f0f0f0;">65</td><td style="padding:6px 10px;font-size:12px;color:#444;border-bottom:1px solid #f0f0f0;">Yes</td></tr><tr><td style="padding:6px 10px;font-size:12px;color:#444;border-bottom:1px solid #f0f0f0;">Dorothy Marshall</td><td style="padding:6px 10px;font-size:12px;color:#444;border-bottom:1px solid #f0f0f0;">Excel</td><td style="padding:6px 10px;font-size:12px;color:#444;border-bottom:1px solid #f0f0f0;">2025-10-23</td><td style="padding:6px 10px;font-size:12px;color:#444;border-bottom:1px solid #f0f0f0;">30</td><td style="padding:6px 10px;font-size:12px;color:#444;border-bottom:1px solid #f0f0f0;">62</td><td style="padding:6px 10px;font-size:12px;color:#444;border-bottom:1px solid #f0f0f0;">Yes</td></tr><tr><td style="padding:6px 10px;font-size:12px;color:#444;border-bottom:1px solid #f0f0f0;">Juan Chen</td><td style="padding:6px 10px;font-size:12px;color:#444;border-bottom:1px solid #f0f0f0;">Leadership</td><td style="padding:6px 10px;font-size:12px;color:#444;border-bottom:1px solid #f0f0f0;">2025-06-22</td><td style="padding:6px 10px;font-size:12px;color:#444;border-bottom:1px solid #f0f0f0;">25</td><td style="padding:6px 10px;font-size:12px;color:#444;border-bottom:1px solid #f0f0f0;">86</td><td style="padding:6px 10px;font-size:12px;color:#444;border-bottom:1px solid #f0f0f0;">Pending</td></tr><tr><td style="padding:6px 10px;font-size:12px;color:#444;border-bottom:1px solid #f0f0f0;">Leah Cruz</td><td style="padding:6px 10px;font-size:12px;color:#444;border-bottom:1px solid #f0f0f0;">Sales</td><td style="padding:6px 10px;font-size:12px;color:#444;border-bottom:1px solid #f0f0f0;">2025-08-22</td><td style="padding:6px 10px;font-size:12px;color:#444;border-bottom:1px solid #f0f0f0;">4</td><td style="padding:6px 10px;font-size:12px;color:#444;border-bottom:1px solid #f0f0f0;">60</td><td style="padding:6px 10px;font-size:12px;color:#444;border-bottom:1px solid #f0f0f0;">Pending</td></tr><tr><td style="padding:6px 10px;font-size:12px;color:#444;border-bottom:1px solid #f0f0f0;">Virginia Smith</td><td style="padding:6px 10px;font-size:12px;color:#444;border-bottom:1px solid #f0f0f0;">Excel</td><td style="padding:6px 10px;font-size:12px;color:#444;border-bottom:1px solid #f0f0f0;">2025-04-09</td><td style="padding:6px 10px;font-size:12px;color:#444;border-bottom:1px solid #f0f0f0;">40</td><td style="padding:6px 10px;font-size:12px;color:#444;border-bottom:1px solid #f0f0f0;">68</td><td style="padding:6px 10px;font-size:12px;color:#444;border-bottom:1px solid #f0f0f0;">Yes</td></tr><tr><td style="padding:6px 10px;font-size:12px;color:#444;border-bottom:1px solid #f0f0f0;">Andrea Jenkins</td><td style="padding:6px 10px;font-size:12px;color:#444;border-bottom:1px solid #f0f0f0;">Safety</td><td style="padding:6px 10px;font-size:12px;color:#444;border-bottom:1px solid #f0f0f0;">2025-08-15</td><td style="padding:6px 10px;font-size:12px;color:#444;border-bottom:1px solid #f0f0f0;">8</td><td style="padding:6px 10px;font-size:12px;color:#444;border-bottom:1px solid #f0f0f0;">71</td><td style="padding:6px 10px;font-size:12px;color:#444;border-bottom:1px solid #f0f0f0;">Yes</td></tr><tr><td style="padding:6px 10px;font-size:12px;color:#444;border-bottom:1px solid #f0f0f0;">Debra Evans</td><td style="padding:6px 10px;font-size:12px;color:#444;border-bottom:1px solid #f0f0f0;">Python</td><td style="padding:6px 10px;font-size:12px;color:#444;border-bottom:1px solid #f0f0f0;">2025-07-02</td><td style="padding:6px 10px;font-size:12px;color:#444;border-bottom:1px solid #f0f0f0;">36</td><td style="padding:6px 10px;font-size:12px;color:#444;border-bottom:1px solid #f0f0f0;">66</td><td style="padding:6px 10px;font-size:12px;color:#444;border-bottom:1px solid #f0f0f0;">Pending</td></tr></tbody></table><p style="font-size:13px;font-weight:bold;color:#4527a0;margin:0 0 6px 0;">项目进度跟踪</p><table style="border-collapse:collapse;width:100%;font-family:Arial,sans-serif;"><thead><tr><th style="background:#4527a0;color:#fff;padding:8px 12px;text-align:left;font-size:12px;white-space:nowrap;">项目名称</th><th style="background:#4527a0;color:#fff;padding:8px 12px;text-align:left;font-size:12px;white-space:nowrap;">负责人</th><th style="background:#4527a0;color:#fff;padding:8px 12px;text-align:left;font-size:12px;white-space:nowrap;">开始日期</th><th style="background:#4527a0;color:#fff;padding:8px 12px;text-align:left;font-size:12px;white-space:nowrap;">截止日期</th><th style="background:#4527a0;color:#fff;padding:8px 12px;text-align:left;font-size:12px;white-space:nowrap;">进度</th><th style="background:#4527a0;color:#fff;padding:8px 12px;text-align:left;font-size:12px;white-space:nowrap;">状态</th></tr></thead><tbody><tr style="background:#f5f5f5;"><td style="padding:7px 12px;font-size:12px;color:#333;border-bottom:1px solid #eee;">丽水海家项目</td><td style="padding:7px 12px;font-size:12px;color:#333;border-bottom:1px solid #eee;">包春芳杰</td><td style="padding:7px 12px;font-size:12px;color:#333;border-bottom:1px solid #eee;">2025-03-09</td><td style="padding:7px 12px;font-size:12px;color:#333;border-bottom:1px solid #eee;">2025-10-03</td><td style="padding:7px 12px;font-size:12px;color:#333;border-bottom:1px solid #eee;">70%</td><td style="padding:7px 12px;font-size:12px;color:#333;border-bottom:1px solid #eee;">暂停</td></tr><tr style="background:#ffffff;"><td style="padding:7px 12px;font-size:12px;color:#333;border-bottom:1px solid #eee;">汕尾雅集项目</td><td style="padding:7px 12px;font-size:12px;color:#333;border-bottom:1px solid #eee;">钮桂红小东</td><td style="padding:7px 12px;font-size:12px;color:#333;border-bottom:1px solid #eee;">2025-03-10</td><td style="padding:7px 12px;font-size:12px;color:#333;border-bottom:1px solid #eee;">2025-10-25</td><td style="padding:7px 12px;font-size:12px;color:#333;border-bottom:1px solid #eee;">39%</td><td style="padding:7px 12px;font-size:12px;color:#333;border-bottom:1px solid #eee;">已完成</td></tr><tr style="background:#f5f5f5;"><td style="padding:7px 12px;font-size:12px;color:#333;border-bottom:1px solid #eee;">呼和浩特项目</td><td style="padding:7px 12px;font-size:12px;color:#333;border-bottom:1px solid #eee;">赖晨</td><td style="padding:7px 12px;font-size:12px;color:#333;border-bottom:1px solid #eee;">2025-05-17</td><td style="padding:7px 12px;font-size:12px;color:#333;border-bottom:1px solid #eee;">2025-12-21</td><td style="padding:7px 12px;font-size:12px;color:#333;border-bottom:1px solid #eee;">43%</td><td style="padding:7px 12px;font-size:12px;color:#333;border-bottom:1px solid #eee;">进行中</td></tr><tr style="background:#ffffff;"><td style="padding:7px 12px;font-size:12px;color:#333;border-bottom:1px solid #eee;">宜昌金信项目</td><td style="padding:7px 12px;font-size:12px;color:#333;border-bottom:1px solid #eee;">边凤英</td><td style="padding:7px 12px;font-size:12px;color:#333;border-bottom:1px solid #eee;">2025-06-09</td><td style="padding:7px 12px;font-size:12px;color:#333;border-bottom:1px solid #eee;">2025-11-08</td><td style="padding:7px 12px;font-size:12px;color:#333;border-bottom:1px solid #eee;">16%</td><td style="padding:7px 12px;font-size:12px;color:#333;border-bottom:1px solid #eee;">进行中</td></tr></tbody></table>茂名市前进路343号
+
+</div>
+
+<div id="hid-text" hidden>
+<!-- 隐藏层的纯文本降级版：裸换行折叠为空格、块级标签转回车、表格转制表符行 -->
+From: "土屋ひより" &lt;mail@example.jp&gt;;
+Date: Sun, Nov 3, 2026 7:55 PM
+To: "和田誠"&lt;310129546@outlook.jp&gt;;
+Subject: ご安心してお任せください。
+
+开云（Kaiyun）体育网页-登录入口 开云（Kaiyun）体育网页-登录入口 欢迎访问Kaiyun体育官方网站 搜索 首页 关于开云体育 返回 产品展示 返回 Kaiyun网址视频AI分析 开云体育网页施工安全监管系统 平安校园监管系统 抢修系统 新闻资讯 返回 公司新闻 行业资讯 合作共赢 返回 业务咨询 项目合作 联系Kaiyun体育官方网站 返回 联系方式 在线留言 首页 关于开云体育 产品展示 Kaiyun网址视频AI分析 开云体育网页施工安全监管系统 平安校园监管系统 抢修系统 新闻资讯 公司新闻 行业资讯 合作共赢 业务咨询 项目合作 联系Kaiyun体育官方网站 联系方式 在线留言 ABOUT US 关于我们 ABOUT US 关于我们 开云体育平台在上海市普陀区正式成立，开云致力推动人工智能生态圈的繁荣发展。公司以"链接、体验、共创、孵化、投资"为核心理念，为人工智能产业的发展提供全方位的支持和服务，尤其专注于为产品研发企业提供渠道、数据、供应链、投资和孵化等服务，助力其加速成长。截至2023年，Kaiyun体育官方网站已成功孵化加速8000余家智能科技企业，建立了深度合作伙伴关系超过1800家，成为我国孵化加速企业合作数量最多的人工智能产业加速器之一。AI机器时代的合作产品涵盖智能健康、教育、办公、家居等8个类目，累计超过10000种。除了人工智能产品，... 2016 年 公司成立 3000 万 注册资金 100 余 名 员工 查看详情 &gt;&gt; 产品中心 Product Center 产品中心 Product Center kaiyun体育官方平台 kaiyun网站首页 开云人工智能监管 kaiyun体育网页产品二 kaiyun体育网页产品一 kaiyun人工智能产品二 kaiyun人工智能产品一 Kaiyun官方网页版 开云官网登录入口 kaiyun体育官方登录入口 Kaiyun官方入口 查看更多 + 开云资讯 NEWS CENTER 开云资讯 NEWS CENTER 13 2026-04 一个AI团队融资2亿倒闭了 近日，知名AI创业公司Yupp宣布：将停止服务，于4月15日正式关闭。要知道，这距离Yupp产品上线才不到一年时间。 　　曾经，Y... 13 2026-04 OpenAI女神官宣离职了！曾被誉为GPT-4o之母 近日，被业内誉为“GPT-4o之母”的OpenAI高管Joanne Jang在X平台正式发文，宣布结束其在公司长达4年半的职业生涯。 ... 13 2026-04 算力需求太猛！AI一季报全面开花探针卡龙头飙涨超7倍光模块龙头翻倍 截至2026年4月9日，A股市场已有58家上市公司发布2026年一季度业绩预告，其中51家预喜，预喜比例超过八成。在AI算力需求持续爆发... 13 2026-04 Sora关停VS可灵推出优惠AI大模型迎“性价比”之战 3月24日，OpenAI视频生成模型Sora团队发布公告称，Sora应用即将关停，为火热全球的AI视频赛道投下一颗震撼弹。这引发了行业的... 一个AI团队融资2亿倒闭了 OpenAI女神官宣离职了！曾被誉为GPT-4o之母 算力需求太猛！AI一季报全面开花探针卡龙头飙涨超7倍光模块龙 查看更多 关于开云体育 · 产品展示 · 新闻资讯 · 合作共赢 · 联系Kaiyun体育官方网站 · 地址：上海市普陀区礼泉路700弄1号805室 电话：021-60909562 传真：021-60902569 咨询热线 021-60909562 Copyright © 2024 开云人工智能有限公司 版权所有 沪ICP备18041948号
+
+Employee	Course	Date	Duration(h)	Score	Certified
+Tiffany Gutierrez	Safety	2025-07-17	12	65	Yes
+Dorothy Marshall	Excel	2025-10-23	30	62	Yes
+Juan Chen	Leadership	2025-06-22	25	86	Pending
+Leah Cruz	Sales	2025-08-22	4	60	Pending
+Virginia Smith	Excel	2025-04-09	40	68	Yes
+Andrea Jenkins	Safety	2025-08-15	8	71	Yes
+Debra Evans	Python	2025-07-02	36	66	Pending
+
+项目进度跟踪
+
+项目名称	负责人	开始日期	截止日期	进度	状态
+丽水海家项目	包春芳杰	2025-03-09	2025-10-03	70%	暂停
+汕尾雅集项目	钮桂红小东	2025-03-10	2025-10-25	39%	已完成
+呼和浩特项目	赖晨	2025-05-17	2025-12-21	43%	进行中
+宜昌金信项目	边凤英	2025-06-09	2025-11-08	16%	进行中
+
+茂名市前进路343号
+</div>
+
+<div id="lead-ws" hidden><!-- 正文最前的空白串（逐字取自 .eml）：197 个空格 + 185 个 U+200B 交替，靠零宽字符躲过 HTML 空白折叠 -->​  ​ ​ ​ ​ ​ ​ ​ ​ ​ ​ ​ ​ ​ ​ ​ ​​ ​  ​ ​ ​ ​ ​ ​ ​ ​ ​ ​ ​ ​ ​ ​ ​ ​  ​ ​ ​ ​ ​ ​ ​ ​ ​ ​ ​ ​ ​ ​ ​ ​  ​ ​ ​ ​ ​ ​ ​ ​ ​ ​ ​ ​ ​ ​ ​ ​  ​ ​ ​ ​ ​ ​ ​ ​ ​ ​ ​ ​ ​ ​ ​ ​  ​ ​ ​ ​ ​ ​ ​ ​ ​ ​ ​ ​ ​ ​ ​ ​  ​ ​ ​ ​ ​  ​ ​ ​ ​ ​ ​ ​ ​ ​ ​ ​ ​ ​ ​ ​ ​  ​ ​ ​ ​ ​ ​ ​ ​ ​ ​ ​ ​ ​ ​ ​ ​  ​ ​ ​ ​ ​ ​ ​ ​ ​ ​ ​ ​ ​ ​ ​ ​  ​ ​ ​ ​ ​ ​ ​ ​ ​ ​ ​ ​ ​ ​ ​ ​  ​ ​ ​ ​ ​ ​ ​ ​ ​ ​ ​ ​ ​ ​ ​ ​  ​ </div>
+
+<script>
+/* ---------- 层级预览 ---------- */
+/* 与原邮件逐段对应：9 段载荷 + 1 段伪造引用头 = 201 字（前段 9 + 引用头 81 + 后段 111）
+   t:'p' 载荷段（1 个可见汉字 + 1 段隐形日文）  t:'q' 伪造的"原始邮件"引用头 */
+/* HTML 视图里的引用块：逐字段换行（原邮件是 <br> 分行 + <b> 标签） */
+const QUOTED_HTML = '-----原始邮件-----<br><b>发件人:</b> &lt;5656709175@qq.com&gt;<br>'
+  + '<b>发送时间:</b> 2026-11-17<br>'
+  + '<b>收件人:</b> 狐桂莲 &lt;4041238849@edu.cn&gt;<br>'
+  + '<b>主题:</b>';
+/* 纯文本视图里的引用块：降级成 5 行纯文字（<br>→换行、<b> 丢失） */
+const QUOTED_PLAIN = '-----原始邮件-----\n发件人: <5656709175@qq.com>\n发送时间: 2026-11-17\n收件人: 狐桂莲 <4041238849@edu.cn>\n主题:';
+const BLOCKS = [
+  {t:'p', p:[   /* ① 请及时查阅下方文档 */
+    ["请","誠心誠意対応させていただきます。"],["及","ご対応いただき、深く感謝申し上げます。"],
+    ["时","貴重なお時間をいただき、ありがとうございます。"],["查","ご協力いただき、誠にありがとうございます。"],
+    ["阅","ご満足いただけるサービスを提供してまいります。"],["下","貴重なお時間をいただき、ありがとうございます。"],
+    ["方","何卒よろしくお願い申し上げます。"],["文","ご教示いただけますと幸いです。"],
+    ["档","お忙しいところ恐縮ですが、ご対応のほどよろしくお願いいたします。"]]},
+  {t:'q'},   /* ② -----原始邮件----- … 主题: */
+  {t:'p', p:[   /* ③ 新学期，通知 */
+    ["新","お力添えいただけますと幸いです。"],["学","貴重なお時間をいただき、ありがとうございます。"],
+    ["期","丁寧に説明させていただきます。"],["，","改めてご連絡させていただきます。"],
+    ["通","ご返信をお待ちしております。"],["知","ご協力いただき、誠にありがとうございます。"]]},
+  {t:'p', p:[   /* ④ 校务部：陈老师通知 */
+    ["校","ご対応いただき、深く感謝申し上げます。"],["务","改めてご連絡させていただきます。"],
+    ["部","迅速に対応させていただきます。"],["：","誠心誠意対応させていただきます。"],
+    ["陈","ご要望にお応えできるよう最善を尽くします。"],["老","迅速に対応させていただきます。"],
+    ["师","まずは取り急ぎご連絡まで。"],["通","詳細につきましては、添付ファイルをご参照ください。"],
+    ["知","平素は格別のご高配を賜り、厚く御礼申し上げます。"]]},
+  {t:'p', p:[   /* ⑤ 关于2026年教育专项个人学籍信息变更告知（第 1 遍） */
+    ["关","ご要望にお応えできるよう最善を尽くします。"],["于","早速のご返信、誠にありがとうございます。"],
+    ["2","誠心誠意対応させていただきます。"],["0","取り急ぎ、ご報告まで申し上げます。"],
+    ["2","ご指導ご鞭撻のほど、よろしくお願いいたします。"],["6","ご期待に添えるよう努めてまいります。"],
+    ["年","お役に立てれば幸いです。"],["教","ご検討のほど、よろしくお願い申し上げます。"],
+    ["育","誠心誠意対応させていただきます。"],["专","ご確認のほど、よろしくお願いいたします。"],
+    ["项","お役に立てれば幸いです。"],["个","ご提案させていただきたく存じます。"],
+    ["人","ご査収のほど、よろしくお願い申し上げます。"],["学","何かご質問がございましたら、いつでもご連絡ください。"],
+    ["籍","ご連絡いただき、ありがとうございます。"],["信","平素は格別のご高配を賜り、厚く御礼申し上げます。"],
+    ["息","ご多忙のところ恐れ入りますが、ご確認をお願いいたします。"],["变","お手数をおかけしますが、よろしくお願いいたします。"],
+    ["更","丁寧に説明させていただきます。"],["告","ご協力いただき、誠にありがとうございます。"],
+    ["知","ご案内申し上げます。"]]},
+  {t:'p', p:[   /* ⑥ 同上（第 2 遍，填充语料换了一套 —— 模板复制没删干净） */
+    ["关","ご期待に添えるよう努めてまいります。"],["于","ご協力いただき、誠にありがとうございます。"],
+    ["2","ご返信をお待ちしております。"],["0","お気軽にご相談ください。"],
+    ["2","お役に立てれば幸いです。"],["6","今後ともご支援を賜りますようお願い申し上げます。"],
+    ["年","迅速に対応させていただきます。"],["教","ご教示いただけますと幸いです。"],
+    ["育","改めてご連絡させていただきます。"],["专","いつも大変お世話になっております。"],
+    ["项","ご指導ご鞭撻のほど、よろしくお願いいたします。"],["个","改めてご連絡させていただきます。"],
+    ["人","ご都合の良い日時をお知らせください。"],["学","迅速に対応させていただきます。"],
+    ["籍","ご安心してお任せください。"],["信","お手数をおかけしますが、よろしくお願いいたします。"],
+    ["息","まずは取り急ぎご連絡まで。"],["变","ご都合の良い日時をお知らせください。"],
+    ["更","迅速に対応させていただきます。"],["告","いつも大変お世話になっております。"],
+    ["知","お役に立てれば幸いです。"]]},
+  {t:'p', p:[   /* ⑦ 如文件过大…请扫描下方二维码打开（纯文字，图片不在这段后面） */
+    ["如","改めてご連絡させていただきます。"],["文","末永くお付き合いいただけますよう、お願い申し上げます。"],
+    ["件","迅速に対応させていただきます。"],["过","改めてご連絡させていただきます。"],
+    ["大","ご承知おきくださいますようお願いいたします。"],["导","ご都合の良い日時をお知らせください。"],
+    ["致","いつも大変お世話になっております。"],["图","取り急ぎ、ご報告まで申し上げます。"],
+    ["片","お力添えいただけますと幸いです。"],["模","詳しくは追ってご連絡いたします。"],
+    ["糊","貴重なお時間をいただき、ありがとうございます。"],["看","ご対応いただき、深く感謝申し上げます。"],
+    ["不","早速のご返信、誠にありがとうございます。"],["清","何卒よろしくお願い申し上げます。"],
+    ["，","ご承知おきくださいますようお願いいたします。"],["请","早速のご返信、誠にありがとうございます。"],
+    ["扫","いつも大変お世話になっております。"],["描","お手すきの際にご確認いただければ幸いです。"],
+    ["下","責任を持って対応させていただきます。"],["方","詳細な資料をお送りいたします。"],
+    ["二","ご対応いただき、深く感謝申し上げます。"],["维","貴重なお時間をいただき、ありがとうございます。"],
+    ["码","お手数をおかけしますが、よろしくお願いいたします。"],["打","迅速に対応させていただきます。"],
+    ["开","何卒よろしくお願い申し上げます。"],
+    ["","今後とも変わらぬご愛顧を賜りますようお願い申し上げます。"]]},   /* 孤儿填充，原邮件里就没有对应的可见字 */
+  {t:'p', qr:true, p:[   /* ⑧ 请务必及时查看不再另行发送！ —— 原邮件在这一段之后才是 <div class="qr-code"> 二维码图 */
+    ["请","早速のご返信、誠にありがとうございます。"],["务","ご案内申し上げます。"],
+    ["必","詳細につきましては、添付ファイルをご参照ください。"],["及","今後ともご支援を賜りますようお願い申し上げます。"],
+    ["时","ご迷惑をおかけして申し訳ございません。"],["查","ご返信をお待ちしております。"],
+    ["看","今後ともご支援を賜りますようお願い申し上げます。"],["不","迅速に対応させていただきます。"],
+    ["再","ご都合の良い日時をお知らせください。"],["另","ご理解とご協力を賜りますようお願い申し上げます。"],
+    ["行","ご査収のほど、よろしくお願い申し上げます。"],["发","ご承知おきくださいますようお願いいたします。"],
+    ["送","ご満足いただけるサービスを提供してまいります。"],["！","お手すきの際にご確認いただければ幸いです。"]]},
+  {t:'p', sign:true, img2:true, p:[   /* ⑨ 落款：教导处（原邮件里是 <p class="dept-sign">，右对齐；紧跟其后还有第二张图） */
+    ["教","ご意見をお聞かせいただければと存じます。"],["导","今後とも変わらぬご愛顧を賜りますようお願い申し上げます。"],
+    ["处","お忙しいところ恐縮ですが、ご対応のほどよろしくお願いいたします。"]]},
+  {t:'p', p:[   /* ⑩ 收到的同学请务必及时查看 */
+    ["收","何卒よろしくお願い申し上げます。"],["到","迅速に対応させていただきます。"],
+    ["的","お手すきの際にご確認いただければ幸いです。"],["同","詳細な資料をお送りいたします。"],
+    ["学","誠心誠意対応させていただきます。"],["请","何卒よろしくお願い申し上げます。"],
+    ["务","改めてご連絡させていただきます。"],["必","ご迷惑をおかけして申し訳ございません。"],
+    ["及","ご査収のほど、よろしくお願い申し上げます。"],["时","いつも大変お世話になっております。"],
+    ["查","ご協力いただき、誠にありがとうございます。"],["看","何かご質問がございましたら、いつでもご連絡ください。"]]}
+];
+
+const $ = id => document.getElementById(id);
+const preview=$('preview'), note=$('viewnote');
+
+let viewMode = 'victim';   /* 当前视图：控制 QR 是否显示、统计行等 */
+
+function payloadHTML(showJp, mk, groups){
+  return groups.map(g=>{
+    let s = mk ? `<span class="pl">${g[0]}</span>` : g[0];   /* 关标记 → 载荷按正常正文显示 */
+    if(showJp && g[1])
+      s += mk ? `<span class="jp">${g[1]}</span>`            /* 开标记 → 橙底标出隐形日文 */
+              : g[1];                                         /* 关标记 → 与正文一模一样 */
+    return s;
+  }).join('');
+}
+function render(){
+  const zw=$('c-zw').checked, hid=$('c-hid').checked,
+        jp=$('c-jp').checked, mk=$('c-hl').checked, tb=(viewMode==='tb');
+
+  /* Thunderbird 常规模式：Gecko 按 DOM 执行"未闭合的 font-size:0 span" → 请 之后全部隐形 */
+  if(tb){
+    preview.classList.add('tight');
+    const lead = document.getElementById('lead-ws').textContent;   /* 185 零宽 + 198 空格，逐字取自 .eml */
+    preview.innerHTML = `<div class="tbline">${esc(lead)}${BLOCKS[0].p[0][0]}</div>`;
+    /* 窗格变窄时把这行横向压到刚好放得下：整行宽度全由空格撑开（空格没有字形），压窄后肉眼无差别，
+       但"197 个空格 + 请"始终落在同一行 */
+    const el = preview.firstElementChild;
+    if(el && el.scrollWidth > el.clientWidth)
+      el.style.transform = 'scaleX(' + (el.clientWidth / el.scrollWidth).toFixed(4) + ')';
+    note.innerHTML = `<b>Thunderbird 常规模式</b> = 你实测到的样子：<b>一行"一堆空格 + 请"</b>——最前面是 <b>197 个真实空格</b> + 185 个 U+200B <b>交替排列</b>（每两个空格之间夹一个零宽字符，HTML 的空白折叠就吃不掉它们），约 810px 宽，紧接着一个<b>"请"</b>，再往后什么都没有。<br>
+      原因不是 CSS 写得狠，而是<b>标签没闭合</b>：正文写成
+      <code>请&lt;span style="font-size:0px;opacity:0"&gt;&lt;span&gt;JP&lt;/span&gt;<b>及</b>&lt;span&gt;JP&lt;/span&gt;<b>时</b>…</code>
+      —— 每对 span 只关了里面那个，<b>外层那个从"请"之后一路开到文件末尾</b>（可见区开 244 / 关 123，欠 121 个）。<br>
+      Gecko 严格按 DOM 树执行：从"及"开始的全部 2,548 个字符（含引用头、二维码行）都继承 font-size:0，又被父级 opacity:0 盖住 → 隐形，直到 EOF 才隐式闭合；再加上远程图片默认拦截，<b>连二维码都不出现</b>。<br>
+      QQ / 微信能看到全文，是因为它们的净化器会<b>补闭合标签或丢弃 font-size:0</b> —— 同一份 HTML，解析容错不同，看到的就是两封信。`;
+    return;
+  }
+
+  let h='';
+  if(zw) h += tb
+    ? `<div class="tbblank"></div>`                            /* Thunderbird：顶部那片空白 */
+    : `<span class="zw">${'​'.repeat(185)}</span>${mk ? `<span class="zwnote">185 个 U+200B 零宽空格（真实字符，可复制）—— 用来顶开首屏 / 干扰复制与粘贴</span>` : ''}<br>`;
+  if(hid){
+    /* 纯文本视图 = 客户端把 HTML 降级成文本：表格转成制表符行、行内样式全部丢弃；
+       其他视图 = 直接放源码里的行内样式（橙色表头、灰底邮件头），即"勾开隐藏层看到的原物" */
+    const isPlain = (viewMode === 'plain');
+    const inner = isPlain
+      ? esc(document.getElementById('hid-text').textContent.trim())
+      : document.getElementById('hid-layer').innerHTML;
+    h += `<div class="${mk ? 'hid' : (isPlain ? 'ptext' : 'hidn')}">${inner}</div>`;
+  }
+  BLOCKS.forEach(b=>{
+    if(b.t === 'q'){
+      /* 原邮件这里是 <blockquote class="ReferenceQuote">（带左边框、灰字）—— 标记关掉时按纯文本呈现，前后一致 */
+      h += `<div style="margin-top:8px;${mk ? 'padding-left:9px;border-left:3px solid #ccc;color:#555;' : ''}">${QUOTED_HTML}</div>`;
+      return;
+    }
+    const st2 = b.sign
+      ? `margin-top:8px;${mk ? 'text-align:right;font-weight:700;' : ''}`     /* 落款：标记开才右对齐加粗 */
+      : 'margin-top:5px';
+    const qr = (b.qr && !tb)
+      ? (viewMode === 'plain' && !mk ? ''                                    /* 纯文本：图片本身不复存在 */
+        : mk ? `<span class="qr">QR → zx.xmbjia.com/step_in/</span>`        /* 标记开：标出真实 URL */
+             : `<span class="qrn">［二维码图片］</span>`)                      /* 标记关：只说明这里有张图 */
+      : '';
+    /* 第二张图：腾讯微云文件预览缩略图 161×250 —— 正文那句"如文件过大导致图片模糊看不清"指的就是它 */
+    const img2 = (b.img2 && !tb)
+      ? (viewMode === 'plain' && !mk ? ''
+        : mk ? `<span class="img">［图2］微云预览缩略图 161×250 · picabstract-preview-ftn.weiyun.com</span>`
+             : `<span class="qrn">［文档预览图 · 微云缩略图 161×250］</span>`)
+      : '';
+    h += `<div style="${st2}">${payloadHTML(jp, mk, b.p)}${qr}${img2}</div>`;
+  });
+  /* 纯文本视图：整封信永远是**一整块文本** —— 0 个表格、0 个 style 属性、0 个 div 外壳；
+     开标记时也只用**行内 span**做标注（加粗/橙底/浅红底），不会破坏"纯文本"这个形态 */
+  if(viewMode === 'plain'){
+    const parts = [];          /* {s:HTML, q:是否引用块} —— 引用块与紧随其后的正文只隔一个换行，其余段落空一行 */
+    if(zw) parts.push({s:'​'.repeat(185) + (mk ? `<span class="zwnote">185 个零宽空格（不可见，顶开首屏 / 干扰复制）</span>` : '')});
+    if(hid){
+      const t = esc(document.getElementById('hid-text').textContent.trim());
+      parts.push({s: mk ? `<span class="hidlab">〔1px 隐藏层 · 10,531 字〕</span><span class="hidm">${t}</span>` : t});
+    }
+    BLOCKS.forEach(b=>{
+      let s;
+      if(b.t === 'q'){
+        s = mk ? QUOTED_HTML : esc(QUOTED_PLAIN);      /* 开标记：源码的 <br>+<b>；关标记：5 行纯文字 */
+      }else{
+        s = mk ? payloadHTML(jp, true, b.p) : esc(b.p.map(g=>g[0]+(jp?g[1]:'')).join(''));
+        if(b.qr   && mk) s += `<span class="qr">QR → zx.xmbjia.com/step_in/</span>`;
+        if(b.img2 && mk) s += `<span class="img">［图2］微云预览缩略图 161×250 · picabstract-preview-ftn.weiyun.com</span>`;
+      }
+      parts.push({s, q: b.t === 'q'});
+    });
+    let doc = '';
+    parts.forEach((p,i) => { doc += (i ? (parts[i-1].q ? '\n' : '\n\n') : '') + p.s; });
+    h = `<div class="ptext">${doc}</div>`;
+  }
+  preview.classList.remove('tight');
+  preview.innerHTML = h;
+
+  let txt;
+  if(!zw && !hid && !jp)
+    txt = `<b>受害者视图</b> ≈ QQ / 微信 / QQ 邮箱里看到的：伪装各自生效，只剩 201 字中文 + 二维码。日文被压成 0 像素，隐藏层被 1px 裁剪——这就是"精心设计的诈骗正文"。`;
+  else if(viewMode==='plain' && zw && hid && jp)
+    txt = `<b>纯文本 / 复制视图</b> = 客户端把 HTML <b>降级成纯文本</b>：表格 → 制表符分隔的行、<b>所有背景/边框/颜色全部丢失</b>、<code>&lt;style&gt;</code> 块被丢弃、图片不复存在。剩下的只有字：隐藏层现形、2,284 字日文把真信息淹没——也就是你从 Thunderbird 复制出来的样子。<br><span style="opacity:.8">↑ 纯文本里<b>没有"源码"这一层</b>：标签和行内样式都已经被剥掉了，所以这里不单设"原始 HTML / style 层"视图——想看源码请开「1px 隐藏层」或按 <kbd>Ctrl+U</kbd>。</span>`;
+  else if(viewMode==='all' && zw && hid && jp)
+    txt = `<b>🔑 一键看懂</b> = 一次性把四层全部打开并标注：黄条 = 185 个零宽空格 + 197 个空格（顶开首屏、干扰复制）；<b>红框 = 1px 藏起来的整版"开云体育"赌博网站与两张业务表</b>（源码原物，能看到橙色表头与灰底邮件头）；橙底 = 2,284 字隐形日文填充；加粗 = 真正的 201 字载荷；黑/蓝药丸 = 两张图的真实地址。<br><span style="opacity:.8">↑ 一句话：<b>攻击者用 437 KB 的字节骗机器，只留 201 个字骗人</b>——这个视图把"骗机器的部分"和"骗人的部分"并排放在一起。</span>`;
+  else
+    txt = `自定义组合（${viewMode==='plain'?'纯文本':(viewMode==='all'?'一键看懂':'受害者')}视图 + 手动勾选）：当前显示 ${[zw&&'零宽垫片',hid&&'隐藏层',jp&&'隐形日文'].filter(Boolean).join('、')||'（无，仅剩载荷）'}`;
+  txt += mk
+    ? `<div style="margin-top:6px;color:#ff8a3d">🏷 已标记特殊内容：橙底=隐形日文填充（2,284 字）、红框=1px 隐藏层、黄标=零宽垫片、加粗=真实载荷、灰框引用头与右对齐落款</div>`
+    : `<div style="margin-top:6px;color:#8b98a8">🏷 未标记 —— <b>整页统一按正常正文样式</b>，前后无差别、看不出哪部分是伪装（这也是原邮件在客户端里的真实样子）</div>`;
+  txt += `<div style="margin-top:5px;font-size:12.5px;color:inherit;opacity:.75">
+    统计：载荷 120 字（9 段）+ 伪造引用头 81 字 = <b style="color:#58c4ff">201 字</b>；隐形日文填充 2,284 字 / 242 处、正文前导空白 = 零宽 185 个 + 空格 197 个（交替排列，躲过 HTML 空白折叠）；<b style="color:#58c4ff">图片 2 张</b> = 二维码（⑧段后）+ 微云预览缩略图 161×250（⑨段落款后，"图片模糊看不清"指的就是它）（页面注解，不属于邮件内容）</div>`;
+  note.innerHTML = txt;
+}
+document.querySelectorAll('.toggles input').forEach(el=>el.addEventListener('change',render));
+function applyView(v){
+  viewMode=v;
+  $('c-zw').checked = v!=='victim';                 /* 零宽垫片：受害者视图里本来就不可见 */
+  $('c-hid').checked= (v==='plain' || v==='all');   /* 隐藏层：plain 降级成纯文本；all 直接放源码原物 */
+  $('c-jp').checked = (v==='plain' || v==='all');   /* font-size:0 在 victim / tb 里照样生效 */
+  $('c-hl').checked = (v==='all');                  /* 标记只在「一键看懂」里打开，其余视图一律关 */
+  render();
+}
+document.querySelectorAll('[data-view]').forEach(b=>b.addEventListener('click',()=>{
+  document.querySelectorAll('[data-view]').forEach(x=>x.classList.remove('on'));
+  b.classList.add('on');
+  applyView(b.dataset.view);
+}));
+(function initFromButton(){
+  const b=document.querySelector('[data-view].on');
+  if(b) applyView(b.dataset.view); else render();
+})();
+
+/* ---------- Base64 演示（复刻 b6()：UTF-8 → Base64） ---------- */
+function b6(s){ return btoa(unescape(encodeURIComponent(s))); }
+const out = $('out');
+function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function show(title, val, color){
+  out.innerHTML = `<span class="c">// ${esc(title)}</span>\n<span style="color:${color}">${esc(val)}</span>`;
+}
+
+/* 单层解码：先清洗空白 → 再校验字符集与长度 → 最后才碰 atob，
+   这样任何输入都只会得到人话提示，不会抛出原始异常 */
+function decodeOne(raw){
+  const s = String(raw).replace(/\s+/g,'');       // 复制过来的换行/空格先丢掉
+  if(!s) return {err:'输入是空的。'};
+  if(!/^[A-Za-z0-9+/]+={0,2}$/.test(s))
+    return {err:'这段内容不是 Base64——它已经是明文了（Base64 只含 A-Z a-z 0-9 + / =）。'};
+  if(s.length % 4 === 1)
+    return {err:'长度不合法（Base64 长度不会模 4 余 1），多半是复制时被截断了。'};
+  let v;
+  try{ v = atob(s); }
+  catch(e){ return {err:'字符集合法但填充不对，是被截断或改过的串。'}; }
+  let t = null;
+  try{ t = decodeURIComponent(escape(v)); }      // 还原 UTF-8；失败说明这层不是文本
+  catch(e){ t = null; }
+  return {v, t};
+}
+function smartDecode(raw){
+  let cur = String(raw), layers = [];
+  for(let i=0;i<3;i++){
+    const r = decodeOne(cur);
+    if(r.err) return i===0 ? {err:r.err} : {layers};
+    layers.push(r.t !== null ? r.t : r.v);
+    if(r.t === null) break;                       // 非 UTF-8 文本，不再往下剥
+    cur = r.t;
+    const c = cur.replace(/\s+/g,'');
+    if(!(/^[A-Za-z0-9+/]+={0,2}$/.test(c) && c.length % 4 === 0)) break;   // 不再像 Base64，收工
+  }
+  return {layers};
+}
+
+$('e1').onclick = ()=>{ const v=b6($('pt').value); $('pt').value=v; show('一层 b6(JSON) —— 抓包时看到的样子（已回填输入框，可接着点"解码 ×1"）', v, '#ffb454'); };
+$('e2').onclick = ()=>{ const v=b6(b6($('pt').value)); $('pt').value=v; show('两层 b6(b6(JSON)) —— 真实请求 data.php?sv=（已回填输入框，先点"解码 ×1"看过滤器那层，再点"智能解码"到底）', v, '#ff8a3d'); };
+$('d1').onclick = ()=>{
+  const r = decodeOne($('pt').value);
+  if(r.err) show('解不了：'+r.err, '（输入框里现在是明文，解码当然"没东西可解"——先点"编码 ×1/×2"把它变成 Base64，或直接点"智能解码"看它会怎么判断）', '#ff5d5d');
+  else show('解码 ×1 的结果（只剥了一层，就停在这）', r.t !== null ? r.t : r.v, '#4bd07f');
+};
+$('d2').onclick = ()=>{
+  const r = smartDecode($('pt').value);
+  if(r.err){ show('解不了：'+r.err, '（先点"编码 ×2"，再回来智能解码）', '#ff5d5d'); return; }
+  out.innerHTML = `<span class="c">// 智能解码：自动识别层数，共剥开 ${r.layers.length} 层（全程无密钥）</span>\n` +
+    r.layers.map((t,i)=>`<span class="c">-- 第 ${i+1} 层 --</span>\n<span style="color:${i===r.layers.length-1?'#4bd07f':'#ffb454'}">${esc(t)}</span>`).join('\n');
+};
+
+/* ══ §02 钓鱼站仿制品：三屏流程（登录→手机号→验证码），本地演示，绝不发请求 ══
+   依据真实 kit：step.html 的 Login() 先跑 6 道**本地**格式检查（不联网），全过才 ds('sv',{user,pass})；
+   data.js 的 rs() 每 2500ms 轮询，state 决定跳哪屏。格式检查 ≠ 校验密码——密码对错它当场不知道 ══ */
+(function fakeSite(){
+  const $=id=>document.getElementById(id);
+  if(!$('fk-go')) return;
+  const cap=$('fk-cap'), rev=$('fk-rev'), revlist=$('fk-revlist'), msg=$('fk-msg'), fast=$('fk-fast');
+  const esc=s=>String(s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+  let timer=null, step=1, stage=0;      // stage: 0登录 1手机号 2验证码
+  const S={u:'',p:'',m:'',c:''};
+
+  const log=t=>{ cap.textContent += (cap.textContent.endsWith('\n')||!cap.textContent?'':'\n') + t; cap.scrollTop=cap.scrollHeight; };
+  const show=()=>{
+    $('scr-login').hidden = stage!==0;
+    $('scr-phone').hidden = stage!==1;
+    $('scr-code').hidden  = stage!==2;
+    $('fk-url').textContent = ['zx.xmbjia.com/step_in/','zx.xmbjia.com/step_phone/','zx.xmbjia.com/step_code/'][stage];
+  };
+  const spin=t=>{ msg.innerHTML = t ? '<span class="spin"></span>'+t : ''; };
+  const goBtns=()=>{ $('fk-go').disabled=$('fk-go2').disabled=$('fk-go3').disabled=$('fk-mgen').disabled=$('fk-cgen').disabled=true; fast.disabled=false; };
+  const goDone=()=>{ $('fk-go').disabled=$('fk-go2').disabled=$('fk-go3').disabled=$('fk-mgen').disabled=$('fk-cgen').disabled=false; fast.disabled=true; };
+
+  function renderRev(n){
+    const rows=[
+      ['QQ 账号', S.u, '密码对就直接登你的真号；不对就丢进撞库库房，或改绑后转卖'],
+      ['密码', S.p, '明文到手——HTTPS 里装的也是明文，"双层 Base64"只是障眼法'],
+      ['手机号', S.m, '配合 state=3/35 的"验证码"页面＝拦截码，收你真验证码的就是他'],
+      ['短信验证码', S.c, '他正拿着这个码在真站登你的号'],
+      ['顺带拿到', 'IP / 设备 / 浏览器指纹', '只要打开页面就有了，连点"登录"都不用']
+    ];
+    revlist.innerHTML = rows.slice(0,n).map(r=>
+      `<li><b>${r[0]}：</b><span class="v">${esc(r[1]||'（未提供）')}</span><span class="why">${r[2]}</span></li>`
+    ).join('');
+    rev.hidden = false;                 // 登录一提交就露出"已到手"
+  }
+
+  function poll(list, then){
+    step=1;
+    timer=setInterval(()=>{
+      step++;
+      if(step===2){ log(`[+2.5s] 轮询 #1 → state: null   <span class="c">// 查号中…（你看到的"转圈"）</span>`); }
+      else{
+        clearInterval(timer); timer=null;
+        log(`[+5.0s] 轮询 #2 → state: <span class="r">${list[0][0]}</span>   <span class="c">// ${list[0][1]}</span>`);
+        then();
+      }
+    },2500);
+    fast.disabled=false;
+    fast.onclick=()=>{ if(timer){ clearInterval(timer); timer=null;
+      log(`[+5.0s] 轮询 #2 → state: <span class="r">${list[0][0]}</span>   <span class="c">// ${list[0][1]}（已跳过等待）</span>`);
+      then(); } };
+  }
+
+  function reset(){
+    if(timer){ clearInterval(timer); timer=null; }
+    stage=0; S.u=S.p=S.m=S.c=''; $('fk-over').hidden=true;
+    $('fk-u').value=$('fk-p').value=$('fk-m').value=$('fk-c').value='';
+    rev.hidden=true; revlist.innerHTML=''; goDone(); spin(''); show();
+    cap.textContent='// 本页无任何网络请求。等待提交…';
+  }
+
+  $('fk-fill').onclick=()=>{ $('fk-u').value='28541973'+Math.floor(Math.random()*90+10); $('fk-p').value='WrongPass!'+Math.floor(Math.random()*90+10); msg.innerHTML=''; };
+
+  /* ── 真站 step.html 的 Login()：6 道**本地**检查，全过才发凭据（一条网络请求都不产生）──
+     1 空账号 / 2 空密码 / 3 账号 6–11 位 / 4 密码 6–16 位 / 5 账号全同字符 / 6 密码全同字符 */
+  const sameChar=s=>{ if(!s) return false; const c=s.charAt(0); for(let i=0;i<s.length;i++) if(c!==s.charAt(i)) return false; return true; };
+  let errTimer=null;
+  function err(text, clearId){
+    if(clearId) $(clearId).value='';                       /* 真站会顺手清空那一栏 */
+    msg.innerHTML='⚠ '+text;
+    log(`<span class="r">✗ 本地初检拦下：</span>${text} <span class="c">// 不联网、0 字节外发；被清空的是 ${clearId==='fk-u'?'账号框':(clearId==='fk-p'?'密码框':'—')}</span>`);
+    clearTimeout(errTimer); errTimer=setTimeout(()=>{ msg.innerHTML=''; }, 3000);   /* 真站 .delay(3000).hide(0) */
+  }
+
+  $('fk-go').onclick=()=>{                                  // 屏1 登录
+    const u=$('fk-u').value, p=$('fk-p').value;             /* 真站不 trim，原样取值 */
+    if(u===''){ err('您还没有输入帐号！'); return; }
+    if(p===''){ err('您还没有输入密码！'); return; }
+    if(u.length<6||u.length>11){ err('您输入的帐号格式不正确，请重新输入。','fk-u'); return; }
+    if(p.length<6||p.length>16){ err('您输入的密码格式不正确，请重新输入。','fk-p'); return; }
+    if(sameChar(u)){ err('您输入的帐号格式不正确，请重新输入。','fk-u'); return; }
+    if(sameChar(p)){ err('您输入的密码格式不正确，请重新输入。','fk-p'); return; }
+    S.u=u; S.p=p; show(); goBtns(); spin('正在登录…');
+    cap.textContent='';
+    log('// 前端 6 道初检全部通过（账号 6–11 位、密码 6–16 位、非空、非全同字符）→ <span class="r">现在才发凭据</span>：');
+    log(`ds('sv',{user:'${esc(u)}',pass:'${esc(p)}'})`);
+    log(`→ GET ../app/data.php?sv=${b6(b6(JSON.stringify({act:'sv',data:{user:u,pass:p}})))}`);
+    log('// 凭据已发出（在任何跳转之前）。rs() 开始每 2500ms 轮询…');
+    renderRev(2);
+    poll([['9','step_phone/ 要手机号']], ()=>{ stage=1; show(); spin(''); goDone(); msg.innerHTML='⚑ 它<b>不知道密码对不对</b>，先把手机号骗到手'; });
+  };
+
+  $('fk-go2').onclick=()=>{                                 // 屏2 手机号
+    const m=$('fk-m').value.trim();
+    if(!m){ msg.innerHTML='⚠ 手机号要填（这就是它真正想要的东西之一）'; return; }
+    if(!/^1[3-9]\d{9}$/.test(m)){                          // 大陆手机号：11 位、1 后跟 3-9
+      msg.innerHTML='⚠ 手机号格式不对：要 <b>11 位</b>、第 2 位是 3–9（例 13812345678）';
+      log('\n✗ 本地校验拦下：手机号格式不合法 <span class="c">// 不联网、0 字节外发</span>');
+      return;
+    }
+    S.m=m; goBtns(); spin('验证中…');
+    log(`\n// 提交到 step_phone/：`);
+    log(`ds('sv',{phone:'${esc(m)}'})`);
+    log(`→ GET ../app/data.php?sv=${b6(b6(JSON.stringify({act:'sv',data:{phone:m}})))}`);
+    log('state: null <span class="c">// 服务器开始"发送验证码"（拦截码套路）</span>');
+    renderRev(3);
+    poll([['35','step_send/ 发送验证码 → 拦截码']], ()=>{ stage=2; show(); spin(''); goDone(); msg.innerHTML='⚑ 验证码环节＝<b>他拿你的号登真站，码发到你手机上被他截走</b>'; });
+  };
+
+  $('fk-go3').onclick=()=>{                                 // 屏3 验证码
+    const c=$('fk-c').value.trim();
+    if(!c){ msg.innerHTML='⚠ 演示里随便编 6 位数字就行（千万别填真码）'; return; }
+    if(!/^\d{6}$/.test(c)){                                // 6 位纯数字
+      msg.innerHTML='⚠ 验证码必须是 <b>6 位数字</b>（000000 也算）';
+      log('\n✗ 本地校验拦下：验证码不是 6 位数字 <span class="c">// 不联网、0 字节外发</span>');
+      return;
+    }
+    S.c=c; goBtns(); spin('提交中…');
+    log(`\n// 提交到 step_code/：`);
+    log(`ds('sv',{code:'${esc(c)}'})`);
+    log(`→ GET ../app/data.php?sv=${b6(b6(JSON.stringify({act:'sv',data:{code:c}})))}`);
+    log('state: null <span class="c">// 服务器拿真号真码去真站登录</span>');
+    renderRev(4);
+    poll([['5','step_ok/ "验证通过" → 盗号完成']], ()=>{ stage=2; show(); spin(''); goDone(); renderRev(5); msg.innerHTML='⚑ <b>账号已失守</b>：他现在用你的真号真码登你的真账号'; $('fk-over').hidden=false; $('fk-ovclose').focus(); });
+  };
+
+  /* 一键生成：随机大陆手机号（真实号段前缀） / 随机 6 位验证码 */
+  const MPRE=['130','131','132','133','134','135','136','137','138','139','150','151','152','153','155','156','157','158','159','166','170','171','172','173','175','176','177','178','179','180','181','182','183','184','185','186','187','188','189','190','191','192','193','195','196','197','198','199'];
+  const digits=n=>{ let s=''; for(let i=0;i<n;i++) s+=Math.floor(Math.random()*10); return s; };
+  $('fk-mgen').onclick=()=>{ $('fk-m').value = MPRE[Math.floor(Math.random()*MPRE.length)] + digits(8); msg.innerHTML=''; };
+  $('fk-cgen').onclick=()=>{ $('fk-c').value = String(Math.floor(Math.random()*1000000)).padStart(6,'0'); msg.innerHTML=''; };
+
+  $('fk-reset').onclick=reset;
+  $('fk-ovclose').onclick=()=>{ $('fk-over').hidden=true; };
+  document.addEventListener('keydown', e=>{ if(e.key==='Escape' && !$('fk-over').hidden) $('fk-over').hidden=true; });
+  reset();
+})();
+
+/* §03 示例值每次载入都随机（10 位账号 + 12 位十六进制密码），不再是写死的固定那串 */
+(function seedSample(){
+  const rnd=(n,cs)=>{ let s=''; for(let i=0;i<n;i++) s+=cs[Math.floor(Math.random()*cs.length)]; return s; };
+  $('pt').value = JSON.stringify({act:'sv',data:{user:rnd(10,'0123456789'), pass:rnd(12,'0123456789abcdef')}});
+})();
+
+/* 打开页面先自动跑一遍：明文 → 编码两层 → 解码还原 */
+(function autoDemo(){
+  const src = $('pt').value, l1 = b6(src), l2 = b6(l1);
+  out.innerHTML =
+    `<span class="c">// 第 0 层：明文（框里的内容）</span>\n<span style="color:#b9c6d4">${esc(src)}</span>\n\n` +
+    `<span class="c">// 第 1 层 b6()：抓包能看到的样子</span>\n<span style="color:#ffb454">${esc(l1)}</span>\n\n` +
+    `<span class="c">// 第 2 层 b6(b6())：真实请求 data.php?sv=</span>\n<span style="color:#ff8a3d">${esc(l2)}</span>\n\n` +
+    `<span class="c">// 解码：atob(atob(sv)) → 还原，无需任何密钥</span>\n<span style="color:#4bd07f">${esc(src)}</span>`;
+})();
+
+</script>
+</body>
+</html>
