@@ -1,52 +1,118 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="zh-CN" class="mdui-theme-auto">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="robots" content="noindex,nofollow">
 <meta name="referrer" content="no-referrer">
+<!--
+  MDUI 运行时：与站内博客共用同一份 /vendor/mdui 资源（同源、命中同一份 HTTP 缓存）。
+  这里刻意不加 defer —— 页面末尾那段内联 JS 会立刻读写 mdui-text-field 的 .value，
+  必须在元素解析时就已注册（否则未升级元素会被写入普通属性，升级后被原型存取器遮蔽）。
+-->
+<link rel="stylesheet" href="/vendor/mdui/mdui.css">
+<script src="/vendor/mdui/mdui.global.js"></script>
 <title>钓鱼邮件工作原理 · Titan Bio / 51 View Row</title>
 <style>
 :root{
-  --bg:#0e1116; --panel:#161b22; --panel2:#1c232c; --line:#2a323d;
-  --fg:#d7dee8; --dim:#8b98a8; --accent:#58c4ff; --danger:#ff5d5d;
-  --warn:#ffb454; --ok:#4bd07f; --mono:ui-monospace,"SF Mono",Menlo,Consolas,"Noto Sans Mono CJK SC",monospace;
+  /* 页面自己的变量全部由 mdui 令牌推导 —— 主题一切换，整页跟着换色 */
+  --bg:rgb(var(--mdui-color-background));
+  --panel:rgb(var(--mdui-color-surface-container));
+  --panel2:rgb(var(--mdui-color-surface-container-high));
+  --line:rgb(var(--mdui-color-outline-variant));
+  --fg:rgb(var(--mdui-color-on-surface));
+  --dim:rgb(var(--mdui-color-on-surface-variant));
+  --accent:rgb(var(--mdui-color-primary));
+  --danger:rgb(var(--mdui-color-error));
+  --warn:rgb(var(--mdui-color-tertiary));
+  --ok:#4bd07f;
+  --mono:ui-monospace,"SF Mono",Menlo,Consolas,"Noto Sans Mono CJK SC",monospace;
+
+  /* ── 暗色：沿用本页原来的那套配色 ── */
+  --mdui-color-primary-dark:88,196,255;
+  --mdui-color-on-primary-dark:6,20,30;
+  --mdui-color-primary-container-dark:20,60,82;
+  --mdui-color-on-primary-container-dark:190,232,255;
+  --mdui-color-secondary-dark:88,196,255;
+  --mdui-color-on-secondary-dark:6,20,30;
+  --mdui-color-secondary-container-dark:30,54,70;
+  --mdui-color-on-secondary-container-dark:196,230,250;
+  --mdui-color-background-dark:14,17,22;
+  --mdui-color-on-background-dark:215,222,232;
+  --mdui-color-surface-dark:14,17,22;
+  --mdui-color-surface-container-dark:22,27,34;
+  --mdui-color-surface-container-low-dark:16,19,24;
+  --mdui-color-surface-container-lowest-dark:6,8,11;
+  --mdui-color-surface-container-high-dark:28,35,44;
+  --mdui-color-surface-container-highest-dark:10,13,17;
+  --mdui-color-surface-variant-dark:42,50,61;
+  --mdui-color-on-surface-dark:215,222,232;
+  --mdui-color-on-surface-variant-dark:139,152,168;
+  --mdui-color-outline-dark:74,88,104;
+  --mdui-color-outline-variant-dark:42,50,61;
+  --mdui-color-error-dark:255,93,93;
+  --mdui-color-tertiary-dark:255,180,84;
+  --mdui-color-tertiary-container-dark:74,48,4;
+  --mdui-color-on-tertiary-container-dark:255,224,168;
+
+  /* ── 亮色：同色系的可读版本（浅底 + 深字） ── */
+  --mdui-color-primary-light:0,110,166;
+  --mdui-color-on-primary-light:255,255,255;
+  --mdui-color-primary-container-light:206,236,255;
+  --mdui-color-on-primary-container-light:0,32,50;
+  --mdui-color-secondary-light:0,110,166;
+  --mdui-color-on-secondary-light:255,255,255;
+  --mdui-color-secondary-container-light:214,238,255;
+  --mdui-color-on-secondary-container-light:0,32,50;
+  --mdui-color-background-light:247,249,251;
+  --mdui-color-on-background-light:24,27,31;
+  --mdui-color-surface-light:247,249,251;
+  --mdui-color-surface-container-light:240,243,246;
+  --mdui-color-surface-container-low-light:243,246,249;
+  --mdui-color-surface-container-lowest-light:255,255,255;
+  --mdui-color-surface-container-high-light:233,237,241;
+  --mdui-color-surface-container-highest-light:255,255,255;
+  --mdui-color-surface-variant-light:224,231,238;
+  --mdui-color-on-surface-light:24,27,31;
+  --mdui-color-on-surface-variant-light:86,98,112;
+  --mdui-color-outline-light:120,132,145;
+  --mdui-color-outline-variant-light:214,220,226;
+  --mdui-color-error-light:196,42,42;
+  --mdui-color-tertiary-light:176,106,0;
+  --mdui-color-tertiary-container-light:255,228,184;
+  --mdui-color-on-tertiary-container-light:57,31,0;
 }
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.75 -apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",Segoe UI,sans-serif}
-.wrap{max-width:1080px;margin:0 auto;padding:32px 20px 80px}
-header h1{font-size:27px;margin:0 0 6px;letter-spacing:.5px}
-header .sub{color:var(--dim);font-size:14px}
+.wrap{max-width:min(1080px,100%);margin:0 auto;padding:20px 20px 80px}
+/* mdui-layout-main 是 flex item，默认 min-width:auto 会被 pre 的长行顶到 1080 不肯收缩 */
+/* mdui-layout-main 默认是 flex 容器：子块会变成 flex item 并按 min-content 撑开，
+   窄屏下被 pre 的长行顶到 843px 再裁掉。本页单栏，直接走块级排版。 */
+mdui-layout{display:block}
+mdui-layout-main.wrap{display:block;min-width:0;max-width:100%}
+.wrap>*{max-width:100%}
+.sub{color:rgb(var(--mdui-color-on-surface-variant));font-size:.9rem;margin-top:.5rem}
 .chips{display:flex;flex-wrap:wrap;gap:8px;margin:14px 0 0}
-.chip{font-size:12px;padding:3px 10px;border:1px solid var(--line);border-radius:999px;color:var(--dim)}
-.chip b{color:var(--accent);font-weight:600}
-h2{font-size:19px;margin:46px 0 6px;padding-left:11px;border-left:4px solid var(--accent)}
-h2 .n{color:var(--accent);font-family:var(--mono);margin-right:8px}
-h3{font-size:15px;margin:22px 0 8px;color:#a9c7dd}
-p{margin:8px 0}
+.chip b{color:rgb(var(--mdui-color-primary));font-weight:600}
+/* 标题、段落、列表、表格排版一律交给 mdui-prose */
+h2 .n{color:rgb(var(--mdui-color-primary));font-family:var(--mono);margin-right:.5em}
+p{margin:.9em 0}
+.mdui-prose p a,.mdui-prose li a{text-decoration:underline;text-underline-offset:3px}
 .lead{color:var(--dim);font-size:14px;margin-bottom:14px}
-.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px;margin-top:20px}
-.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px}
-.card .num{font:700 26px/1.2 var(--mono);color:var(--accent)}
-.card .num.r{color:var(--danger)}
-.card .lbl{font-size:12.5px;color:var(--dim);margin-top:4px}
-.flow{display:flex;flex-direction:column;gap:0;margin-top:16px}
-.step{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 16px;position:relative}
-.step .tag{display:inline-block;font:600 11px/1 var(--mono);padding:4px 8px;border-radius:5px;background:#22303f;color:var(--accent);margin-bottom:6px}
-.step.bad .tag{background:#3a1f1f;color:#ff8a8a}
-.step.good .tag{background:#1c3326;color:var(--ok)}
-.step b{color:#fff}
+
 .step .why{color:var(--dim);font-size:13.5px;margin-top:5px}
-.arrow{text-align:center;color:var(--dim);font-size:18px;line-height:1.5;padding:2px 0}
-pre{background:#0a0d11;border:1px solid var(--line);border-radius:10px;padding:13px 15px;overflow:auto;font:12.5px/1.7 var(--mono);color:#b9c6d4;margin:10px 0}
-pre .k{color:var(--accent)} pre .v{color:var(--warn)} pre .r{color:var(--danger)} pre .c{color:#5d6b7a}
-.panel{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px 20px;margin-top:14px}
+
+pre{max-width:100%;background:rgb(var(--mdui-color-surface-container-highest));border:1px solid var(--line);border-radius:var(--mdui-shape-corner-medium);padding:13px 15px;overflow:auto;font:12.5px/1.7 var(--mono);color:rgb(var(--mdui-color-on-surface-variant));margin:10px 0}
+pre .k{color:var(--accent)} pre .v{color:var(--warn)} pre .r{color:var(--danger)} pre .c{color:rgb(var(--mdui-color-outline))}
+mdui-card.panel{padding:18px 20px;margin-top:14px}
 .toggles{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:12px}
-.tg{display:flex;align-items:center;gap:7px;background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:7px 11px;font-size:13px;cursor:pointer;user-select:none}
+
 .tg input{accent-color:var(--accent);cursor:pointer}
-.tg .cnt{font-family:var(--mono);color:var(--warn);font-size:12px}
+.toggles .tg{display:flex;align-items:center;gap:9px;background:rgb(var(--mdui-color-surface-container-high));border:1px solid var(--line);border-radius:var(--mdui-shape-corner-medium);padding:6px 11px;font-size:13px;cursor:pointer;user-select:none}
+.toggles .tg:hover{border-color:rgb(var(--mdui-color-outline))}
+.toggles .cnt{font-family:var(--mono);color:var(--warn);font-size:12px}
 .tglsep{width:1px;align-self:stretch;background:var(--line);margin:0 4px}
-.tg.hl{border-color:#7a5a24;background:#241a0e}
+
 .tg.hl input{accent-color:#ff8a3d}
 .zwnote{display:inline-block;font-size:11.5px;color:#8a6a12;background:#fff8e1;border:1px solid #f0e0b0;padding:1px 8px;border-radius:4px;margin-left:6px}
 /* 标记关闭时的"正常显示"样式：零边框、零底色，与正文完全一致 */
@@ -60,11 +126,12 @@ pre .k{color:var(--accent)} pre .v{color:var(--warn)} pre .r{color:var(--danger)
 .hid .hidraw{white-space:pre-wrap}
 includetail{display:block}
 .hid::before{word-break:keep-all}
-.viewbtns{display:flex;flex-wrap:wrap;gap:8px;margin:4px 0 14px}
-.btn{background:#22303f;color:#cfe6f7;border:1px solid #2f4356;border-radius:8px;padding:7px 14px;font-size:13.5px;cursor:pointer}
+.viewbtns{display:flex;gap:8px;margin:4px 0 14px;overflow-x:auto;overflow-y:hidden;padding-bottom:2px;scrollbar-width:thin}
+.viewbtns>mdui-segmented-button-group{flex:0 0 auto;min-width:0}
+
 .btn:hover{border-color:var(--accent);color:#fff}
-.btn.on{background:var(--accent);color:#04121c;border-color:var(--accent);font-weight:600}
-#preview{background:#fbfbf8;color:#222;border-radius:10px;padding:16px;font-size:14.5px;line-height:2.1;min-height:120px;overflow-wrap:anywhere}
+
+#preview{background:#fbfbf8;color:#222;border-radius:var(--mdui-shape-corner-medium);padding:16px;font-size:14.5px;line-height:2.1;min-height:120px;overflow-wrap:anywhere}
 #preview.tight{min-height:0}
 #preview .zw{background:repeating-linear-gradient(45deg,#ffe9a8 0 6px,#fff3d0 6px 12px);color:#a07a12;font-size:12px;padding:1px 4px;border-radius:3px}
 #preview .hid{display:block;background:#ffecec;border:1px dashed #e08a8a;border-radius:6px;padding:6px 9px;margin:6px 0;font-size:12.5px;color:#9b4b4b;line-height:1.7}
@@ -76,55 +143,57 @@ includetail{display:block}
 #preview .qrn{display:inline;background:none;border:none;padding:0;margin-left:4px;color:inherit;font-size:inherit;font-family:inherit}
 #viewnote{font-size:13.5px;color:var(--dim);margin-top:10px;border-left:3px solid var(--warn);padding-left:10px}
 #viewnote b{color:var(--warn)}
-.twocol{display:grid;grid-template-columns:1fr 1fr;gap:14px}
-@media(max-width:760px){.twocol{grid-template-columns:1fr}}
-.box{border:1px solid var(--line);border-radius:12px;padding:14px 16px;background:var(--panel)}
-.box h4{margin:0 0 8px;font-size:14px;color:var(--accent)}
-.box.bad{border-color:#5c2b2b} .box.bad h4{color:var(--danger)}
-table{width:100%;border-collapse:collapse;font-size:13.5px;margin-top:10px}
-th,td{border:1px solid var(--line);padding:8px 10px;text-align:left;vertical-align:top}
-th{background:var(--panel2);color:#a9c7dd;font-weight:600}
+
+
+ .box.bad h4{color:var(--danger)}
+/* 表格样式由 mdui-prose 提供（surface-variant 边框 + corner-large） */
 /* 页面主题不许渗进预览区里邮件自带的表格（原样式是行内给的，行内优先） */
 #preview table{font-size:12.5px;margin:8px 0;width:100%}
 #preview th,#preview td{border:none;padding:0;background:none;color:inherit;font-weight:inherit;text-align:left;vertical-align:top}
 td code{font-family:var(--mono);font-size:12.5px;color:var(--warn)}
-.risk-h{color:var(--danger)} .risk-m{color:var(--warn)} .risk-l{color:var(--ok)}
-.tl{list-style:none;padding:0;margin:14px 0 0;border-left:2px solid var(--line);margin-left:8px}
-.tl li{position:relative;padding:0 0 16px 20px;font-size:14px}
+
 .tl li::before{content:"";position:absolute;left:-6px;top:8px;width:10px;height:10px;border-radius:50%;background:var(--accent)}
 .tl li.bad::before{background:var(--danger)}
-.tl .d{font-family:var(--mono);color:var(--accent);font-size:12.5px;margin-right:8px}
-.ioc{background:#0a0d11;border:1px solid var(--line);border-radius:10px;padding:14px 16px;font-family:var(--mono);font-size:12.8px;line-height:2;color:#b9c6d4;overflow:auto}
-.ioc .lab{color:#5d6b7a;display:inline-block;width:112px}
-.ioc .val{color:var(--warn);cursor:pointer;border-bottom:1px dotted #666}
+
 .ioc .val:hover{color:var(--accent)}
 ul.check{list-style:none;padding:0;margin:12px 0}
 ul.check li{padding:7px 0 7px 30px;position:relative;border-bottom:1px dashed var(--line);font-size:14.5px}
 ul.check li::before{content:"☑";position:absolute;left:4px;color:var(--ok)}
 ul.check li.no::before{content:"☐";color:var(--dim)}
-.callout{background:#211a10;border:1px solid #5c451f;border-radius:10px;padding:12px 16px;font-size:14px;color:#f0d9a8;margin-top:14px}
-.callout b{color:#ffce6a}
-footer{margin-top:56px;padding-top:18px;border-top:1px solid var(--line);color:#5d6b7a;font-size:12.5px;line-height:1.9}
+mdui-card.callout{background:rgb(var(--mdui-color-tertiary-container));color:rgb(var(--mdui-color-on-tertiary-container));padding:12px 16px;font-size:14px;margin-top:14px}
+mdui-card.callout b{color:inherit;font-weight:700}
+footer{margin-top:56px;padding-top:18px;border-top:1px solid var(--line);color:rgb(var(--mdui-color-outline));font-size:12.5px;line-height:1.9}
 kbd{background:#22303f;border:1px solid var(--line);border-radius:5px;padding:1px 6px;font:12px var(--mono)}
 
 /* ── 01 邮件头元信息条 ── */
 .mailmeta{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:10px;margin:16px 0 4px}
-.mailmeta>div{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:11px 13px;font-size:13px;word-break:break-all;line-height:1.6}
-.mailmeta>div>span{display:block;color:var(--dim);font-size:11px;letter-spacing:.6px;margin-bottom:3px;font-family:var(--mono)}
+.mailmeta>mdui-card{padding:11px 13px;font-size:13px;word-break:break-all;line-height:1.6}
+.mailmeta>mdui-card>span{display:block;color:var(--dim);font-size:11px;letter-spacing:.6px;margin-bottom:3px;font-family:var(--mono)}
 .mailmeta b{color:var(--danger);font-weight:600}
 .mailmeta .mm-note{display:block;color:var(--warn);font-size:11.5px;letter-spacing:0;margin-top:3px}
 
 /* ── 02 开源/隐私声明条 ── */
-.safeline{background:#11201a;border:1px solid #2e5c45;border-radius:10px;padding:11px 15px;font-size:13.5px;color:#b9e4c9;line-height:1.8;margin-top:12px}
-.safeline b{color:#7ee2a8}
+mdui-card.safeline{background:rgb(var(--mdui-color-secondary-container));color:rgb(var(--mdui-color-on-secondary-container));padding:11px 15px;font-size:13.5px;line-height:1.8;margin-top:12px}
+mdui-card.safeline b{color:rgb(var(--mdui-color-primary));font-weight:700}
 .safeline kbd{background:#16302a;border-color:#2e5c45;color:#9ff0c4}
 .safeline code{color:#9ff0c4;background:#16302a;padding:1px 5px;border-radius:4px;font-size:12.5px}
 .safeline::after{content:"";display:block;clear:both}
 /* 开源：可展开的源码块 */
 /* ── 02 钓鱼站仿制品 + 骗子后台 ── */
 .demo2{display:grid;grid-template-columns:1.05fr 1fr;gap:14px;margin-top:14px;align-items:start}
-@media(max-width:820px){.demo2{grid-template-columns:1fr}}
-.fsite{background:#fff;color:#333;border:1px solid var(--line);border-radius:12px;overflow:hidden;position:relative}
+@media(max-width:820px){.demo2{grid-template-columns:1fr;gap:12px}}
+/* 窄屏：内边距收紧、分段按钮缩小、统计 chips 单行更紧凑 */
+@media(max-width:600px){
+  .wrap{padding-left:14px;padding-right:14px}
+  .sub{font-size:.85rem;line-height:1.6}
+  .viewbtns mdui-segmented-button{padding-inline:8px;font-size:12.5px}
+  .toggles{gap:8px}
+  .mailmeta{gap:8px}
+  .callout,.safeline{font-size:13px;padding:11px 13px}
+  .fsite .bod{padding:18px 16px 16px}
+  header .chips,.chips{gap:6px}
+}
+.fsite{background:#fff;color:#333;border:1px solid var(--line);border-radius:var(--mdui-shape-corner-medium);overflow:hidden;position:relative}
 .fsite .bar{display:flex;align-items:center;gap:8px;background:#eef1f5;color:#5f6b78;font:12px var(--mono);padding:9px 12px;border-bottom:1px solid #dde3ea}
 .fsite .dot{width:9px;height:9px;border-radius:50%;background:#ff5f57;box-shadow:15px 0 0 #febc2e,30px 0 0 #28c840;display:inline-block;margin-right:30px}
 .fsite .bod{padding:26px 26px 22px;text-align:center;position:relative}
@@ -156,41 +225,38 @@ kbd{background:#22303f;border:1px solid var(--line);border-radius:5px;padding:1p
 /* 后台面板 */
 .caphead{display:flex;justify-content:space-between;align-items:center;margin-top:12px}
 .caphead span{font:600 11px var(--mono);color:var(--dim);letter-spacing:1.2px}
-.mini2{background:#22303f;color:#cfe6f7;border:1px solid #2f4356;border-radius:6px;padding:4px 10px;font-size:12px;cursor:pointer}
+
 .mini2:hover{border-color:var(--accent);color:#fff}
 .mini2[disabled]{opacity:.45;cursor:not-allowed}
-.cap .c{color:#5d6b7a}.cap .k{color:var(--accent)}.cap .v{color:var(--warn)}.cap .r{color:var(--danger)}
+.cap .c{color:rgb(var(--mdui-color-outline))}.cap .k{color:var(--accent)}.cap .v{color:var(--warn)}.cap .r{color:var(--danger)}
 .revwrap{border-top:1px solid var(--line);margin-top:12px;padding-top:10px}
 .revtitle{font:700 11px var(--mono);color:var(--danger);letter-spacing:1.4px;margin-bottom:2px}
 /* ── §02 结算弹窗（复刻真站 data.js 里的 msg() 遮罩框） ── */
-.ov{position:fixed;inset:0;background:rgba(0,0,0,.74);z-index:9999;display:flex;align-items:center;justify-content:center;padding:22px}
-.ov[hidden]{display:none}
-.ovbox{background:#12161c;border:1px solid #5c2b2b;border-radius:14px;max-width:640px;width:100%;max-height:86vh;overflow:auto;padding:24px 26px 20px;box-shadow:0 18px 64px rgba(0,0,0,.65)}
-.ovtitle{font-size:25px;font-weight:800;color:#ff5d5d;letter-spacing:1.5px}
+/* 遮罩、纸面、圆角、阴影与 ESC 全由 mdui-dialog 负责 */
+.ovtitle{font-size:25px;font-weight:800;color:var(--danger);letter-spacing:1.5px}
 .ovsub{font:12.5px/1.7 var(--mono);color:var(--dim);margin-top:7px}
-.ovbody{font-size:14px;line-height:1.85;color:#cbd5e1;margin-top:14px}
-.ovbody b{color:#fff}
+.ovbody{font-size:14px;line-height:1.85;color:rgb(var(--mdui-color-on-surface));margin-top:14px}
+.ovbody b{color:rgb(var(--mdui-color-primary))}
 .ovbody ol,.ovbody ul{margin:6px 0 12px;padding-left:22px}
 .ovbody li{margin:5px 0}
-.ovbody code{font-size:12.5px;color:var(--warn);background:#151b22;padding:1px 5px;border-radius:4px}
-.ovreal{background:#211a10;border:1px solid #5c451f;border-radius:9px;padding:11px 14px;color:#f0d9a8;margin:12px 0 0}
-.ovdemo{background:#11201a;border:1px solid #2e5c45;border-radius:9px;padding:11px 14px;color:#b9e4c9;margin:10px 0 0}
+.ovbody code{font-size:12.5px;color:var(--warn);background:rgb(var(--mdui-color-surface-container-high));padding:1px 5px;border-radius:4px}
+.ovreal{background:rgb(var(--mdui-color-tertiary-container));border:1px solid rgb(var(--mdui-color-outline));border-radius:var(--mdui-shape-corner-medium);padding:11px 14px;color:rgb(var(--mdui-color-on-tertiary-container));margin:12px 0 0}
+.ovdemo{background:#11201a;border:1px solid #2e5c45;border-radius:var(--mdui-shape-corner-medium);padding:11px 14px;color:#b9e4c9;margin:10px 0 0}
 .ovdemo code{color:#9ff0c4;background:#16302a}
 .ovbtns{margin-top:16px;text-align:right}
-.ovbtn{background:#5c2b2b;color:#ffd9d9;border:1px solid #8a3a3a;border-radius:8px;padding:9px 20px;font-size:14px;cursor:pointer;font-family:inherit}
-.ovbtn:hover{background:#7a3535;color:#fff}
+
 .fsite .note{font-size:11.5px;color:#93a0ae;text-align:left;line-height:1.75;margin-top:6px;border-top:1px dashed #e2e7ed;padding-top:10px}
 .fsite .note b{color:#c0392b}
-.recv{background:var(--panel);border:1px solid #5c2b2b;border-radius:12px;padding:16px 18px}
+mdui-card.recv{padding:16px 18px}
 .recv h4{margin:0 0 4px;font-size:15px;color:var(--danger)}
 .recv .sub{font-size:12.5px;color:var(--dim);line-height:1.7}
-.cap{background:#0a0d11;border:1px solid var(--line);border-radius:9px;padding:12px 14px;margin-top:11px;font:12.5px/1.75 var(--mono);color:#b9c6d4;min-height:120px;max-height:230px;overflow:auto;white-space:pre-wrap;word-break:break-all}
+.cap{background:rgb(var(--mdui-color-surface-container-highest));border:1px solid var(--line);border-radius:var(--mdui-shape-corner-medium);padding:12px 14px;margin-top:11px;font:12.5px/1.75 var(--mono);color:rgb(var(--mdui-color-on-surface-variant));min-height:120px;max-height:230px;overflow:auto;white-space:pre-wrap;word-break:break-all}
 .rev{list-style:none;padding:0;margin:12px 0 0;font-size:13.5px}
 .rev li{padding:8px 0 8px 0;border-top:1px dashed var(--line);line-height:1.7}
 .rev li>b{color:#ff8a8a;display:inline-block;min-width:74px}
 .rev .v{color:var(--warn);font-family:var(--mono);word-break:break-all}
 .rev .why{display:block;color:var(--dim);font-size:12.5px;padding-left:0}
-.mini{background:#3a1f1f;color:#ffb3b3;border:1px solid #5c2b2b;border-radius:7px;padding:6px 13px;font-size:13px;cursor:pointer;margin-top:12px}
+
 .mini:hover{border-color:var(--danger);color:#fff}
 
 /* ── 站内文章链接 ── */
@@ -199,61 +265,70 @@ a:hover{color:#7fe1ff}
 </style>
 </head>
 <body>
-<div class="wrap">
-<div class="callout" style="margin-top:0"><b>⚠ 教学演示页，非钓鱼页：</b>本页仿制的「QQ 安全中心」登录框只在你自己的浏览器里跑，<b>零网络请求、不保存、不上传</b>；与腾讯公司无任何关联，搜索引擎已被要求不索引本页。<b>请勿在这里输入任何真实账号密码。</b></div>
+<mdui-top-app-bar>
+  <mdui-top-app-bar-title>一封钓鱼邮件的完整工作原理</mdui-top-app-bar-title>
+</mdui-top-app-bar>
 
+<mdui-layout>
+<mdui-layout-main class="wrap mdui-prose">
+<div class="sub">样本：<code>.eml</code> — From「Titan Bio」/ Subject「51 View Row, Colorado Springs」· 2026-11-18 19:41 +0800</div>
 
-<header>
-  <h1>一封钓鱼邮件的完整工作原理</h1>
-  <div class="sub">样本：<code>.eml</code> — From「Titan Bio」/ Subject「51 View Row, Colorado Springs」· 2026-11-18 19:41 +0800</div>
   <div class="chips">
-    <span class="chip">正文 <b>437,491</b> 字节</span>
-    <span class="chip">真话 <b>201</b> 字（占 0.05%）</span>
-    <span class="chip">隐形日文填充 <b>2,284</b> 字</span>
-    <span class="chip">&lt;style&gt; <b>1,485</b> 个</span>
-    <span class="chip">混淆规则重复 <b>4,452</b> 次</span>
-    <span class="chip">伪装层 <b>4</b> 层</span>
-    <span class="chip">域名年龄 <b>7 周</b></span>
+    <mdui-chip class="chip" variant="assist">正文 <b>437,491</b> 字节</mdui-chip>
+    <mdui-chip class="chip" variant="assist">真话 <b>201</b> 字（占 0.05%）</mdui-chip>
+    <mdui-chip class="chip" variant="assist">隐形日文填充 <b>2,284</b> 字</mdui-chip>
+    <mdui-chip class="chip" variant="assist">&lt;style&gt; <b>1,485</b> 个</mdui-chip>
+    <mdui-chip class="chip" variant="assist">混淆规则重复 <b>4,452</b> 次</mdui-chip>
+    <mdui-chip class="chip" variant="assist">伪装层 <b>4</b> 层</mdui-chip>
+    <mdui-chip class="chip" variant="assist">域名年龄 <b>7 周</b></mdui-chip>
   </div>
-</header>
 
-<div class="callout" style="margin-top:14px">📖 <b>配套文章</b>：本页只保留「可点的部分」——<a href="/blog/20261118-phishing-email-anatomy/">科普篇 · 四层伪装与防骗指南</a>　｜　<a href="/blog/20261118-phishing-email-forensics/">技术篇 · 头字段 / DOM 统计 / 检测脚本</a><br><span style="opacity:.85">IOC、时间线、六道初检表、状态机、全链路与处置建议都在文章里，不在这一页重复。</span></div>
+<mdui-card class="callout" variant="filled" style="margin-top:16px"><b>⚠ 教学演示页，非钓鱼页：</b>本页仿制的「QQ 安全中心」登录框只在你自己的浏览器里跑，<b>零网络请求、不保存、不上传</b>；与腾讯公司无任何关联，搜索引擎已被要求不索引本页。<b>请勿在这里输入任何真实账号密码。</b></mdui-card>
+
+
+
+
+<mdui-card class="callout" variant="filled" style="margin-top:14px">📖 <b>配套文章</b>：本页只保留「可点的部分」——<a href="/blog/20261118-phishing-email-anatomy/">科普篇 · 四层伪装与防骗指南</a>　｜　<a href="/blog/20261118-phishing-email-forensics/">技术篇 · 头字段 / DOM 统计 / 检测脚本</a><br><span style="opacity:.85">IOC、时间线、六道初检表、状态机、全链路与处置建议都在文章里，不在这一页重复。</span></mdui-card>
 
 <!-- ══════════════ 01 恶意邮件 demo ══════════════ -->
 <h2><span class="n">01</span>恶意邮件：你收到的样子</h2>
 <p class="lead">先看原件。发件人显示「Titan Bio」，主题是一个美国地址，正文自称学校教务处——<b>三者互不相干</b>，因为这封信不是写给"你"的，是批量套模板发的。</p>
 
 <div class="mailmeta">
-  <div><span>发件人</span>Titan Bio &lt;6m2nTVWEWzRdK3bMji@<b>ethnolinguistically.ren</b>&gt;<span class="mm-note">← 显示名与地址本身都可被任意伪造</span></div>
-  <div><span>主题</span>51 View Row, Colorado Springs<span class="mm-note">← 与正文毫无关系的诱饵</span></div>
-  <div><span>回复到</span>a13565220748@163.com<span class="mm-note">← 不是发件人，回信直接进骗子信箱</span></div>
-  <div><span>实际投给你</span>信封收件人 ≠ To 头写的地址<span class="mm-note">← 详见技术篇</span></div>
+  <mdui-card variant="elevated"><span>发件人</span>Titan Bio &lt;6m2nTVWEWzRdK3bMji@<b>ethnolinguistically.ren</b>&gt;<span class="mm-note">← 显示名与地址本身都可被任意伪造</span></mdui-card>
+  <mdui-card variant="elevated"><span>主题</span>51 View Row, Colorado Springs<span class="mm-note">← 与正文毫无关系的诱饵</span></mdui-card>
+  <mdui-card variant="elevated"><span>回复到</span>a13565220748@163.com<span class="mm-note">← 不是发件人，回信直接进骗子信箱</span></mdui-card>
+  <mdui-card variant="elevated"><span>实际投给你</span>信封收件人 ≠ To 头写的地址<span class="mm-note">← 详见技术篇</span></mdui-card>
 </div>
 
-<div class="panel">
+<mdui-card class="panel" variant="outlined">
   <div class="toggles">
-    <label class="tg"><input type="checkbox" id="c-zw" checked> 零宽垫片 <span class="cnt">×185</span></label>
-    <label class="tg"><input type="checkbox" id="c-hid" checked> 1px 隐藏层 <span class="cnt">10,548 字</span></label>
-    <label class="tg"><input type="checkbox" id="c-jp" checked> 隐形日文 <span class="cnt">2,284 字</span></label>
+    <div class="tg"><mdui-switch id="c-zw" checked></mdui-switch>零宽垫片 <span class="cnt">×185</span></div>
+    <div class="tg"><mdui-switch id="c-hid" checked></mdui-switch>1px 隐藏层 <span class="cnt">10,548 字</span></div>
+    <div class="tg"><mdui-switch id="c-jp" checked></mdui-switch>隐形日文 <span class="cnt">2,284 字</span></div>
     <span class="tglsep" aria-hidden="true"></span>
-    <label class="tg hl"><input type="checkbox" id="c-hl"> 🏷 标记特殊内容</label>
+    <div class="tg"><mdui-switch id="c-hl"></mdui-switch>🏷 标记特殊内容</div>
   </div>
   <div class="viewbtns">
-    <button class="btn on" data-view="victim">受害者视图（QQ / 微信 / QQ 邮箱）</button>
-    <button class="btn" data-view="tb">Thunderbird 常规模式</button>
-    <button class="btn" data-view="plain">纯文本 / 复制视图</button>
-    <button class="btn" data-view="all">🔑 一键看懂</button>
+    <mdui-segmented-button-group id="viewgroup" selects="single" full-width>
+      <mdui-segmented-button value="victim" selected>受害者视图</mdui-segmented-button>
+      <mdui-segmented-button value="tb">Thunderbird</mdui-segmented-button>
+      <mdui-segmented-button value="plain">纯文本 / 复制</mdui-segmented-button>
+      <mdui-segmented-button value="all">🔑 一键看懂</mdui-segmented-button>
+    </mdui-segmented-button-group>
   </div>
   <div id="preview"></div>
   <div id="viewnote"></div>
-</div>
+</mdui-card>
 <p class="lead">注意正文那句「如文件过大导致<b>图片模糊看不清</b>，请扫描下方二维码打开」——二维码指向的就是下一节的钓鱼站。把上面的视图轮流点一遍：同一封信，<b>受害者视图 201 字、纯文本满屏日文垃圾、Thunderbird 只剩一个"请"字</b>；拿不准就直接点 <b>🔑 一键看懂</b>——四层伪装一次全开并逐块标注。</p>
+
+<mdui-divider style="margin-top:40px"></mdui-divider>
 
 <!-- ══════════════ 02 恶意网站 demo ══════════════ -->
 <h2><span class="n">02</span>恶意网站：高仿 QQ 登录（可交互）</h2>
 <p class="lead">左边是钓鱼页 <code>zx.xmbjia.com/step_in/</code> 的<b>仿制品</b>，按真实 kit 的流程走<b>三屏：账号密码 → 验证手机号 → 短信验证码</b>。在右边实时看<b>骗子后台拿到了什么、又在怎么审你</b>。</p>
-<div class="safeline">🔓 <b>本站开源</b>：源码就是<b>当前这个 .html 文件本身</b>（右键 → 查看网页源代码，或 <kbd>Ctrl+U</kbd>），§02 的登录与校验逻辑可逐行核对——下面也把那段原文贴出来了 ｜ 🚫 <b>不会上传任何输入信息</b>：页面里没有任何 <code>fetch</code> / <code>XMLHttpRequest</code> / 表单提交，输入只存在于你自己的浏览器内存中（已实测<b>网络请求 = 0</b>）｜ 🧪 <b>仅作演示</b>，刷新即清空</div>
-<div class="callout" style="margin-top:6px"><b>建议先这么玩：</b>点「🎲 填一个故意错的」再登 录——它<b>照样收下</b>。钓鱼页的<b>前端初检只有格式</b>（账号 6–11 位、密码 6–16 位、不能为空、不能整串全是同一个字符），<b>不校验密码是否正确</b>：密码是拿到手之后才拿去真站试的，它当场根本不知道你输错没输错，"密码错误"四个字同样是它事后编的。<br>⚠ 反过来也成立：<b>格式太离谱（比如只填 3 位）会被它本地弹回，一个字节都不发</b>——所以试它要填<b>格式合规的假数据</b>（🎲 按钮生成的就是）。而每多走一屏，就多交出一样东西。</div>
+<mdui-card class="safeline" variant="filled">🔓 <b>本站开源</b>：源码就是<b>当前这个 .html 文件本身</b>（右键 → 查看网页源代码，或 <kbd>Ctrl+U</kbd>），§02 的登录与校验逻辑可逐行核对——下面也把那段原文贴出来了 ｜ 🚫 <b>不会上传任何输入信息</b>：页面里没有任何 <code>fetch</code> / <code>XMLHttpRequest</code> / 表单提交，输入只存在于你自己的浏览器内存中（已实测<b>网络请求 = 0</b>）｜ 🧪 <b>仅作演示</b>，刷新即清空</mdui-card>
+<mdui-card class="callout" variant="filled" style="margin-top:6px"><b>建议先这么玩：</b>点「🎲 填一个故意错的」再登 录——它<b>照样收下</b>。钓鱼页的<b>前端初检只有格式</b>（账号 6–11 位、密码 6–16 位、不能为空、不能整串全是同一个字符），<b>不校验密码是否正确</b>：密码是拿到手之后才拿去真站试的，它当场根本不知道你输错没输错，"密码错误"四个字同样是它事后编的。<br>⚠ 反过来也成立：<b>格式太离谱（比如只填 3 位）会被它本地弹回，一个字节都不发</b>——所以试它要填<b>格式合规的假数据</b>（🎲 按钮生成的就是）。而每多走一屏，就多交出一样东西。</mdui-card>
 
 <div class="demo2">
   <div class="fsite">
@@ -295,22 +370,22 @@ a:hover{color:#7fe1ff}
     </div>
   </div>
 
-  <div class="recv">
+  <mdui-card class="recv" variant="outlined">
     <h4>骗子后台：正在审你</h4>
     <div class="sub">对应 <code>data.js</code>：每次提交后 <code>rs()</code> 每 2.5 s 轮询一次，<b>服务器</b>决定把你推进哪个页面。<br>它<b>当场判断不了你的密码对不对</b>——密码是拿到之后拿去真站撞的。</div>
-    <div class="caphead"><span>后台日志</span><button class="mini2" id="fk-fast" disabled>⏩ 跳过等待</button></div>
+    <div class="caphead"><span>后台日志</span><mdui-button variant="text" id="fk-fast" disabled>⏩ 跳过等待</mdui-button></div>
     <div class="cap" id="fk-cap"></div>
     <div class="revwrap" id="fk-rev" hidden>
       <div class="revtitle">已到手</div>
       <ul class="rev" id="fk-revlist"></ul>
     </div>
-    <button class="mini" id="fk-reset">清空演示数据</button>
-  </div>
+    <mdui-button variant="outlined" id="fk-reset">清空演示数据</mdui-button>
+  </mdui-card>
 </div>
 
 <!-- §02 结算弹窗：三屏全填完才出现 -->
-<div class="ov" id="fk-over" hidden>
-  <div class="ovbox" role="dialog" aria-modal="true" aria-labelledby="ov-t">
+<mdui-dialog id="fk-over" close-on-esc>
+  <div class="ovbox">
     <div class="ovtitle" id="ov-t">恭喜你，被盗号了</div>
     <div class="ovsub">state = 5 → step_ok/ 「验证通过」—— 在真站上，走到这一步＝盗号完成</div>
     <div class="ovbody">
@@ -330,21 +405,25 @@ a:hover{color:#7fe1ff}
       <p class="ovreal"><b>如果这是真的，现在立刻做：</b>① 改密码 + 开设备锁/二次验证；② 查好友有没有收到你发出的异常消息；③ 有充值/会员的先冻结；④ 把整封 .eml 提交 <kbd>12321.cn</kbd> 举报。</p>
       <p class="ovdemo">🧪 <b>但这是演示</b>：本页<b>没有发送任何东西</b>（实测网络请求 = 0），上面这些数据只存在你自己的浏览器内存里，关掉页面就没了。真站此刻执行的是 <code>location.href='../step_ok/'</code>。</p>
     </div>
-    <div class="ovbtns"><button class="ovbtn" id="fk-ovclose">知道了，这只是演示</button></div>
+    <div class="ovbtns"><mdui-button variant="tonal" id="fk-ovclose">知道了，这只是演示</mdui-button></div>
   </div>
-</div>
+</mdui-dialog>
+
+<mdui-divider style="margin-top:40px"></mdui-divider>
 
 <!-- ══════════════ 03 双层 Base64 ══════════════ -->
 <h2><span class="n">03</span>双层 Base64：网站如何"加密"</h2>
 <p class="lead">钓鱼页 <code>data.js</code> 里的 <code>b6()</code>：把字符串按 UTF-8 转标准 Base64，<b>连调两次，没有密钥</b>。§02 里你提交的内容，右栏显示的就是它。</p>
 
-<div class="panel">
-  <textarea id="pt" rows="3" style="width:100%;background:#0a0d11;color:#b9c6d4;border:1px solid var(--line);border-radius:8px;padding:10px;font:13px/1.7 var(--mono);resize:vertical">{"act":"sv","data":{"user":"19990203","pass":"66ccff66ccff"}}</textarea>
+<mdui-card class="panel" variant="outlined">
+  <mdui-text-field id="pt" rows="3" variant="outlined" label="明文 JSON（可编辑）"
+    value='{"act":"sv","data":{"user":"19990203","pass":"66ccff66ccff"}}'
+    style="width:100%;font-family:var(--mono)"></mdui-text-field>
   <div class="viewbtns" style="margin-top:10px">
-    <button class="btn" id="e1">编码 ×1</button>
-    <button class="btn" id="e2">编码 ×2（真实请求）</button>
-    <button class="btn" id="d1">解码 ×1</button>
-    <button class="btn" id="d2">智能解码（自动识别层数）</button>
+    <mdui-button variant="tonal" id="e1">编码 ×1</mdui-button>
+    <mdui-button variant="tonal" id="e2">编码 ×2（真实请求）</mdui-button>
+    <mdui-button variant="tonal" id="d1">解码 ×1</mdui-button>
+    <mdui-button variant="tonal" id="d2">智能解码（自动识别层数）</mdui-button>
   </div>
   <div style="margin-top:8px;font-size:12.5px;color:var(--dim);line-height:1.9">
     流程：<b>明文</b> ──<b>编码×1</b>──▶ 单层 Base64 ──<b>编码×2</b>──▶ 双层（真实请求 <code>sv=</code> 参数）
@@ -352,8 +431,8 @@ a:hover{color:#7fe1ff}
     <br><span style="opacity:.75">↑ 编码按钮会把结果<b>回填进输入框</b>，所以顺序点下去就能看到每一层；框里是明文时点解码，只会得到"已经是明文"这个正确答案。</span>
   </div>
   <pre id="out">点上面任意按钮看结果</pre>
-  <div class="callout"><b>要点：</b>Base64 是<b>公开可逆的编码</b>，不是加密。叠两层只为躲开"扫到 base64 就解一层"的静态规则——真正的机密传输靠的是 HTTPS，而这里 HTTPS 里装的还是明文。你甚至能在页面源码里直接读到它自己写的示例：<code>// console.log("ds('sv',{user:'4165456',pass:'446565'});")</code></div>
-</div>
+  <mdui-card class="callout" variant="filled"><b>要点：</b>Base64 是<b>公开可逆的编码</b>，不是加密。叠两层只为躲开"扫到 base64 就解一层"的静态规则——真正的机密传输靠的是 HTTPS，而这里 HTTPS 里装的还是明文。你甚至能在页面源码里直接读到它自己写的示例：<code>// console.log("ds('sv',{user:'4165456',pass:'446565'});")</code></mdui-card>
+</mdui-card>
 
 <footer>
   本页基于本地 <code>.eml</code> 样本解码生成，全部数字为实测统计（437,491 字节 / 1,485 个 &lt;style&gt; / 4,452 行 data-ogsb / 185 个 U+200B / 242 处 font-size:0 / 2,284 字日文填充 / 201 字可见载荷）。<br>
@@ -362,7 +441,8 @@ a:hover{color:#7fe1ff}
   续读：<a href="/blog/20261118-phishing-email-anatomy/">科普篇</a> · <a href="/blog/20261118-phishing-email-forensics/">技术篇</a>（IOC、时间线与处置、复现脚本）
 </footer>
 
-</div>
+</mdui-layout-main>
+</mdui-layout>
 
 <div id="hid-layer" hidden>
 <!-- 隐藏层完整原文，逐字取自 .eml 的 .visually-hidden span（10,531 字节） -->
@@ -706,7 +786,13 @@ function render(){
     统计：载荷 120 字（9 段）+ 伪造引用头 81 字 = <b style="color:#58c4ff">201 字</b>；隐形日文填充 2,284 字 / 242 处、正文前导空白 = 零宽 185 个 + 空格 197 个（交替排列，躲过 HTML 空白折叠）；<b style="color:#58c4ff">图片 2 张</b> = 二维码（⑧段后）+ 微云预览缩略图 161×250（⑨段落款后，"图片模糊看不清"指的就是它）（页面注解，不属于邮件内容）</div>`;
   note.innerHTML = txt;
 }
-document.querySelectorAll('.toggles input').forEach(el=>el.addEventListener('change',render));
+document.querySelectorAll('.toggles mdui-switch').forEach(el=>el.addEventListener('change',render));
+document.querySelector('.toggles').addEventListener('click',e=>{   /* 点标签文字也要能拨动，且只拨一次 */
+  if(e.target.closest('mdui-switch')) return;                      /* 点在开关上：交给组件自己处理 */
+  const box=e.target.closest('.tg'); if(!box) return;
+  const sw=box.querySelector('mdui-switch'); if(!sw||sw.disabled) return;
+  sw.checked=!sw.checked; sw.dispatchEvent(new Event('change',{bubbles:true}));
+});
 function applyView(v){
   viewMode=v;
   $('c-zw').checked = v!=='victim';                 /* 零宽垫片：受害者视图里本来就不可见 */
@@ -715,15 +801,9 @@ function applyView(v){
   $('c-hl').checked = (v==='all');                  /* 标记只在「一键看懂」里打开，其余视图一律关 */
   render();
 }
-document.querySelectorAll('[data-view]').forEach(b=>b.addEventListener('click',()=>{
-  document.querySelectorAll('[data-view]').forEach(x=>x.classList.remove('on'));
-  b.classList.add('on');
-  applyView(b.dataset.view);
-}));
-(function initFromButton(){
-  const b=document.querySelector('[data-view].on');
-  if(b) applyView(b.dataset.view); else render();
-})();
+const vgroup=$('viewgroup');                       /* MDUI 分段按钮：单选，change 时 group.value 就是当前视图 */
+vgroup.addEventListener('change',()=>applyView(vgroup.value));
+applyView(vgroup.value || 'victim');
 
 /* ---------- Base64 演示（复刻 b6()：UTF-8 → Base64） ---------- */
 function b6(s){ return btoa(unescape(encodeURIComponent(s))); }
@@ -833,7 +913,7 @@ $('d2').onclick = ()=>{
 
   function reset(){
     if(timer){ clearInterval(timer); timer=null; }
-    stage=0; S.u=S.p=S.m=S.c=''; $('fk-over').hidden=true;
+    stage=0; S.u=S.p=S.m=S.c=''; $('fk-over').open=false;
     $('fk-u').value=$('fk-p').value=$('fk-m').value=$('fk-c').value='';
     rev.hidden=true; revlist.innerHTML=''; goDone(); spin(''); show();
     cap.textContent='// 本页无任何网络请求。等待提交…';
@@ -901,7 +981,7 @@ $('d2').onclick = ()=>{
     log(`→ GET ../app/data.php?sv=${b6(b6(JSON.stringify({act:'sv',data:{code:c}})))}`);
     log('state: null <span class="c">// 服务器拿真号真码去真站登录</span>');
     renderRev(4);
-    poll([['5','step_ok/ "验证通过" → 盗号完成']], ()=>{ stage=2; show(); spin(''); goDone(); renderRev(5); msg.innerHTML='⚑ <b>账号已失守</b>：他现在用你的真号真码登你的真账号'; $('fk-over').hidden=false; $('fk-ovclose').focus(); });
+    poll([['5','step_ok/ "验证通过" → 盗号完成']], ()=>{ stage=2; show(); spin(''); goDone(); renderRev(5); msg.innerHTML='⚑ <b>账号已失守</b>：他现在用你的真号真码登你的真账号'; $('fk-over').open=true; $('fk-ovclose').focus(); });
   };
 
   /* 一键生成：随机大陆手机号（真实号段前缀） / 随机 6 位验证码 */
@@ -911,8 +991,8 @@ $('d2').onclick = ()=>{
   $('fk-cgen').onclick=()=>{ $('fk-c').value = String(Math.floor(Math.random()*1000000)).padStart(6,'0'); msg.innerHTML=''; };
 
   $('fk-reset').onclick=reset;
-  $('fk-ovclose').onclick=()=>{ $('fk-over').hidden=true; };
-  document.addEventListener('keydown', e=>{ if(e.key==='Escape' && !$('fk-over').hidden) $('fk-over').hidden=true; });
+  $('fk-ovclose').onclick=()=>{ $('fk-over').open=false; };
+  document.addEventListener('keydown', e=>{ if(e.key==='Escape' && $('fk-over').open) $('fk-over').open=false; });
   reset();
 })();
 

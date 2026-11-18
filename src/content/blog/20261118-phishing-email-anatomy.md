@@ -78,6 +78,8 @@ tags: ['安全', '网络']
 
 配两张图：一张二维码，一张「文档预览」缩略图（就是那句「图片模糊看不清」所指的东西）。
 
+
+
 **但同一封信，在不同软件里长得完全不一样**：
 
 | 打开方式 | 你会看到 |
@@ -87,7 +89,18 @@ tags: ['安全', '网络']
 | Thunderbird | **只剩一个「请」字**，图片全被拦下 —— 骗局直接断在这里 |
 
 第三行最邪门。原因说穿了很简单：**它那些藏日文的标签根本没写闭合**（开了 244 个，只关了 123 个）。QQ、微信这类净化器会自动帮你补全，所以照常显示；老老实实按规范解析的 Thunderbird 则被那个没关上的标签一路吞到文件末尾，**后面所有字都被判了隐形**。
+<style>
+/* 黑幕（moegirl .heimu 同款）：文字与背景同色，鼠标悬停才显形 */
+.heimu{--heimu-bg:#181a1b;--heimu-fg:#fff;background-color:var(--heimu-bg);color:var(--heimu-bg);
+  border-radius:4px;padding:.1em .4em;transition:color .13s linear;text-shadow:none}
+.heimu:hover,.heimu:active{color:var(--heimu-fg)}
+.heimu a{color:inherit}
+:root.mdui-theme-dark .heimu{--heimu-bg:#4e5558;--heimu-fg:#e8e6e3}
+:root.mdui-theme-light .heimu{--heimu-bg:#181a1b;--heimu-fg:#fff}
+@media (prefers-color-scheme:dark){:root.mdui-theme-auto .heimu{--heimu-bg:#4e5558;--heimu-fg:#e8e6e3}}
+</style>
 
+<span class="heimu">~~骗子的灵感来源：[偽中国語 / 重音テト × 足立レイ - 音無あふ](https://www.bilibili.com/video/BV1x5jmzTEJf)~~</span>
 <mdui-card variant="filled" style="margin-top:1rem">
 <p style="margin:0">同一封信，解析方式不同，看到的就是两封信。这也给出了一条最省事的防骗建议：<strong>重要的通知，以纯文本为准</strong>——伪装在纯文本视图里全都会掉光。</p>
 </mdui-card>
