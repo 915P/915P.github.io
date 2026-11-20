@@ -1,0 +1,2022 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>任务流手机 · 可点击原型</title>
+<style>
+/* ============================================================
+   1. 设计变量与基础
+   改配色只需要动 :root 里的几个变量
+   ============================================================ */
+:root{
+  --bg:#08090d;
+  --screen:#0f1117;
+  --card:#161923;
+  --card-hi:#1c2030;
+  --line:rgba(255,255,255,.075);
+  --line-strong:rgba(255,255,255,.14);
+  --text:#e9ebf2;
+  --sub:#969cab;
+  --faint:#646b7c;
+  --accent:#7c8cff;
+  --accent-deep:#4b5bd6;
+  --accent-soft:rgba(124,140,255,.14);
+  --amber:#f2b56b;
+  --amber-soft:rgba(242,181,107,.12);
+  --green:#71d6a3;
+  --green-soft:rgba(113,214,163,.12);
+  --red:#ff8b8b;
+  --red-soft:rgba(255,139,139,.12);
+  --font:"PingFang SC","Hiragino Sans GB","Microsoft YaHei","Segoe UI",system-ui,sans-serif;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{
+  background:
+    radial-gradient(900px 620px at 18% -12%, rgba(59,66,106,.38), transparent 62%),
+    radial-gradient(760px 520px at 104% 104%, rgba(38,43,64,.5), transparent 60%),
+    var(--bg);
+  color:var(--text);
+  font-family:var(--font);
+  min-height:100vh;
+  -webkit-font-smoothing:antialiased;
+}
+button{font-family:inherit;color:inherit}
+button:focus-visible,[tabindex]:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:6px}
+::selection{background:rgba(124,140,255,.35)}
+
+/* ============================================================
+   2. 页面骨架：手机 + 右侧演示台
+   ============================================================ */
+.page{max-width:1120px;margin:0 auto;padding:34px 24px 54px}
+.page-head{display:flex;align-items:center;gap:13px;margin-bottom:26px}
+.brand-mark{
+  width:38px;height:38px;border-radius:12px;flex:0 0 auto;
+  background:linear-gradient(145deg,#4b5bd6,#8f9cff);
+  display:grid;place-items:center;font-size:17px;font-weight:600;
+  box-shadow:0 8px 24px rgba(124,140,255,.25), inset 0 1px 0 rgba(255,255,255,.3);
+}
+.page-head h1{font-size:16.5px;margin:0;font-weight:600;letter-spacing:.02em}
+.page-head p{margin:3px 0 0;font-size:12px;color:var(--sub)}
+.stage{display:flex;gap:52px;justify-content:center;align-items:flex-start}
+.phone-wrap{position:relative;flex:0 0 auto}
+.phone{
+  width:min(390px, calc(100vw - 40px));
+  aspect-ratio:390 / 844;
+  background:#05060a;
+  border-radius:52px;
+  padding:9px;
+  position:relative;
+  box-shadow:
+    0 0 0 1px rgba(255,255,255,.085),
+    0 44px 90px -24px rgba(0,0,0,.85),
+    0 0 130px rgba(80,100,255,.07);
+}
+.phone::before,.phone::after{content:"";position:absolute;right:-2px;width:2px;border-radius:2px;background:rgba(255,255,255,.13)}
+.phone::before{top:186px;height:60px}
+.phone::after{top:258px;height:38px}
+.phone-screen{
+  position:relative;width:100%;height:100%;
+  border-radius:44px;overflow:hidden;
+  background:var(--screen);
+  background-image:radial-gradient(620px 320px at 50% -8%, rgba(124,140,255,.11), transparent 62%);
+  isolation:isolate;
+}
+.notch{
+  position:absolute;top:10px;left:50%;transform:translateX(-50%);
+  width:96px;height:26px;border-radius:20px;background:#05060a;z-index:70;
+}
+/* 顶部遮罩：内容滚动时不穿过状态栏 */
+.top-shade{
+  position:absolute;top:0;left:0;right:0;height:58px;z-index:44;
+  pointer-events:none;
+  background:linear-gradient(180deg, #141724 0%, #0f1117 100%);
+}
+.statusbar{
+  position:absolute;top:0;left:0;right:0;height:46px;
+  padding:15px 24px 0;
+  display:flex;justify-content:space-between;align-items:flex-start;
+  font-size:11.5px;font-weight:600;letter-spacing:.02em;
+  color:rgba(255,255,255,.84);z-index:45;pointer-events:none;
+  font-variant-numeric:tabular-nums;
+}
+.sb-right{display:flex;gap:4px;align-items:center;font-size:9px;letter-spacing:.06em;color:rgba(255,255,255,.5)}
+.sb-bars{display:flex;align-items:flex-end;gap:1.5px;height:8px}
+.sb-bars i{width:2px;background:rgba(255,255,255,.55);border-radius:1px}
+.sb-bars i:nth-child(1){height:3px}
+.sb-bars i:nth-child(2){height:5px}
+.sb-bars i:nth-child(3){height:7px}
+.sb-bars i:nth-child(4){height:8px}
+.sb-batt{width:16px;height:8px;border:1px solid rgba(255,255,255,.45);border-radius:2px;position:relative;padding:1px}
+.sb-batt::after{content:"";display:block;width:72%;height:100%;background:rgba(255,255,255,.7);border-radius:1px}
+.screens{position:absolute;inset:0}
+.screen{
+  position:absolute;inset:0;display:none;
+  overflow-y:auto;overflow-x:hidden;
+  padding:64px 18px 28px;
+  scrollbar-width:none;
+}
+.screen::-webkit-scrollbar{display:none}
+.screen.active{display:block;animation:screenIn .28s ease both}
+@keyframes screenIn{from{opacity:0;transform:translateY(7px)}to{opacity:1;transform:none}}
+.screen-title{font-size:22px;font-weight:600;letter-spacing:-.01em;margin:0}
+.home-indicator{
+  position:absolute;bottom:7px;left:50%;transform:translateX(-50%);
+  width:108px;height:4px;border-radius:3px;background:rgba(255,255,255,.5);
+  z-index:75;pointer-events:none;
+}
+/* 每屏顶部：这一屏回答什么问题 */
+.screen-q{
+  font-size:10px;letter-spacing:.14em;color:var(--faint);
+  display:flex;align-items:baseline;gap:8px;margin-bottom:12px;
+}
+.screen-q b{color:var(--sub);font-weight:600;font-size:11px;letter-spacing:.03em}
+.screen-q::before{content:"";width:14px;height:1px;background:var(--faint);align-self:center;flex:0 0 auto;opacity:.6}
+
+/* ============================================================
+   3. 第一屏：桌面（App 图标网格）
+   ============================================================ */
+.home-widget{
+  position:relative;overflow:hidden;
+  border:1px solid rgba(124,140,255,.22);
+  border-radius:22px;
+  background:
+    linear-gradient(158deg, rgba(124,140,255,.17), rgba(124,140,255,.03) 58%),
+    var(--card);
+  padding:16px;margin-bottom:22px;
+}
+.home-widget::after{
+  content:"";position:absolute;top:-60px;right:-40px;width:150px;height:150px;
+  border-radius:50%;background:radial-gradient(circle, rgba(124,140,255,.22), transparent 70%);
+  pointer-events:none;
+}
+.fw-row{display:flex;align-items:center;gap:8px;font-size:11.5px;color:var(--sub);position:relative;z-index:1}
+.fw-row .sep{flex:1}
+.fw-count{font-size:10px;color:var(--faint);letter-spacing:.04em}
+.live-dot{
+  width:6px;height:6px;border-radius:50%;background:var(--green);
+  box-shadow:0 0 0 4px rgba(113,214,163,.1);animation:livePulse 2.4s ease-in-out infinite;flex:0 0 auto;
+}
+@keyframes livePulse{0%,100%{opacity:1;box-shadow:0 0 0 3px rgba(113,214,163,.08)}50%{opacity:.65;box-shadow:0 0 0 6px rgba(113,214,163,.03)}}
+.home-widget h2{font-size:19px;font-weight:600;margin:11px 0 5px;letter-spacing:-.01em;position:relative;z-index:1}
+.home-widget p{margin:0 0 13px;font-size:12px;line-height:1.65;color:var(--sub);position:relative;z-index:1}
+.src-chips{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:15px;position:relative;z-index:1}
+.src-chip{
+  font-size:10px;color:var(--sub);border:1px solid var(--line);
+  padding:3px 7px;border-radius:999px;background:rgba(255,255,255,.025);
+}
+.widget-btn{
+  position:relative;z-index:1;
+  background:var(--accent);color:#0b0e1a;border:0;
+  font-weight:600;font-size:12.5px;padding:9px 14px;border-radius:11px;cursor:pointer;
+  transition:transform .15s ease, box-shadow .2s;
+  box-shadow:0 6px 18px rgba(124,140,255,.22);
+}
+.widget-btn:hover{transform:translateY(-1px);box-shadow:0 8px 22px rgba(124,140,255,.3)}
+.grid-label{
+  display:flex;justify-content:space-between;align-items:center;
+  font-size:10.5px;color:var(--faint);letter-spacing:.06em;margin-bottom:14px;
+}
+.app-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:20px 10px;padding-bottom:76px}
+.app{
+  background:none;border:0;padding:0;cursor:pointer;
+  display:flex;flex-direction:column;align-items:center;gap:7px;border-radius:16px;
+}
+.app-icon{
+  width:54px;height:54px;border-radius:16px;
+  display:grid;place-items:center;
+  background:var(--tile,#242838);
+  color:rgba(255,255,255,.93);
+  font-size:18px;font-weight:600;
+  position:relative;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.16), 0 7px 16px rgba(0,0,0,.28);
+  transition:transform .18s ease, filter .18s;
+}
+.app:hover .app-icon{transform:translateY(-2px);filter:brightness(1.08)}
+.app:active .app-icon{transform:scale(.95)}
+.app-name{font-size:10.5px;color:var(--sub);white-space:nowrap}
+.app .badge{
+  position:absolute;top:-4px;right:-4px;min-width:18px;height:18px;padding:0 4px;
+  border-radius:9px;background:#ff6b6b;color:#260808;font-size:9.5px;font-weight:700;
+  display:grid;place-items:center;border:2px solid var(--screen);
+}
+.app-icon.ink{color:#181a22}
+/* 常驻“流”入口 */
+.flow-fab{
+  position:absolute;right:16px;bottom:24px;z-index:36;
+  display:flex;align-items:center;gap:8px;
+  padding:9px 13px 9px 10px;border-radius:999px;
+  background:rgba(19,22,33,.94);
+  border:1px solid rgba(124,140,255,.42);
+  color:var(--text);cursor:pointer;
+  backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);
+  box-shadow:0 12px 30px rgba(0,0,0,.5), 0 0 24px rgba(124,140,255,.14);
+  transition:opacity .2s, transform .2s;
+}
+.flow-fab:hover{transform:translateY(-1px)}
+.flow-fab[hidden]{display:none}
+.fab-orb{
+  width:22px;height:22px;border-radius:50%;
+  background:radial-gradient(circle at 34% 28%, #c3caff, #6373f5 58%, #3d49b8);
+  box-shadow:0 0 12px rgba(124,140,255,.55);
+  position:relative;flex:0 0 auto;
+}
+.fab-orb::after{content:"";position:absolute;inset:6px;border:1px solid rgba(255,255,255,.7);border-radius:50%}
+.fab-text{font-size:11.5px;font-weight:600;letter-spacing:.1em}
+.fab-count{
+  min-width:19px;height:19px;border-radius:10px;padding:0 4px;
+  background:var(--accent);color:#0b0e1a;font-size:10px;font-weight:700;
+  display:grid;place-items:center;font-variant-numeric:tabular-nums;
+}
+.flow-fab.pulse{animation:fabPulse 2.8s ease-in-out infinite}
+@keyframes fabPulse{
+  0%,100%{box-shadow:0 12px 30px rgba(0,0,0,.5), 0 0 0 0 rgba(124,140,255,.28)}
+  50%{box-shadow:0 12px 30px rgba(0,0,0,.5), 0 0 0 7px rgba(124,140,255,0)}
+}
+
+/* ============================================================
+   4. 第二屏：任务流
+   ============================================================ */
+.flow-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:13px}
+.icon-btn{
+  width:30px;height:30px;border-radius:10px;
+  border:1px solid var(--line);background:rgba(255,255,255,.03);
+  display:grid;place-items:center;cursor:pointer;color:var(--sub);font-size:14px;
+  transition:background .18s,color .18s;
+}
+.icon-btn:hover{background:rgba(255,255,255,.07);color:var(--text)}
+.agent-chip{
+  display:inline-flex;align-items:center;gap:6px;
+  font-size:10px;color:var(--sub);
+  border:1px solid var(--line);border-radius:999px;
+  padding:5px 9px;background:rgba(255,255,255,.025);cursor:pointer;
+  transition:border-color .2s;
+}
+.agent-chip:hover{border-color:var(--line-strong)}
+.agent-chip .dot{width:6px;height:6px;border-radius:50%;background:var(--green);flex:0 0 auto;animation:livePulse 2.4s infinite}
+.agent-chip.paused .dot{background:var(--amber);animation:none}
+.flow-sub{font-size:11.5px;line-height:1.6;color:var(--sub);margin:5px 0 0}
+.flow-meta{display:flex;justify-content:space-between;align-items:center;font-size:10.5px;color:var(--faint);margin:13px 0 11px;font-variant-numeric:tabular-nums}
+.filters{display:flex;gap:6px;overflow-x:auto;padding-bottom:12px;scrollbar-width:none}
+.filters::-webkit-scrollbar{display:none}
+.chip{
+  flex:0 0 auto;border:1px solid var(--line);background:rgba(255,255,255,.025);
+  color:var(--sub);font-size:11px;padding:6px 10px;border-radius:999px;cursor:pointer;
+  transition:background .18s,border-color .18s,color .18s;
+}
+.chip:hover{border-color:var(--line-strong);color:var(--text)}
+.chip[aria-pressed="true"]{background:var(--accent-soft);border-color:rgba(124,140,255,.4);color:#ccd2ff}
+.flow-list{display:flex;flex-direction:column;gap:9px;padding-bottom:26px}
+.task{
+  background:var(--card);border:1px solid var(--line);border-radius:18px;
+  overflow:hidden;position:relative;
+  transition:border-color .2s,background .2s,opacity .3s,filter .3s;
+}
+.task:hover{border-color:var(--line-strong)}
+.task.open{border-color:rgba(124,140,255,.36);background:var(--card-hi)}
+.task.enter{animation:cardIn .52s cubic-bezier(.2,.8,.2,1) both;animation-delay:calc(var(--i,0) * 55ms)}
+@keyframes cardIn{from{opacity:0;transform:translateY(14px) scale(.985)}to{opacity:1;transform:none}}
+.task-main{display:block;width:100%;text-align:left;background:none;border:0;padding:14px 14px 12px;cursor:pointer;color:inherit}
+.task-top{display:flex;align-items:center;gap:7px;flex-wrap:wrap;font-size:10px;color:var(--faint);margin-bottom:8px}
+.src{display:inline-flex;align-items:center;gap:5px;color:var(--sub);font-weight:500;font-size:10.5px}
+.src-dot{width:6px;height:6px;border-radius:50%;background:var(--c,#8a91a5);box-shadow:0 0 8px color-mix(in srgb, var(--c,#8a91a5) 65%, transparent);flex:0 0 auto}
+.read-badge{
+  display:inline-flex;align-items:center;gap:3px;
+  color:#b9c0d4;background:rgba(255,255,255,.045);border:1px solid var(--line);
+  padding:1px 6px;border-radius:6px;font-size:9px;letter-spacing:.02em;
+}
+.task-time{margin-left:auto;font-variant-numeric:tabular-nums;font-size:9.5px;color:var(--faint)}
+.task-title{display:block;font-size:13.5px;font-weight:600;line-height:1.5;margin-bottom:6px;color:var(--text)}
+.task-suggest{display:block;font-size:11px;color:var(--sub);line-height:1.6}
+.task-suggest b{color:#c6cbe0;font-weight:500;font-size:9.5px;letter-spacing:.04em;margin-right:5px}
+.task-state{
+  display:inline-flex;align-items:center;gap:5px;margin-top:9px;
+  font-size:9.5px;padding:3px 7px;border-radius:6px;
+  background:rgba(255,255,255,.045);color:var(--sub);
+}
+.task-state.ok{background:var(--green-soft);color:var(--green)}
+.task-state.wait{background:var(--amber-soft);color:var(--amber)}
+.task-state.dim{background:rgba(255,255,255,.03);color:var(--faint)}
+.task-actions{display:none;flex-wrap:wrap;gap:6px;padding:0 14px 14px}
+.task.open .task-actions{display:flex}
+.btn{
+  border:1px solid var(--line);background:rgba(255,255,255,.035);color:var(--text);
+  font-size:10.5px;padding:7px 10px;border-radius:9px;cursor:pointer;
+  transition:background .18s,border-color .18s,transform .12s;
+}
+.btn:hover{background:rgba(255,255,255,.07);border-color:var(--line-strong)}
+.btn:active{transform:scale(.97)}
+.btn.primary{background:var(--accent-soft);border-color:rgba(124,140,255,.38);color:#cdd3ff}
+.btn.primary:hover{background:rgba(124,140,255,.2)}
+.btn.ghost{color:var(--sub)}
+.btn.danger{color:var(--red);border-color:rgba(255,139,139,.22);background:rgba(255,139,139,.05)}
+.btn:disabled{opacity:.38;cursor:not-allowed;transform:none}
+.failed-note{display:none;padding:0 14px 14px;font-size:11px;line-height:1.6;color:var(--amber)}
+.task.failed{background:#131419;border-color:rgba(255,255,255,.08)}
+.task.failed .task-title{color:#8a90a0}
+.task.failed .task-suggest{color:#707787}
+.task.failed .src{color:#747b8c}
+.task.failed .src-dot{background:#5b6170!important;box-shadow:none!important}
+.task.failed .read-badge{opacity:.5}
+.task.failed .task-actions{display:none!important}
+.task.failed .failed-note{display:block;color:#d0a97c}
+.task.ignored{opacity:.46}
+.task.done .task-title{color:var(--sub)}
+.empty{padding:36px 16px;text-align:center;color:var(--faint);font-size:11.5px;line-height:1.8}
+
+/* ============================================================
+   5. 第三屏：权限台
+   ============================================================ */
+.console-nav{display:flex;align-items:center;justify-content:space-between;margin-bottom:13px}
+.console-sub{font-size:11.5px;line-height:1.6;color:var(--sub);margin:5px 0 0}
+.anchor-row{display:flex;gap:6px;overflow-x:auto;margin:13px 0 14px;padding-bottom:2px;scrollbar-width:none}
+.anchor-row::-webkit-scrollbar{display:none}
+.panel{
+  background:var(--card);border:1px solid var(--line);border-radius:18px;
+  margin-bottom:13px;overflow:hidden;
+}
+.panel-head{
+  display:flex;align-items:center;justify-content:space-between;gap:10px;
+  padding:14px 15px 11px;border-bottom:1px solid var(--line);
+}
+.panel-head h3{margin:0;font-size:13px;font-weight:600;display:flex;align-items:center;gap:7px}
+.panel-head h3 .num{
+  width:17px;height:17px;border-radius:5px;display:grid;place-items:center;
+  background:rgba(255,255,255,.06);color:var(--sub);font-size:9px;font-weight:600;
+}
+.panel-head span{font-size:9.5px;color:var(--faint);letter-spacing:.04em}
+.gate{display:flex;gap:10px;padding:13px 15px;border-bottom:1px solid var(--line);align-items:flex-start}
+.gate:last-child{border-bottom:0}
+.gate-num{
+  width:21px;height:21px;border-radius:7px;flex:0 0 auto;margin-top:1px;
+  display:grid;place-items:center;background:rgba(255,255,255,.055);
+  color:var(--sub);font-size:10px;font-weight:600;
+}
+.gate-body{flex:1;min-width:0}
+.gate-body strong{display:block;font-size:12px;font-weight:600;margin-bottom:3px}
+.gate-body p{margin:0;font-size:10.5px;color:var(--sub);line-height:1.6}
+.gate-act{
+  display:inline-block;background:none;border:0;color:var(--accent);
+  font-size:10px;padding:3px 0 0;cursor:pointer;margin-top:2px;
+}
+.gate-act:hover{text-decoration:underline;text-underline-offset:3px}
+.state-pill{
+  flex:0 0 auto;margin-top:1px;font-size:9px;padding:3px 7px;border-radius:6px;
+  border:1px solid transparent;white-space:nowrap;letter-spacing:.02em;
+}
+.state-on{background:var(--green-soft);color:var(--green);border-color:rgba(113,214,163,.24)}
+.state-wait{background:var(--amber-soft);color:var(--amber);border-color:rgba(242,181,107,.24)}
+.state-off{background:rgba(255,255,255,.04);color:var(--faint);border-color:var(--line)}
+.cap-note{
+  padding:10px 15px;font-size:10px;color:var(--faint);line-height:1.65;
+  border-bottom:1px solid var(--line);background:rgba(255,255,255,.015);
+}
+.cap-note em{font-style:normal;color:var(--sub)}
+.app-cap{border-bottom:1px solid var(--line)}
+.app-cap:last-child{border-bottom:0}
+.app-cap-head{display:flex;align-items:center;gap:9px;padding:12px 15px}
+.app-glyph{
+  width:29px;height:29px;border-radius:9px;flex:0 0 auto;
+  display:grid;place-items:center;background:var(--c,#2a2e3d);
+  color:rgba(255,255,255,.92);font-size:11.5px;font-weight:600;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.12);
+}
+.app-cap-head strong{display:block;font-size:11.5px;font-weight:600}
+.app-cap-head small{display:block;font-size:9.5px;color:var(--faint);margin-top:2px;line-height:1.4}
+.perm-set{margin-left:auto;display:flex;gap:3px;flex:0 0 auto}
+.perm{
+  font-size:8px;font-weight:700;letter-spacing:.02em;
+  padding:2px 4px;border-radius:4px;background:rgba(255,255,255,.05);color:var(--sub);
+}
+.perm.R{color:#9fc4ff;background:rgba(110,168,254,.1)}
+.perm.W{color:#d9b8ff;background:rgba(194,166,255,.1)}
+.perm.P{color:var(--amber);background:var(--amber-soft)}
+.cap-rows{padding:0 15px 7px}
+.cap-row{display:flex;align-items:center;gap:8px;padding:7px 0;border-top:1px dashed rgba(255,255,255,.055)}
+.cap-row:first-child{border-top:0}
+.cap-name{font-size:10.5px;color:var(--sub);flex:1;min-width:0;line-height:1.45}
+.cap-lock{font-size:9px;color:var(--faint)}
+.sw{
+  width:33px;height:19px;border-radius:999px;flex:0 0 auto;position:relative;
+  border:1px solid var(--line);background:rgba(255,255,255,.07);
+  cursor:pointer;padding:0;transition:background .2s,border-color .2s;
+}
+.sw::after{
+  content:"";position:absolute;top:2px;left:2px;width:13px;height:13px;border-radius:50%;
+  background:#aab0c0;transition:transform .2s cubic-bezier(.3,.7,.3,1),background .2s;
+}
+.sw[aria-checked="true"]{background:rgba(124,140,255,.55);border-color:rgba(124,140,255,.62)}
+.sw[aria-checked="true"]::after{transform:translateX(14px);background:#fff}
+.sw:disabled{opacity:.4;cursor:not-allowed}
+.sw.just-changed{animation:swPop .45s ease}
+@keyframes swPop{
+  0%{box-shadow:0 0 0 0 rgba(124,140,255,.55)}
+  100%{box-shadow:0 0 0 7px rgba(124,140,255,0)}
+}
+.app-cap.muted .app-cap-head{opacity:.74}
+.app-cap.muted .app-glyph{filter:saturate(.3)}
+.cap-ghost{
+  padding:0 15px 12px 53px;font-size:9.5px;color:var(--faint);
+  display:flex;align-items:flex-start;gap:6px;line-height:1.55;
+}
+.ghost-dot{width:5px;height:5px;border-radius:50%;background:#545b6c;flex:0 0 auto;margin-top:4px}
+.app-cap.blocked{background:rgba(255,139,139,.025)}
+.app-cap.blocked .app-glyph{background:#3a2529!important;color:#ffb0b0}
+.block-tag{
+  margin-left:auto;font-size:8px;color:var(--red);
+  border:1px solid rgba(255,139,139,.28);padding:2px 5px;border-radius:5px;letter-spacing:.04em;
+}
+.log-list{list-style:none;margin:0;padding:3px 0;max-height:248px;overflow-y:auto;scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.16) transparent}
+.log-item{display:flex;align-items:flex-start;gap:8px;padding:7px 15px;border-bottom:1px solid rgba(255,255,255,.035);font-size:10px;line-height:1.55}
+.log-item:last-child{border-bottom:0}
+.log-tag{
+  width:15px;height:15px;border-radius:4px;flex:0 0 auto;margin-top:0;
+  display:grid;place-items:center;font-size:8px;font-weight:700;
+  background:rgba(255,255,255,.06);color:var(--sub);
+}
+.log-tag.kR{color:#9fc4ff;background:rgba(110,168,254,.12)}
+.log-tag.kW{color:#d9b8ff;background:rgba(194,166,255,.12)}
+.log-tag.kP{color:var(--amber);background:var(--amber-soft)}
+.log-tag.kYou{color:var(--green);background:var(--green-soft)}
+.log-text{flex:1;color:var(--sub);min-width:0}
+.log-time{color:var(--faint);font-size:8.5px;font-variant-numeric:tabular-nums;flex:0 0 auto;margin-top:1px}
+.log-foot{
+  position:sticky;bottom:0;display:flex;align-items:center;gap:9px;
+  padding:10px 15px;border-top:1px solid var(--line);
+  background:rgba(21,24,34,.97);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);
+}
+.agent-state{display:flex;align-items:center;gap:6px;font-size:9.5px;color:var(--sub);flex:1;line-height:1.4}
+.agent-state .dot{width:5px;height:5px;border-radius:50%;background:var(--green);animation:livePulse 2.4s infinite;flex:0 0 auto}
+.agent-state.paused{color:var(--amber)}
+.agent-state.paused .dot{background:var(--amber);animation:none}
+.takeover-btn{
+  flex:0 0 auto;border:1px solid rgba(242,181,107,.42);background:var(--amber-soft);
+  color:var(--amber);font-size:10.5px;font-weight:600;padding:6px 9px;border-radius:8px;
+  cursor:pointer;transition:background .18s;
+}
+.takeover-btn:hover{background:rgba(242,181,107,.19)}
+.takeover-btn.on{border-color:rgba(113,214,163,.35);background:var(--green-soft);color:var(--green)}
+.paused-banner{
+  position:absolute;left:14px;right:14px;top:48px;z-index:66;
+  display:none;align-items:center;justify-content:space-between;gap:8px;
+  background:rgba(242,181,107,.11);border:1px solid rgba(242,181,107,.32);
+  color:var(--amber);font-size:10px;line-height:1.5;padding:7px 11px;border-radius:10px;
+  backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);
+}
+.paused-banner.show{display:flex;animation:screenIn .25s ease both}
+.paused-banner span{color:rgba(242,181,107,.7)}
+
+/* ============================================================
+   6. 浮层：场景 S1–S4 / 放行
+   ============================================================ */
+#overlay-root{position:absolute;inset:0;z-index:60;pointer-events:none}
+#overlay-root>*{pointer-events:auto}
+.overlay{position:absolute;inset:0;display:flex;align-items:flex-end}
+.scrim{position:absolute;inset:0;background:rgba(4,5,9,.68);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);animation:fadeIn .24s ease}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+.sheet{
+  position:relative;width:100%;max-height:93%;overflow-y:auto;scrollbar-width:none;
+  background:#12141c;border-radius:26px 26px 0 0;
+  border-top:1px solid rgba(255,255,255,.11);
+  padding:16px 18px 22px;
+  animation:sheetUp .32s cubic-bezier(.2,.8,.2,1);
+  box-shadow:0 -24px 60px rgba(0,0,0,.45);
+}
+.sheet::-webkit-scrollbar{display:none}
+@keyframes sheetUp{from{transform:translateY(46px);opacity:.35}to{transform:none;opacity:1}}
+.sheet-grab{width:34px;height:4px;border-radius:4px;background:rgba(255,255,255,.16);margin:0 auto 14px}
+.ov-eyebrow{
+  display:flex;align-items:center;gap:6px;margin-bottom:9px;
+  font-size:9.5px;letter-spacing:.1em;color:var(--amber);
+}
+.ov-eyebrow .live-dot{background:var(--accent);box-shadow:0 0 0 3px rgba(124,140,255,.1)}
+.ov-title{font-size:18px;font-weight:600;line-height:1.4;margin:0 0 7px;letter-spacing:-.01em}
+.ov-desc{font-size:11.5px;line-height:1.7;color:var(--sub);margin:0 0 14px}
+.ov-note{font-size:9.5px;line-height:1.65;color:var(--faint);margin-top:12px}
+.progress-track{height:6px;border-radius:3px;background:rgba(255,255,255,.07);overflow:hidden;margin:16px 0 13px}
+.progress-fill{
+  height:100%;width:0;border-radius:3px;
+  background:linear-gradient(90deg,#5f6fe8,#8f9cff);
+  box-shadow:0 0 12px rgba(124,140,255,.55);
+  transition:width .32s ease;
+}
+.src-list{display:flex;flex-wrap:wrap;gap:5px}
+.src-tag{
+  display:flex;align-items:center;gap:5px;
+  font-size:9.5px;padding:4px 8px;border-radius:7px;
+  border:1px solid var(--line);background:rgba(255,255,255,.02);color:var(--faint);
+  transition:border-color .2s,color .2s,background .2s;
+}
+.src-tag i{width:4px;height:4px;border-radius:50%;background:#4a5162;flex:0 0 auto;transition:background .2s}
+.src-tag.done{color:var(--sub);border-color:rgba(124,140,255,.28);background:rgba(124,140,255,.06)}
+.src-tag.done i{background:var(--accent);box-shadow:0 0 6px rgba(124,140,255,.6)}
+.draft{
+  border:1px solid var(--line);background:rgba(255,255,255,.025);
+  border-radius:13px;padding:12px;margin:11px 0 4px;
+  font-size:11.5px;line-height:1.7;color:#d6dae6;
+}
+.draft-from{display:flex;align-items:center;gap:6px;font-size:9.5px;color:var(--faint);margin-bottom:8px}
+.draft-from .src-dot{width:5px;height:5px}
+.draft mark{background:transparent;color:var(--accent);font-style:normal}
+.action-row{display:flex;gap:8px;margin-top:15px}
+.btn-lg{
+  flex:1;padding:12px;border-radius:12px;font-size:12px;font-weight:600;
+  border:1px solid var(--line);background:rgba(255,255,255,.04);color:var(--text);
+  cursor:pointer;transition:transform .12s,background .18s,opacity .2s;
+}
+.btn-lg:hover{background:rgba(255,255,255,.075)}
+.btn-lg:active{transform:scale(.985)}
+.btn-lg.primary{background:var(--accent);border-color:transparent;color:#0b0e1a}
+.btn-lg.primary:hover{background:#8f9cff}
+.btn-lg.danger{color:var(--red);border-color:rgba(255,139,139,.28);background:rgba(255,139,139,.06)}
+.btn-lg:disabled{opacity:.38;cursor:not-allowed}
+.allow-foot{display:flex;align-items:flex-start;gap:6px;font-size:9.5px;line-height:1.6;color:var(--faint);margin-top:12px}
+.allow-foot svg{flex:0 0 auto;margin-top:1px;opacity:.7}
+
+/* S3：整屏交还 */
+.overlay.takeover{align-items:stretch}
+.takeover-sheet{
+  position:relative;width:100%;min-height:100%;
+  display:flex;flex-direction:column;align-items:center;text-align:center;
+  padding:52px 24px 28px;
+  background:
+    radial-gradient(520px 340px at 50% 16%, rgba(124,140,255,.17), transparent 66%),
+    #0b0d13;
+  animation:sheetUp .34s cubic-bezier(.2,.8,.2,1);
+}
+.tk-top{display:flex;align-items:center;gap:6px;font-size:9.5px;letter-spacing:.12em;color:var(--amber);margin-bottom:26px}
+.tk-eyebrow{font-size:9.5px;letter-spacing:.16em;color:var(--faint);text-transform:uppercase}
+.tk-title{font-size:28px;font-weight:600;letter-spacing:.01em;margin:11px 0 8px}
+.tk-sub{font-size:11.5px;line-height:1.75;color:var(--sub);margin:0;max-width:250px}
+.tk-amount{margin:24px 0 3px;font-size:34px;font-weight:600;letter-spacing:-.01em;font-variant-numeric:tabular-nums}
+.tk-merchant{font-size:10px;color:var(--faint)}
+.hold-wrap{position:relative;width:108px;height:108px;display:grid;place-items:center;margin:30px 0 13px}
+.hold-breath{
+  position:absolute;inset:-16px;border-radius:50%;
+  border:1px solid rgba(124,140,255,.28);animation:breathe 2.6s ease-in-out infinite;
+}
+@keyframes breathe{0%,100%{transform:scale(.94);opacity:.35}50%{transform:scale(1.06);opacity:.8}}
+.hold-ring{
+  position:absolute;inset:3px;border-radius:50%;
+  background:conic-gradient(var(--accent) calc(var(--p,0) * 1%), rgba(255,255,255,.07) 0);
+  -webkit-mask:radial-gradient(circle, transparent 61%, #000 63%);
+  mask:radial-gradient(circle, transparent 61%, #000 63%);
+}
+.hold-btn{
+  position:relative;width:84px;height:84px;border-radius:50%;
+  background:rgba(124,140,255,.11);border:1px solid rgba(124,140,255,.38);
+  color:#cdd3ff;cursor:pointer;user-select:none;-webkit-user-select:none;touch-action:none;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;
+  transition:background .2s,transform .12s;
+}
+.hold-btn:active{transform:scale(.97);background:rgba(124,140,255,.18)}
+.hold-btn svg{opacity:.9}
+.hold-btn span{font-size:9px;letter-spacing:.04em}
+.hold-hint{font-size:9.5px;color:var(--faint);margin-bottom:6px}
+.tk-cancel{
+  margin-top:auto;background:none;border:0;color:var(--sub);
+  font-size:10.5px;padding:12px 16px;cursor:pointer;
+}
+.tk-cancel:hover{color:var(--text)}
+.tk-success{display:none;flex-direction:column;align-items:center;padding-top:60px}
+.takeover-sheet.done .tk-main{display:none}
+.takeover-sheet.done .tk-success{display:flex}
+.success-mark{
+  width:64px;height:64px;border-radius:50%;display:grid;place-items:center;
+  background:var(--green-soft);border:1px solid rgba(113,214,163,.4);
+  color:var(--green);margin-bottom:20px;
+  box-shadow:0 0 40px rgba(113,214,163,.16);
+}
+.tk-success h2{font-size:20px;font-weight:600;margin:0 0 8px}
+.tk-success p{font-size:11px;line-height:1.7;color:var(--sub);margin:0 0 5px}
+.tk-success .btn-lg{width:100%;margin-top:26px;flex:none}
+.tk-success .ov-note{max-width:250px}
+
+/* S4：失败态 */
+.fail-icon{
+  width:46px;height:46px;border-radius:14px;display:grid;place-items:center;
+  background:var(--red-soft);border:1px solid rgba(255,139,139,.25);
+  color:var(--red);font-size:20px;font-weight:600;margin-bottom:14px;
+}
+.attempt-list{display:flex;flex-direction:column;gap:8px;margin:14px 0 4px}
+.attempt{
+  display:flex;align-items:center;gap:8px;font-size:10.5px;color:var(--faint);
+  padding:8px 10px;border:1px solid var(--line);border-radius:9px;background:rgba(255,255,255,.02);
+  transition:color .2s,border-color .2s;
+}
+.attempt.active{color:var(--sub);border-color:rgba(124,140,255,.28);background:rgba(124,140,255,.055)}
+.attempt .spinner{
+  width:9px;height:9px;border-radius:50%;border:1.5px solid rgba(124,140,255,.25);
+  border-top-color:var(--accent);flex:0 0 auto;opacity:0;
+  animation:spin .7s linear infinite;
+}
+.attempt.active .spinner{opacity:1}
+.attempt .checkmark{width:9px;height:9px;flex:0 0 auto;opacity:0;color:var(--green)}
+.attempt.done .checkmark{opacity:1}
+@keyframes spin{to{transform:rotate(360deg)}}
+.fail-copy{
+  border:1px solid rgba(255,139,139,.18);background:rgba(255,139,139,.045);
+  border-radius:11px;padding:10px 12px;margin:13px 0 2px;
+  font-size:10.5px;line-height:1.7;color:#e6b9b9;
+}
+.fail-meta{display:flex;justify-content:space-between;font-size:9.5px;color:var(--faint);margin-top:9px}
+
+/* Toast */
+#toast-root{
+  position:absolute;left:0;right:0;bottom:42px;z-index:80;
+  display:flex;justify-content:center;padding:0 18px;pointer-events:none;
+}
+.toast{
+  background:rgba(29,33,45,.97);border:1px solid rgba(255,255,255,.13);
+  color:var(--text);font-size:10.5px;line-height:1.55;
+  padding:9px 13px;border-radius:11px;text-align:center;
+  box-shadow:0 14px 34px rgba(0,0,0,.45);
+  animation:toastIn .22s ease;max-width:100%;
+}
+@keyframes toastIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+
+/* ============================================================
+   7. 右侧演示台
+   ============================================================ */
+.rail{width:296px;flex:0 0 auto;position:sticky;top:30px;display:flex;flex-direction:column;gap:16px}
+.rail-block{border:1px solid var(--line);border-radius:16px;padding:15px;background:rgba(255,255,255,.018)}
+.rail-label{
+  display:flex;align-items:center;gap:9px;
+  font-size:9.5px;letter-spacing:.15em;color:var(--faint);margin-bottom:11px;
+}
+.rail-label::after{content:"";flex:1;height:1px;background:var(--line)}
+.screen-switch{display:flex;flex-direction:column;gap:5px}
+.screen-switch button{
+  display:flex;align-items:center;gap:10px;width:100%;text-align:left;
+  padding:9px 10px;border-radius:10px;border:1px solid transparent;
+  background:none;color:var(--sub);font-size:11px;cursor:pointer;
+  transition:background .18s,border-color .18s;
+}
+.screen-switch button:hover{background:rgba(255,255,255,.035)}
+.screen-switch button[aria-pressed="true"]{background:var(--accent-soft);border-color:rgba(124,140,255,.28)}
+.screen-switch .idx{font-size:8.5px;color:var(--faint);font-variant-numeric:tabular-nums;flex:0 0 auto}
+.screen-switch button[aria-pressed="true"] .idx{color:var(--accent)}
+.screen-switch strong{display:block;font-weight:500;color:var(--text);font-size:11.5px}
+.screen-switch small{display:block;font-size:9.5px;color:var(--faint);margin-top:1px}
+.scene-grid{display:flex;flex-direction:column;gap:5px}
+.scene-btn{
+  display:flex;align-items:flex-start;gap:9px;width:100%;text-align:left;
+  background:none;border:1px solid transparent;border-radius:10px;
+  padding:8px 9px;cursor:pointer;transition:background .18s,border-color .18s;
+}
+.scene-btn:hover{background:rgba(255,255,255,.035);border-color:var(--line)}
+.scene-btn .tag{
+  flex:0 0 auto;font-size:8.5px;font-weight:700;letter-spacing:.04em;
+  padding:2px 4px;border-radius:4px;margin-top:1px;
+  color:var(--sub);background:rgba(255,255,255,.06);
+}
+.scene-btn[data-scene="s2"] .tag{color:#d9b8ff;background:rgba(194,166,255,.1)}
+.scene-btn[data-scene="s3"] .tag{color:var(--amber);background:var(--amber-soft)}
+.scene-btn[data-scene="s4"] .tag{color:var(--red);background:var(--red-soft)}
+.scene-btn strong{display:block;font-size:11px;font-weight:500;color:var(--text)}
+.scene-btn small{display:block;font-size:9.5px;line-height:1.45;color:var(--faint);margin-top:2px}
+.legend{display:flex;flex-wrap:wrap;gap:7px 11px;font-size:9.5px;color:var(--sub)}
+.legend span{display:inline-flex;align-items:center;gap:5px}
+.legend i{width:5px;height:5px;border-radius:50%;flex:0 0 auto}
+.legend .r{background:#9fc4ff}.legend .w{background:#d9b8ff}.legend .p{background:var(--amber)}
+.rail-note{font-size:9.5px;line-height:1.75;color:var(--faint);margin:9px 0 0}
+.proof{
+  max-width:620px;margin:34px auto 0;text-align:center;
+  font-size:11px;line-height:1.8;color:var(--faint);
+}
+.proof b{color:var(--sub);font-weight:500}
+
+/* S3 成功态与交还层布局补丁 */
+.tk-main{flex:1;display:flex;flex-direction:column;align-items:center;width:100%}
+.takeover-sheet.done .tk-main{display:none}
+.tk-success{flex:1;justify-content:center;padding-top:20px}
+.cap-row .perm{flex:0 0 auto}
+.task-state{max-width:100%;line-height:1.4}
+
+/* ============================================================
+   8. 响应式与减弱动效
+   ============================================================ */
+@media (max-width:900px){
+  .stage{flex-direction:column;align-items:center;gap:26px}
+  .rail{position:static;width:min(390px, calc(100vw - 32px));display:grid;grid-template-columns:1fr;gap:12px}
+  .screen-switch{flex-direction:row;overflow-x:auto;scrollbar-width:none}
+  .screen-switch button{flex:1 0 auto;width:auto;padding:7px 9px}
+  .screen-switch small{display:none}
+  .screen-switch .idx{display:none}
+  .scene-grid{display:grid;grid-template-columns:1fr 1fr;gap:4px}
+  .page{padding:22px 16px 40px}
+  .phone{width:min(390px, calc(100vw - 32px))}
+  .proof{margin-top:24px}
+}
+@media (max-width:460px){
+  .phone{border-radius:40px;padding:7px}
+  .phone-screen{border-radius:35px}
+  .page-head{margin-bottom:18px}
+  .screen{padding-left:15px;padding-right:15px}
+  .flow-fab{right:13px;bottom:22px}
+}
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{
+    animation-duration:.001ms!important;
+    animation-iteration-count:1!important;
+    transition-duration:.001ms!important;
+  }
+}
+</style>
+</head>
+<body>
+<div class="page">
+  <header class="page-head">
+    <div class="brand-mark" aria-hidden="true">流</div>
+    <div>
+      <h1>任务流手机</h1>
+      <p>可点击原型 · 三块主屏 · 四个交还场景</p>
+    </div>
+  </header>
+
+  <main class="stage">
+    <div class="phone-wrap">
+      <div class="phone" id="phone">
+        <div class="phone-screen" id="phoneScreen">
+          <div class="notch" aria-hidden="true"></div>
+          <div class="statusbar" aria-hidden="true">
+            <span id="sbTime">09:41</span>
+            <span class="sb-right">
+              <span>5G</span>
+              <span class="sb-bars"><i></i><i></i><i></i><i></i></span>
+              <span class="sb-batt"></span>
+            </span>
+          </div>
+
+          <div class="screens">
+            <!-- ========== 第一屏：桌面 ========== -->
+            <section class="screen active" id="screen-home" aria-label="桌面">
+              <div class="screen-q">这一屏回答 <b>App 还在吗？</b></div>
+
+              <div class="home-widget">
+                <div class="fw-row">
+                  <span class="live-dot" aria-hidden="true"></span>
+                  <span>今日流</span>
+                  <span class="sep"></span>
+                  <span class="fw-count">只读聚合</span>
+                </div>
+                <h2 id="widgetTitle">5 件还没看</h2>
+                <p id="widgetSub">来自 8 个来源。读取是只读的，动手要你点头。</p>
+                <div class="src-chips" aria-label="聚合来源">
+                  <span class="src-chip">微信</span>
+                  <span class="src-chip">QQ</span>
+                  <span class="src-chip">企业微信</span>
+                  <span class="src-chip">学习通</span>
+                  <span class="src-chip">智慧树</span>
+                  <span class="src-chip">Canvas</span>
+                  <span class="src-chip">课堂派</span>
+                  <span class="src-chip">日历</span>
+                </div>
+                <button class="widget-btn" data-goto="flow">打开任务流</button>
+              </div>
+
+              <div class="grid-label">
+                <span>全部应用</span>
+                <span>12 个</span>
+              </div>
+              <div class="app-grid" id="appGrid">
+                <button class="app" data-app="微信" aria-label="打开微信（原型不跳转）">
+                  <span class="app-icon" style="--tile:linear-gradient(145deg,#3fae72,#26794e)">微<span class="badge">2</span></span>
+                  <span class="app-name">微信</span>
+                </button>
+                <button class="app" data-app="QQ" aria-label="打开 QQ（原型不跳转）">
+                  <span class="app-icon" style="--tile:linear-gradient(145deg,#3f8bd8,#2a5f9c)">Q</span>
+                  <span class="app-name">QQ</span>
+                </button>
+                <button class="app" data-app="企业微信" aria-label="打开企业微信（原型不跳转）">
+                  <span class="app-icon" style="--tile:linear-gradient(145deg,#3784b5,#255471)">企</span>
+                  <span class="app-name">企业微信</span>
+                </button>
+                <button class="app" data-app="超星学习通" aria-label="打开超星学习通（原型不跳转）">
+                  <span class="app-icon" style="--tile:linear-gradient(145deg,#c05757,#8a3737)">学<span class="badge">1</span></span>
+                  <span class="app-name">学习通</span>
+                </button>
+                <button class="app" data-app="智慧树" aria-label="打开智慧树（原型不跳转）">
+                  <span class="app-icon" style="--tile:linear-gradient(145deg,#c29250,#8c6531)">树</span>
+                  <span class="app-name">智慧树</span>
+                </button>
+                <button class="app" data-app="Canvas" aria-label="打开 Canvas（原型不跳转）">
+                  <span class="app-icon" style="--tile:linear-gradient(145deg,#8664d4,#5a4399)">C</span>
+                  <span class="app-name">Canvas</span>
+                </button>
+                <button class="app" data-app="课堂派" aria-label="打开课堂派（原型不跳转）">
+                  <span class="app-icon" style="--tile:linear-gradient(145deg,#4d8d99,#33606a)">课</span>
+                  <span class="app-name">课堂派</span>
+                </button>
+                <button class="app" data-app="日历" aria-label="打开日历（原型不跳转）">
+                  <span class="app-icon ink" style="--tile:linear-gradient(145deg,#ececf2,#c9cad4)">20</span>
+                  <span class="app-name">日历</span>
+                </button>
+                <button class="app" data-app="邮件" aria-label="打开邮件（原型不跳转）">
+                  <span class="app-icon" style="--tile:linear-gradient(145deg,#5077c9,#36538f)">邮</span>
+                  <span class="app-name">邮件</span>
+                </button>
+                <button class="app" data-app="文件" aria-label="打开文件（原型不跳转）">
+                  <span class="app-icon" style="--tile:linear-gradient(145deg,#5a6175,#3d4354)">件</span>
+                  <span class="app-name">文件</span>
+                </button>
+                <button class="app" data-app="相机" aria-label="打开相机（原型不跳转）">
+                  <span class="app-icon" style="--tile:linear-gradient(145deg,#767d8e,#4c5261)">相</span>
+                  <span class="app-name">相机</span>
+                </button>
+                <button class="app" data-goto="console" aria-label="打开设置与权限台">
+                  <span class="app-icon" style="--tile:linear-gradient(145deg,#666e82,#414757)">设</span>
+                  <span class="app-name">设置</span>
+                </button>
+              </div>
+            </section>
+
+            <!-- ========== 第二屏：任务流 ========== -->
+            <section class="screen" id="screen-flow" aria-label="任务流">
+              <div class="screen-q">这一屏回答 <b>谁来决定下一步？</b></div>
+              <div class="flow-top">
+                <button class="icon-btn" id="flowBack" aria-label="回到桌面">←</button>
+                <button class="agent-chip" id="flowAgentChip" aria-label="查看 Agent 状态与权限">
+                  <span class="dot" aria-hidden="true"></span>
+                  <span id="agentChipText">Agent 在岗</span>
+                </button>
+              </div>
+              <h2 class="screen-title">今日流</h2>
+              <p class="flow-sub">散在八个 App 里的事，汇成一条。灰色的，是 Agent 没办成的。</p>
+              <div class="flow-meta">
+                <span id="flowDate">11月20日 周四</span>
+                <span id="flowSummary">6 件事 · 5 件待看</span>
+              </div>
+              <div class="filters" role="group" aria-label="筛选任务">
+                <button class="chip" data-filter="all" aria-pressed="true">全部</button>
+                <button class="chip" data-filter="pending" aria-pressed="false">待你点头</button>
+                <button class="chip" data-filter="action" aria-pressed="false">需你动手</button>
+                <button class="chip" data-filter="done" aria-pressed="false">已处理</button>
+              </div>
+              <div class="flow-list" id="flowList" aria-live="polite"></div>
+            </section>
+
+            <!-- ========== 第三屏：权限台 ========== -->
+            <section class="screen" id="screen-console" aria-label="权限台">
+              <div class="screen-q">这一屏回答 <b>谁有权点头？</b></div>
+              <div class="console-nav">
+                <button class="icon-btn" id="consoleBack" aria-label="回到桌面">←</button>
+                <button class="agent-chip" data-goto="flow" aria-label="去任务流">
+                  <span class="dot" aria-hidden="true"></span>
+                  <span>去任务流</span>
+                </button>
+              </div>
+              <h2 class="screen-title">权限台</h2>
+              <p class="console-sub">三道点头，决定 Agent 能走多远。走不过去的，就交还给你。</p>
+
+              <div class="anchor-row" role="group" aria-label="跳到权限台分区">
+                <button class="chip" data-anchor="gatePanel" aria-pressed="true">三道点头</button>
+                <button class="chip" data-anchor="capPanel" aria-pressed="false">能力清单</button>
+                <button class="chip" data-anchor="logPanel" aria-pressed="false">操作日志</button>
+              </div>
+
+              <div class="panel" id="gatePanel">
+                <div class="panel-head">
+                  <h3><span class="num">a</span>三道点头</h3>
+                  <span>授权 / 放行 / 确认</span>
+                </div>
+                <div id="gateList"></div>
+              </div>
+
+              <div class="panel" id="capPanel">
+                <div class="panel-head">
+                  <h3><span class="num">b</span>App 能力清单</h3>
+                  <span>应用声明，你来开关</span>
+                </div>
+                <div class="cap-note">
+                  <em>只读 R</em> 可看 · <em>可写 W</em> 可动手 · <em>涉支付 P</em> 永远交还给你。灰色表示应用没有给 Agent 任何入口。
+                </div>
+                <div id="capList"></div>
+              </div>
+
+              <div class="panel" id="logPanel">
+                <div class="panel-head">
+                  <h3><span class="num">c</span>实时操作日志</h3>
+                  <span>每一步都留在屏幕上</span>
+                </div>
+                <ul class="log-list" id="logList" aria-label="Agent 操作日志" aria-live="polite"></ul>
+                <div class="log-foot">
+                  <div class="agent-state" id="agentState">
+                    <span class="dot" aria-hidden="true"></span>
+                    <span id="agentStateText">Agent 运行中 · 可随时打断</span>
+                  </div>
+                  <button class="takeover-btn" id="pauseBtn" aria-label="暂停 Agent 并接管操作">暂停并接管</button>
+                </div>
+              </div>
+            </section>
+          </div>
+
+          <div class="top-shade" aria-hidden="true"></div>
+
+          <!-- 桌面角落的流入口 -->
+          <button class="flow-fab pulse" id="flowFab" aria-label="打开任务流">
+            <span class="fab-orb" aria-hidden="true"></span>
+            <span class="fab-text">流</span>
+            <span class="fab-count" id="fabCount">5</span>
+          </button>
+
+          <div class="paused-banner" id="pausedBanner" role="status">
+            <span id="pausedBannerText">Agent 已暂停，轮到你操作</span>
+            <span>日志仍在记录</span>
+          </div>
+
+          <div id="overlay-root"></div>
+          <div id="toast-root" aria-live="polite" aria-atomic="true"></div>
+          <div class="home-indicator" aria-hidden="true"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ========== 演示台 ========== -->
+    <aside class="rail">
+      <div class="rail-block">
+        <div class="rail-label">屏幕</div>
+        <div class="screen-switch" role="group" aria-label="切换主屏">
+          <button data-goto="home" aria-pressed="true">
+            <span class="idx">01</span>
+            <span><strong>桌面</strong><small>App 没消失，流在角落</small></span>
+          </button>
+          <button data-goto="flow" aria-pressed="false">
+            <span class="idx">02</span>
+            <span><strong>任务流</strong><small>散落通知合成任务卡</small></span>
+          </button>
+          <button data-goto="console" aria-pressed="false">
+            <span class="idx">03</span>
+            <span><strong>权限台</strong><small>三道点头与操作日志</small></span>
+          </button>
+        </div>
+      </div>
+
+      <div class="rail-block">
+        <div class="rail-label">演示场景</div>
+        <div class="scene-grid">
+          <button class="scene-btn" data-scene="s1">
+            <span class="tag">S1</span>
+            <span><strong>只读聚合</strong><small>8 个来源生成今日流</small></span>
+          </button>
+          <button class="scene-btn" data-scene="s2">
+            <span class="tag">S2</span>
+            <span><strong>写前放行</strong><small>微信请求代发一条消息</small></span>
+          </button>
+          <button class="scene-btn" data-scene="s3">
+            <span class="tag">S3</span>
+            <span><strong>支付交还</strong><small>手机交给你，验证指纹</small></span>
+          </button>
+          <button class="scene-btn" data-scene="s4">
+            <span class="tag">S4</span>
+            <span><strong>拒绝失败</strong><small>学习通 SAEP 拒绝操作</small></span>
+          </button>
+        </div>
+      </div>
+
+      <div class="rail-block">
+        <div class="rail-label">标签</div>
+        <div class="legend" aria-label="权限标签说明">
+          <span><i class="r"></i>R 只读</span>
+          <span><i class="w"></i>W 可写</span>
+          <span><i class="p"></i>P 涉支付</span>
+        </div>
+        <p class="rail-note">点场景按钮触发浮层。也可以在卡片里展开“交给 Agent 办”。所有状态只存在本地，没有真实网络请求。</p>
+      </div>
+    </aside>
+  </main>
+
+  <p class="proof"><b>这个原型要证明：聚合可以自动，动作不能自动。</b>每一次读取都看得见，每一次写、每一次付款、每一次应用拒绝，都让手机回到人手里。</p>
+</div>
+<script>
+/* ============================================================
+   JS 1. 工具函数与 store
+   所有演示状态都在 store 里，方便你改文案或接真数据
+   ============================================================ */
+'use strict';
+const $  = (sel, root = document) => root.querySelector(sel);
+const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
+
+const pad2 = n => String(n).padStart(2, '0');
+function clockText(){
+  const d = new Date();
+  return pad2(d.getHours()) + ':' + pad2(d.getMinutes());
+}
+function dateText(){
+  const d = new Date();
+  const wd = '日一二三四五六'[d.getDay()];
+  return (d.getMonth() + 1) + '月' + d.getDate() + '日 周' + wd;
+}
+function minutesAgo(min){
+  const d = new Date(Date.now() - min * 60000);
+  return pad2(d.getHours()) + ':' + pad2(d.getMinutes());
+}
+
+const store = {
+  screen: 'home',
+  filter: 'all',
+  expanded: null,
+  paused: false,
+  releaseCount: 0,          // “应用放行”已点头的次数
+  flowAnim: true,
+  overlay: null,
+
+  /* ---- 任务卡数据：改这里就能改流里的内容 ---- */
+  tasks: [
+    {
+      id: 't1', app: '课堂派', color: '#6ea8fe',
+      time: '今天 22:00 截止',
+      title: '第三次作业：地磁场观测报告',
+      suggest: '先看评分要求，再提交 PDF',
+      kind: 'homework', readonly: true, unread: true,
+      state: 'pending', scheduled: false, note: ''
+    },
+    {
+      id: 't2', app: '微信', color: '#7ee0a8',
+      time: '9 分钟前',
+      title: '班长问：明早实验课换教室了吗',
+      suggest: '回一句「已换到三教 302」',
+      kind: 'message', readonly: true, unread: true,
+      state: 'pending', scheduled: false, note: ''
+    },
+    {
+      id: 't3', app: '智慧树', color: '#f2b56b',
+      time: '今天 23:00 截止',
+      title: '物理竞赛校选报名，需缴费 ¥30',
+      suggest: '这笔钱只能由你亲自确认',
+      kind: 'payment', readonly: true, unread: true,
+      state: 'pending', scheduled: false, note: ''
+    },
+    {
+      id: 't4', app: '超星学习通', color: '#ff9b9b',
+      time: '09:55 截止',
+      title: '地球物理课随堂签到',
+      suggest: '只剩几分钟，建议你亲自处理',
+      kind: 'checkin', readonly: true, unread: true,
+      state: 'pending', scheduled: false, note: ''
+    },
+    {
+      id: 't5', app: 'QQ', color: '#8ed0ff',
+      time: '昨天 21:40',
+      title: '群文件：实验数据_第三组.xlsx',
+      suggest: '放进今晚整理数据的时段',
+      kind: 'file', readonly: true, unread: true,
+      state: 'pending', scheduled: false, note: ''
+    },
+    {
+      id: 't6', app: 'Canvas', color: '#c2a6ff',
+      time: '今天 08:00',
+      title: '课程公告：期中安排已发布',
+      suggest: '读一遍，把随堂测记进日程',
+      kind: 'notice', readonly: true, unread: false,
+      state: 'pending', scheduled: false, note: ''
+    }
+  ],
+
+  /* ---- 三道点头 ---- */
+  gates: [
+    {
+      key: 'auth', num: '1', name: '用户授权',
+      desc: 'Agent 可读 8 个来源的通知，且只在本机处理。',
+      state: 'on', label: '已开', action: '查看范围'
+    },
+    {
+      key: 'release', num: '2', name: '应用放行',
+      desc: '微信请求发送能力，需要你放行一次。',
+      state: 'wait', label: '待确认', action: '去确认'
+    },
+    {
+      key: 'pay', num: '3', name: '下单确认',
+      desc: '每一笔支付都把手机交还给你，Agent 没有支付能力。',
+      state: 'off', label: '未开', action: '了解规则'
+    }
+  ],
+
+  /* ---- App 能力清单：应用声明，用户开关 ---- */
+  apps: [
+    {
+      id: 'wechat', name: '微信', glyph: '微', color: '#2f8f5b',
+      caps: [
+        { label: '读取近期消息', perm: 'R', on: true },
+        { label: '草拟回复（不发送）', perm: 'W', on: true },
+        { label: '发送消息', perm: 'W', on: false, needsGate: true },
+        { label: '支付', perm: 'P', on: false, locked: true }
+      ]
+    },
+    {
+      id: 'qq', name: 'QQ', glyph: 'Q', color: '#2f6da8',
+      caps: [
+        { label: '读取群文件列表', perm: 'R', on: true },
+        { label: '下载文件到本地', perm: 'W', on: false }
+      ]
+    },
+    {
+      id: 'ketangpai', name: '课堂派', glyph: '课', color: '#3d737d',
+      caps: [
+        { label: '读取作业要求', perm: 'R', on: true },
+        { label: '提交作业', perm: 'W', on: false, needsGate: true }
+      ]
+    },
+    {
+      id: 'zhihuishu', name: '智慧树', glyph: '树', color: '#8c6a35',
+      caps: [
+        { label: '读取考试安排', perm: 'R', on: true },
+        { label: '报名与缴费', perm: 'P', on: false, locked: true }
+      ]
+    },
+    {
+      id: 'wxwork', name: '企业微信', glyph: '企', color: '#35637c',
+      caps: [], note: '该应用未声明能力',
+      ghost: '组织侧没有给 Agent 任何入口。通知仍可只读聚合，因为那是系统级授权。'
+    },
+    {
+      id: 'chaoxing', name: '超星学习通', glyph: '学', color: '#8a3737',
+      caps: [], saep: true, note: '该应用已拒绝被 Agent 操作（SAEP）',
+      ghost: '应用主动拒绝。与它有关的任务只能交还给你，不能代办。'
+    },
+    {
+      id: 'canvas', name: 'Canvas', glyph: 'C', color: '#5a4399',
+      caps: [], note: '该应用未声明能力',
+      ghost: '未提供能力注册项。流里只保留一条只读公告摘要。'
+    }
+  ],
+
+  /* ---- 初始日志 ---- */
+  logs: [
+    { type: 'R', text: '汇总了 8 个来源的通知列表（只读）', time: minutesAgo(12) },
+    { type: 'R', text: '读取了微信「地物三班」的 12 条消息', time: minutesAgo(9) },
+    { type: 'R', text: '读取了课堂派作业要求与截止时间', time: minutesAgo(6) },
+    { type: '你', text: '你允许 Agent 在本机整理通知，不允许代发', time: minutesAgo(3) }
+  ]
+};
+window.__flowStore = store;   // 调试用：控制台可看状态
+
+/* ============================================================
+   JS 2. 导航、计数、日志
+   ============================================================ */
+function go(screen){
+  const changed = store.screen !== screen;
+  store.screen = screen;
+  clearToast();
+  $$('.screen').forEach(el => el.classList.toggle('active', el.id === 'screen-' + screen));
+  $$('.screen-switch button[data-goto]').forEach(btn => {
+    btn.setAttribute('aria-pressed', String(btn.dataset.goto === screen));
+  });
+  $('#flowFab').hidden = screen !== 'home';
+  if (screen === 'flow') renderTasks(changed || store.flowAnim);
+  if (screen === 'console') renderConsole();
+  const active = $('#screen-' + screen);
+  if (active) active.scrollTop = 0;
+}
+
+function unreadCount(){
+  return store.tasks.filter(t => t.unread).length;
+}
+
+function updateCounts(){
+  const unread = unreadCount();
+  $('#fabCount').textContent = unread;
+  $('#flowSummary').textContent = store.tasks.length + ' 件事 · ' + unread + ' 件待看';
+  $('#widgetTitle').textContent = unread > 0 ? unread + ' 件还没看' : '今天的流是空的';
+  $('#widgetSub').textContent = '来自 8 个来源。读取是只读的，动手要你点头。';
+  $('#flowFab').classList.toggle('pulse', unread > 0 && store.screen === 'home');
+}
+
+function addLog(type, text){
+  store.logs.unshift({ type, text, time: clockText() });
+  if (store.logs.length > 40) store.logs.pop();
+  renderLogs();
+}
+
+function renderLogs(){
+  const list = $('#logList');
+  list.innerHTML = store.logs.map(item => `
+    <li class="log-item">
+      <span class="log-tag k${item.type}">${item.type}</span>
+      <span class="log-text">${item.text}</span>
+      <time class="log-time">${item.time}</time>
+    </li>
+  `).join('');
+}
+
+function clearToast(){
+  clearTimeout(toast.timer);
+  $('#toast-root').innerHTML = '';
+}
+function toast(message){
+  const root = $('#toast-root');
+  root.innerHTML = '<div class="toast" role="status">' + message + '</div>';
+  clearTimeout(toast.timer);
+  toast.timer = setTimeout(() => { root.innerHTML = ''; }, 2800);
+}
+
+/* ============================================================
+   JS 3. 任务流渲染
+   ============================================================ */
+function stateChip(t){
+  if (t.state === 'ignored')  return '<span class="task-state dim">已忽略</span>';
+  if (t.state === 'done')     return '<span class="task-state ok">已完成</span>';
+  if (t.state === 'manual')   return '<span class="task-state wait">需你亲自处理</span>';
+  if (t.state === 'delegated') return '<span class="task-state">' + (t.note || 'Agent 已接手（只读）') + '</span>';
+  if (t.state === 'failed')   return '';
+  if (t.scheduled)            return '<span class="task-state ok">已加入日程</span>';
+  return '';
+}
+
+function actionHTML(t){
+  if (t.state === 'pending'){
+    return `<div class="task-actions">
+      <button class="btn" data-act="schedule" ${t.scheduled ? 'disabled' : ''}>${t.scheduled ? '已加入日程' : '加入日程'}</button>
+      <button class="btn primary" data-act="delegate" ${store.paused ? 'disabled title="Agent 已暂停"' : ''}>交给 Agent 办</button>
+      <button class="btn ghost" data-act="ignore">忽略</button>
+    </div>`;
+  }
+  if (t.state === 'manual'){
+    return `<div class="task-actions">
+      <button class="btn" data-act="open">去${t.app}回复</button>
+      <button class="btn ghost" data-act="ignore">先放着</button>
+    </div>`;
+  }
+  if (t.state === 'ignored'){
+    return `<div class="task-actions">
+      <button class="btn ghost" data-act="restore">撤销忽略</button>
+    </div>`;
+  }
+  return '';
+}
+
+function taskHTML(t, i){
+  const open = store.expanded === t.id;
+  const failed = t.state === 'failed';
+  const failedNote = failed
+    ? `<div class="failed-note">这一步没能替你完成，需要你亲自打开 ${t.app}。
+        <div><button class="btn" data-act="open" style="margin-top:8px">亲自打开 ${t.app}</button></div>
+      </div>`
+    : '';
+  return `
+  <article class="task ${open ? 'open' : ''} ${failed ? 'failed' : ''} ${t.state === 'ignored' ? 'ignored' : ''} ${t.state === 'done' ? 'done' : ''} ${store.flowAnim ? 'enter' : ''}"
+           data-id="${t.id}" style="--i:${i}">
+    <button class="task-main" aria-expanded="${open}" data-open="${t.id}">
+      <span class="task-top">
+        <span class="src"><i class="src-dot" style="--c:${t.color}"></i>${t.app}</span>
+        ${t.readonly ? '<span class="read-badge" title="本条来自只读聚合">👁 只读</span>' : ''}
+        <span class="task-time">${t.time}</span>
+      </span>
+      <span class="task-title">${t.title}</span>
+      <span class="task-suggest"><b>建议</b>${t.suggest}</span>
+      ${stateChip(t)}
+    </button>
+    ${failedNote}
+    ${actionHTML(t)}
+  </article>`;
+}
+
+function renderTasks(animate){
+  if (typeof animate === 'boolean') store.flowAnim = animate;
+  const list = $('#flowList');
+  const filtered = store.tasks.filter(t => {
+    if (store.filter === 'pending') return t.state === 'pending';
+    if (store.filter === 'action')  return t.state === 'pending' && ['message', 'payment', 'checkin'].includes(t.kind);
+    if (store.filter === 'done')    return ['done', 'failed', 'ignored', 'manual', 'delegated'].includes(t.state);
+    return true;
+  });
+  list.innerHTML = filtered.length
+    ? filtered.map(taskHTML).join('')
+    : '<div class="empty">这个筛选下没有任务。<br>换个筛选看看，或者回到桌面。</div>';
+  store.flowAnim = false;
+  updateCounts();
+}
+
+function toggleTaskCard(card){
+  const id = card.dataset.id;
+  const wasOpen = card.classList.contains('open');
+  $$('#flowList .task.open').forEach(other => {
+    other.classList.remove('open');
+    const main = $('.task-main', other);
+    if (main) main.setAttribute('aria-expanded', 'false');
+  });
+  if (wasOpen){
+    store.expanded = null;
+    return;
+  }
+  card.classList.add('open');
+  const main = $('.task-main', card);
+  if (main) main.setAttribute('aria-expanded', 'true');
+  store.expanded = id;
+  const t = store.tasks.find(item => item.id === id);
+  if (t && t.unread){
+    t.unread = false;
+    updateCounts();
+  }
+}
+
+function handleTaskAction(id, act){
+  const t = store.tasks.find(item => item.id === id);
+  if (!t) return;
+
+  if (act === 'schedule'){
+    if (t.scheduled) return;
+    t.scheduled = true;
+    addLog('你', '你把「' + t.title + '」加入了日程');
+    renderTasks(false);
+    toast('已加入今日日程');
+    return;
+  }
+
+  if (act === 'ignore'){
+    t.state = 'ignored';
+    t.unread = false;
+    addLog('你', '你忽略了「' + t.title + '」');
+    renderTasks(false);
+    toast('已忽略，这条不会再来打扰');
+    return;
+  }
+
+  if (act === 'restore'){
+    t.state = 'pending';
+    addLog('你', '你把「' + t.title + '」放回了流里');
+    renderTasks(false);
+    toast('已放回待办');
+    return;
+  }
+
+  if (act === 'open'){
+    toast('原型里不跳转第三方 App。这一步需要你亲自完成。');
+    addLog('你', '你选择亲自打开 ' + t.app);
+    return;
+  }
+
+  if (act === 'delegate'){
+    if (store.paused){
+      toast('Agent 已暂停，恢复后再交给它');
+      return;
+    }
+    if (t.state !== 'pending') return;
+    if (t.id === 't2'){ openS2(t); return; }
+    if (t.id === 't3'){ openS3(t); return; }
+    if (t.id === 't4'){ openS4(t); return; }
+
+    // 其余任务先由 Agent 做只读整理，不产生写操作
+    t.state = 'delegated';
+    t.unread = false;
+    if (t.id === 't1'){
+      t.note = '已整理 · 提交仍要你点头';
+      addLog('R', '整理了课堂派作业要求与群文件（只读）');
+      toast('清单整理好了，提交按钮留给你');
+    } else if (t.id === 't5'){
+      t.note = '已放进今晚的阅读清单';
+      addLog('R', '读取了 QQ 群文件「实验数据_第三组.xlsx」（只读）');
+      toast('已放进阅读清单，没有下载或转发');
+    } else {
+      t.note = '已放进今天的阅读清单';
+      addLog('R', '读取了 Canvas 公告「期中安排已发布」（只读）');
+      toast('已放进阅读清单');
+    }
+    renderTasks(false);
+  }
+}
+
+/* ============================================================
+   JS 4. 权限台：三道点头 + 能力清单 + 暂停接管
+   ============================================================ */
+function renderConsole(){
+  renderGates();
+  renderCaps();
+  renderLogs();
+  updateAgentUI();
+}
+
+function renderGates(){
+  const g = store.gates;
+  if (store.releaseCount > 0){
+    g[1].state = 'on';
+    g[1].label = '已开（逐次）';
+    g[1].desc = '你已放行微信发送 ' + store.releaseCount + ' 次。每次发送仍要重新点头。';
+    g[1].action = '再确认一次';
+  } else {
+    g[1].state = 'wait';
+    g[1].label = '待确认';
+    g[1].desc = '微信请求发送能力，需要你放行一次。';
+    g[1].action = '去确认';
+  }
+  $('#gateList').innerHTML = g.map(gate => `
+    <div class="gate">
+      <span class="gate-num">${gate.num}</span>
+      <div class="gate-body">
+        <strong>${gate.name}</strong>
+        <p>${gate.desc}</p>
+        <button class="gate-act" data-gate-act="${gate.key}">${gate.action}</button>
+      </div>
+      <span class="state-pill state-${gate.state === 'on' ? 'on' : gate.state === 'wait' ? 'wait' : 'off'}">${gate.label}</span>
+    </div>
+  `).join('');
+}
+
+function renderCaps(){
+  $('#capList').innerHTML = store.apps.map(app => {
+    const hasCaps = app.caps.length > 0;
+    const onCount = app.caps.filter(c => c.on).length;
+    const perms = [...new Set(app.caps.map(c => c.perm))]
+      .sort((a, b) => 'RWP'.indexOf(a) - 'RWP'.indexOf(b))
+      .map(p => `<span class="perm ${p}">${p}</span>`).join('');
+    const rows = app.caps.map((cap, i) => `
+      <div class="cap-row">
+        <span class="perm ${cap.perm}">${cap.perm}</span>
+        <span class="cap-name">${cap.label}</span>
+        ${cap.locked ? '<span class="cap-lock">每次交还</span>' : ''}
+        ${cap.needsGate && !cap.locked ? '<span class="cap-lock">逐次</span>' : ''}
+        <button class="sw"
+          role="switch"
+          aria-checked="${cap.on}"
+          aria-label="${app.name} ${cap.label}${cap.locked ? '，不可开放' : ''}"
+          data-cap-app="${app.id}" data-cap-index="${i}"
+          ${cap.locked ? 'disabled' : ''}></button>
+      </div>
+    `).join('');
+    return `
+      <div class="app-cap ${hasCaps ? '' : 'muted'} ${app.saep ? 'blocked' : ''}" data-app-block="${app.id}">
+        <div class="app-cap-head">
+          <span class="app-glyph" style="--c:${app.color}">${app.glyph}</span>
+          <div>
+            <strong>${app.name}</strong>
+            <small>${hasCaps ? onCount + ' 项已开 · 共 ' + app.caps.length + ' 项' : app.note}</small>
+          </div>
+          ${app.saep ? '<span class="block-tag">SAEP</span>' : (hasCaps ? `<span class="perm-set">${perms}</span>` : '')}
+        </div>
+        ${hasCaps ? `<div class="cap-rows">${rows}</div>` : `<div class="cap-ghost"><i class="ghost-dot"></i><span>${app.ghost}</span></div>`}
+      </div>`;
+  }).join('');
+}
+
+function focusCap(appId, index){
+  const btn = $(`.sw[data-cap-app="${appId}"][data-cap-index="${index}"]`);
+  if (!btn) return;
+  btn.focus();
+  btn.classList.add('just-changed');
+  setTimeout(() => btn.classList.remove('just-changed'), 500);
+}
+
+function updateCapHeader(app){
+  const block = $(`.app-cap[data-app-block="${app.id}"]`);
+  if (!block) return;
+  const small = $('.app-cap-head small', block);
+  if (small) small.textContent = app.caps.filter(c => c.on).length + ' 项已开 · 共 ' + app.caps.length + ' 项';
+}
+
+function updateAgentUI(){
+  $('#flowAgentChip').classList.toggle('paused', store.paused);
+  $('#agentChipText').textContent = store.paused ? 'Agent 已暂停' : 'Agent 在岗';
+  $('#pausedBanner').classList.toggle('show', store.paused);
+  $('#agentState').classList.toggle('paused', store.paused);
+  $('#agentStateText').textContent = store.paused ? 'Agent 已暂停 · 由你接管' : 'Agent 运行中 · 可随时打断';
+  const btn = $('#pauseBtn');
+  btn.textContent = store.paused ? '恢复 Agent' : '暂停并接管';
+  btn.classList.toggle('on', store.paused);
+  btn.setAttribute('aria-label', store.paused ? '恢复 Agent 继续运行' : '暂停 Agent 并接管操作');
+}
+
+function togglePause(){
+  store.paused = !store.paused;
+  addLog('你', store.paused ? '你暂停了 Agent，接下来由你操作' : '你恢复了 Agent 的运行');
+  updateAgentUI();
+  renderTasks(false);
+}
+
+/* ============================================================
+   JS 5. 浮层基础
+   ============================================================ */
+let overlayLastFocus = null;
+let ovTimers = [];
+let ovIntervals = [];
+let ovRaf = 0;
+
+function later(fn, ms){
+  const id = setTimeout(fn, ms);
+  ovTimers.push(id);
+  return id;
+}
+function repeat(fn, ms){
+  const id = setInterval(fn, ms);
+  ovIntervals.push(id);
+  return id;
+}
+function cleanupOverlay(){
+  ovTimers.forEach(clearTimeout);
+  ovIntervals.forEach(clearInterval);
+  cancelAnimationFrame(ovRaf);
+  ovTimers = [];
+  ovIntervals = [];
+  ovRaf = 0;
+}
+function mountOverlay(type, html){
+  const root = $('#overlay-root');
+  if (!store.overlay) overlayLastFocus = document.activeElement;
+  clearToast();
+  cleanupOverlay();
+  root.innerHTML = html;
+  store.overlay = type;
+  const dialog = $('[role="dialog"]', root);
+  if (dialog){
+    dialog.setAttribute('tabindex', '-1');
+    setTimeout(() => dialog.focus({ preventScroll: true }), 30);
+  }
+}
+function closeOverlay(){
+  cleanupOverlay();
+  $('#overlay-root').innerHTML = '';
+  store.overlay = null;
+  if (overlayLastFocus && document.contains(overlayLastFocus)){
+    try { overlayLastFocus.focus({ preventScroll: true }); } catch (err) {}
+  }
+  overlayLastFocus = null;
+}
+
+/* ---- S1：只读聚合（无风险提示） ---- */
+function openS1(){
+  const sources = ['QQ', '微信', '企业微信', '超星学习通', '智慧树', 'Canvas', '课堂派', '日历'];
+  mountOverlay('s1', `
+    <div class="overlay" data-ov="s1">
+      <div class="scrim"></div>
+      <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="s1Title">
+        <div class="sheet-grab"></div>
+        <div class="ov-eyebrow"><span class="live-dot"></span>Agent 正在工作 · 只读</div>
+        <h2 class="ov-title" id="s1Title">读取 8 个来源的通知</h2>
+        <p class="ov-desc">只读。不会替你点任何按钮，也不会回复任何人。</p>
+        <div class="progress-track"><div class="progress-fill" id="s1Fill"></div></div>
+        <div class="src-list">
+          ${sources.map(name => `<span class="src-tag" data-src="${name}"><i></i>${name}</span>`).join('')}
+        </div>
+        <p class="ov-note" id="s1Stat">正在读取 0 / 8</p>
+        <div class="action-row">
+          <button class="btn-lg" id="s1Skip">跳过演示</button>
+          <button class="btn-lg primary" id="s1Done" disabled>生成任务流</button>
+        </div>
+      </div>
+    </div>
+  `);
+  const fill = $('#s1Fill');
+  const stat = $('#s1Stat');
+  const doneBtn = $('#s1Done');
+  const skipBtn = $('#s1Skip');
+  let index = 0;
+  let finished = false;
+
+  const iv = repeat(() => {
+    if (finished) return;
+    const name = sources[index];
+    const tag = $(`.src-tag[data-src="${name}"]`);
+    if (tag) tag.classList.add('done');
+    index += 1;
+    fill.style.width = (index / sources.length * 100) + '%';
+    stat.textContent = '正在读取 ' + index + ' / 8';
+    addLog('R', '读取了 ' + name + ' 的通知（只读）');
+    if (index >= sources.length) finish(false);
+  }, 380);
+
+  function finish(skipLogs){
+    if (finished) return;
+    finished = true;
+    clearInterval(iv);
+    index = sources.length;
+    $$('.src-tag').forEach(tag => tag.classList.add('done'));
+    fill.style.width = '100%';
+    stat.textContent = '已生成今日任务流 · 8 个来源';
+    doneBtn.disabled = false;
+    doneBtn.textContent = '去任务流';
+    skipBtn.disabled = true;
+    skipBtn.textContent = '已完成';
+    store.flowAnim = true;
+    if (skipLogs) addLog('R', '读取了 8 个来源的通知，生成今日任务流（只读）');
+  }
+
+  skipBtn.addEventListener('click', () => finish(true));
+  doneBtn.addEventListener('click', () => {
+    if (!finished) return;
+    closeOverlay();
+    go('flow');
+    toast('今日任务流已更新，' + unreadCount() + ' 件待看');
+  });
+}
+
+/* ---- S2：写前放行（微信允许 / 拒绝） ---- */
+function openS2(task, capRef){
+  const isCap = !!capRef;
+  let owner = null;
+  if (capRef){
+    for (const app of store.apps){
+      const index = app.caps.indexOf(capRef);
+      if (index >= 0){ owner = { app, index, cap: capRef }; break; }
+    }
+  }
+  const appName = owner ? owner.app.name : '微信';
+  const capLabel = owner ? owner.cap.label : '发送消息';
+  const title = isCap ? appName + '请求一次能力放行' : '微信请求替你发一条消息';
+  const desc = isCap
+    ? '「' + capLabel + '」会写数据。只放行这一次，用完就收回。'
+    : '这一步会写数据。只放行这一次，发完即失效。';
+  mountOverlay('s2', `
+    <div class="overlay" data-ov="s2">
+      <div class="scrim"></div>
+      <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="s2Title">
+        <div class="sheet-grab"></div>
+        <div class="ov-eyebrow">需要你点头 · 应用放行</div>
+        <h2 class="ov-title" id="s2Title">${title}</h2>
+        <p class="ov-desc">${desc}</p>
+        ${isCap ? '' : `
+        <div class="draft">
+          <div class="draft-from"><i class="src-dot" style="--c:#7ee0a8"></i>微信 · 地物三班 · 班长</div>
+          <span style="color:var(--faint)">班长：明早实验课换教室了吗？</span><br>
+          Agent 拟回复：<mark>已换到三教 302，老师昨晚在群里通知的。</mark>
+        </div>`}
+        <div class="action-row">
+          <button class="btn-lg danger" id="s2Deny">拒绝</button>
+          <button class="btn-lg primary" id="s2Allow">允许本次</button>
+        </div>
+        <div class="allow-foot">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>
+          <span>只对这一次生效。拒绝会立刻生效，这一步不会被执行。</span>
+        </div>
+      </div>
+    </div>
+  `);
+  $('#s2Deny').addEventListener('click', () => {
+    closeOverlay();
+    addLog('你', '你拒绝了' + appName + '的放行请求');
+    if (task){
+      task.state = 'manual';
+      task.unread = false;
+      renderTasks(false);
+    }
+    toast('已拒绝，消息没有发出');
+  });
+  $('#s2Allow').addEventListener('click', () => {
+    closeOverlay();
+    if (!owner || owner.app.id === 'wechat') store.releaseCount += 1;
+    addLog('W', '你放行了' + appName + '「' + capLabel + '」（仅本次）');
+    if (task){
+      task.state = 'done';
+      task.unread = false;
+      addLog('W', 'Agent 发出了回复：已换到三教 302');
+      renderTasks(false);
+      toast('已发送，只此一次');
+    } else if (owner){
+      capRef.on = true;
+      addLog('W', appName + '「' + capLabel + '」能力仅对本次开启');
+      renderCaps();
+      focusCap(owner.app.id, owner.index);
+      toast('已允许本次，用完即收回');
+    }
+    renderGates();
+    updateCounts();
+  });
+}
+
+/* ---- S3：支付交还，用户亲自验证 ---- */
+function openS3(task){
+  if (!task) return;
+  mountOverlay('s3', `
+    <div class="overlay takeover" data-ov="s3">
+      <div class="scrim"></div>
+      <div class="takeover-sheet" id="tkSheet" role="dialog" aria-modal="true" aria-labelledby="tkTitle">
+        <div class="tk-main">
+          <div class="tk-top">交还 · 支付确认</div>
+          <div class="tk-eyebrow">手机已交还给你</div>
+          <h2 class="tk-title" id="tkTitle">请亲自完成</h2>
+          <p class="tk-sub">指纹 / 人脸，确认这一笔支付。Agent 不会替你做。</p>
+          <div class="tk-amount">¥30.00</div>
+          <div class="tk-merchant">智慧树 · 物理竞赛校选报名费</div>
+          <div class="hold-wrap">
+            <div class="hold-breath" aria-hidden="true"></div>
+            <div class="hold-ring" id="holdRing" style="--p:0" aria-hidden="true"></div>
+            <button class="hold-btn" id="holdBtn" aria-label="按住验证指纹或人脸，持续一点二秒">
+              <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round">
+                <path d="M12 10a4 4 0 0 0-4 4v2"/><path d="M12 6a8 8 0 0 0-8 8v2"/>
+                <path d="M12 14v3a4 4 0 0 0 .7 2.3"/><path d="M16 10.5a4 4 0 0 1 1 2.5v2"/>
+                <path d="M20 15v-1a8 8 0 0 0-3-6.2"/><path d="M12 2a12 12 0 0 0-8 3"/>
+                <path d="M17 5.5A12 12 0 0 1 22 14"/>
+              </svg>
+              <span>按住验证</span>
+            </button>
+          </div>
+          <p class="hold-hint">按住 1.2 秒，松开会取消</p>
+          <button class="tk-cancel" id="tkCancel">取消，先不付</button>
+        </div>
+        <div class="tk-success">
+          <div class="success-mark">
+            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5 9 17.5 20 6.5"/></svg>
+          </div>
+          <h2>已完成支付</h2>
+          <p>¥30.00 · 智慧树报名费</p>
+          <p>回执已放进流里。这一笔没有经过 Agent。</p>
+          <button class="btn-lg primary" id="tkSuccessBtn">回到任务流</button>
+          <p class="ov-note">原型里没有真实扣款，这只是交互演示。</p>
+        </div>
+      </div>
+    </div>
+  `);
+
+  const sheet = $('#tkSheet');
+  const ring = $('#holdRing');
+  const holdBtn = $('#holdBtn');
+  let done = false;
+  let holding = false;
+  let startTs = 0;
+
+  function setProgress(p){ ring.style.setProperty('--p', String(p)); }
+  function stopHold(){
+    holding = false;
+    cancelAnimationFrame(ovRaf);
+    if (!done) setProgress(0);
+  }
+  function complete(){
+    if (done) return;
+    done = true;
+    holding = false;
+    cancelAnimationFrame(ovRaf);
+    setProgress(100);
+    sheet.classList.add('done');
+    task.state = 'done';
+    task.unread = false;
+    task.scheduled = false;
+    addLog('P', '你本人完成了支付 ¥30（智慧树报名费）');
+    renderTasks(false);
+    updateCounts();
+    toast('支付完成，回执已进流');
+    setTimeout(() => { const b = $('#tkSuccessBtn'); if (b) b.focus(); }, 60);
+  }
+  function beginHold(e){
+    if (done || holding) return;
+    if (e.type === 'keydown'){
+      if (!(e.key === ' ' || e.key === 'Enter')) return;
+      e.preventDefault();
+    }
+    holding = true;
+    startTs = performance.now();
+    addLog('P', '支付交还：等待你在手机上验证身份');
+    const tick = () => {
+      if (!holding) return;
+      const p = Math.min(1, (performance.now() - startTs) / 1200);
+      setProgress(p * 100);
+      if (p >= 1){ complete(); return; }
+      ovRaf = requestAnimationFrame(tick);
+    };
+    ovRaf = requestAnimationFrame(tick);
+  }
+
+  holdBtn.addEventListener('pointerdown', beginHold);
+  holdBtn.addEventListener('pointerup', stopHold);
+  holdBtn.addEventListener('pointerleave', stopHold);
+  holdBtn.addEventListener('pointercancel', stopHold);
+  holdBtn.addEventListener('keydown', beginHold);
+  holdBtn.addEventListener('keyup', stopHold);
+
+  $('#tkCancel').addEventListener('click', () => {
+    closeOverlay();
+    addLog('你', '你取消了支付，任务留在流里');
+    toast('已取消，任务还在流里');
+  });
+  $('#tkSuccessBtn').addEventListener('click', () => {
+    closeOverlay();
+    go('flow');
+    toast('已完成。这一笔没有经过 Agent。');
+  });
+}
+
+/* ---- S4：App 拒绝被操作（SAEP 失败态） ---- */
+function openS4(task){
+  if (!task) return;
+  mountOverlay('s4', `
+    <div class="overlay" data-ov="s4">
+      <div class="scrim"></div>
+      <div class="sheet" id="s4Sheet" role="dialog" aria-modal="true" aria-labelledby="s4Title">
+        <div class="sheet-grab"></div>
+        <div class="ov-eyebrow">Agent 尝试代办 · 失败态</div>
+        <h2 class="ov-title" id="s4Title">尝试完成学习通签到</h2>
+        <p class="ov-desc">超星学习通声明了 SAEP：拒绝被 Agent 操作。系统正在等待它的响应。</p>
+        <div class="attempt-list" id="s4Attempts">
+          <div class="attempt active" data-step="1">
+            <span class="spinner"></span>
+            <svg class="checkmark" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M4 12.5 9 17.5 20 6.5"/></svg>
+            <span>读取签到页</span>
+          </div>
+          <div class="attempt" data-step="2">
+            <span class="spinner"></span>
+            <svg class="checkmark" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M4 12.5 9 17.5 20 6.5"/></svg>
+            <span>请求进入课程</span>
+          </div>
+          <div class="attempt" data-step="3">
+            <span class="spinner"></span>
+            <svg class="checkmark" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M4 12.5 9 17.5 20 6.5"/></svg>
+            <span>等待应用响应</span>
+          </div>
+        </div>
+        <p class="ov-note" id="s4Stat">没有写操作，正在等待应用放行</p>
+      </div>
+    </div>
+  `);
+  addLog('R', 'Agent 尝试读取超星学习通签到页（只读）');
+  const stat = $('#s4Stat');
+
+  later(() => {
+    const step = $('.attempt[data-step="1"]');
+    if (step){ step.classList.remove('active'); step.classList.add('done'); }
+    $('.attempt[data-step="2"]').classList.add('active');
+    if (stat) stat.textContent = '应用没有放行，继续等待';
+  }, 650);
+
+  later(() => {
+    const step = $('.attempt[data-step="2"]');
+    if (step){ step.classList.remove('active'); step.classList.add('done'); }
+    $('.attempt[data-step="3"]').classList.add('active');
+    if (stat) stat.textContent = 'SAEP：应用拒绝被 Agent 操作';
+  }, 1350);
+
+  later(() => showS4Failure(task), 2150);
+}
+
+function showS4Failure(task){
+  task.state = 'failed';
+  task.unread = false;
+  addLog('W', '超星学习通拒绝操作（SAEP），签到没能完成');
+  renderTasks(false);
+  updateCounts();
+  const sheet = $('#s4Sheet');
+  if (!sheet) return;
+  sheet.innerHTML = `
+    <div class="sheet-grab"></div>
+    <div class="ov-eyebrow">失败 · 已交还给你</div>
+    <div class="fail-icon" aria-hidden="true">!</div>
+    <h2 class="ov-title" id="s4Title">这一步没能替你完成</h2>
+    <p class="ov-desc">应用拒绝后，Agent 不会尝试绕过。签到这件事，只能由你本人完成。</p>
+    <div class="fail-copy">这一步没能替你完成，需要你亲自打开 超星学习通。</div>
+    <div class="fail-meta"><span>截止 09:55</span><span>任务卡已变灰</span></div>
+    <div class="action-row">
+      <button class="btn-lg" id="s4Later">稍后处理</button>
+      <button class="btn-lg primary" id="s4Open">亲自打开 超星学习通</button>
+    </div>
+    <p class="ov-note">原型不会真的跳转。打开后，任务仍留在流里，直到你完成。</p>
+  `;
+  const goFailedTask = () => {
+    closeOverlay();
+    store.expanded = 't4';
+    go('flow');
+    renderTasks(false);
+  };
+  $('#s4Later').addEventListener('click', goFailedTask);
+  $('#s4Open').addEventListener('click', () => {
+    addLog('你', '你选择亲自打开超星学习通完成签到');
+    goFailedTask();
+  });
+}
+
+/* ============================================================
+   JS 6. 事件绑定与初始化
+   ============================================================ */
+function bindEvents(){
+  // 页面内导航
+  $('#flowBack').addEventListener('click', () => go('home'));
+  $('#consoleBack').addEventListener('click', () => go('home'));
+  $('#flowFab').addEventListener('click', () => go('flow'));
+  $('#flowAgentChip').addEventListener('click', () => go('console'));
+
+  // 所有 data-goto（演示台、桌面小组件、设置图标）
+  document.addEventListener('click', e => {
+    const el = e.target.closest('[data-goto]');
+    if (!el) return;
+    go(el.dataset.goto);
+  });
+
+  // 桌面 App 图标（不真实跳转）
+  $('#appGrid').addEventListener('click', e => {
+    if (e.target.closest('[data-goto]')) return;
+    const app = e.target.closest('.app[data-app]');
+    if (!app) return;
+    toast('原型不打开「' + app.dataset.app + '」。它的通知已经在流里了。');
+  });
+
+  // 任务流筛选
+  $$('.chip[data-filter]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      store.filter = btn.dataset.filter;
+      $$('.chip[data-filter]').forEach(other => other.setAttribute('aria-pressed', String(other === btn)));
+      renderTasks(false);
+    });
+  });
+
+  // 权限台内跳转
+  $$('.chip[data-anchor]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      $$('.chip[data-anchor]').forEach(other => other.setAttribute('aria-pressed', String(other === btn)));
+      const panel = $('#' + btn.dataset.anchor);
+      if (panel) panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+  });
+
+  // 任务卡：展开 / 动作
+  $('#flowList').addEventListener('click', e => {
+    const act = e.target.closest('[data-act]');
+    if (act){
+      const card = act.closest('.task');
+      handleTaskAction(card.dataset.id, act.dataset.act);
+      return;
+    }
+    const main = e.target.closest('.task-main');
+    if (main) toggleTaskCard(main.closest('.task'));
+  });
+
+  // 三道点头
+  $('#gateList').addEventListener('click', e => {
+    const btn = e.target.closest('[data-gate-act]');
+    if (!btn) return;
+    const key = btn.dataset.gateAct;
+    if (key === 'auth'){
+      addLog('你', '你查看了当前授权范围（只读）');
+      toast('可读：8 个来源的通知，只在本机处理');
+    } else if (key === 'release'){
+      const wechat = store.apps.find(a => a.id === 'wechat');
+      openS2(null, wechat.caps[2]);
+    } else if (key === 'pay'){
+      addLog('P', '你查看了支付规则：Agent 没有支付能力');
+      toast('支付没有开关。每一笔都会把手机交还给你。');
+    }
+  });
+
+  // 能力开关
+  $('#capList').addEventListener('click', e => {
+    const sw = e.target.closest('.sw');
+    if (!sw || sw.disabled) return;
+    const app = store.apps.find(a => a.id === sw.dataset.capApp);
+    if (!app) return;
+    const index = Number(sw.dataset.capIndex);
+    const cap = app.caps[index];
+    if (!cap || cap.locked) return;
+
+    const paint = () => {
+      sw.setAttribute('aria-checked', String(cap.on));
+      updateCapHeader(app);
+      sw.classList.add('just-changed');
+      setTimeout(() => sw.classList.remove('just-changed'), 500);
+    };
+
+    if (cap.on){
+      cap.on = false;
+      paint();
+      addLog('你', '你关闭了「' + app.name + ' · ' + cap.label + '」');
+      toast('已关闭，Agent 不能再调用');
+      return;
+    }
+    if (cap.needsGate){
+      openS2(null, cap);
+      return;
+    }
+    cap.on = true;
+    paint();
+    addLog('你', '你开启了「' + app.name + ' · ' + cap.label + '」');
+    toast('能力已开，仍受操作日志监督');
+  });
+
+  // 暂停并接管
+  $('#pauseBtn').addEventListener('click', togglePause);
+
+  // 演示台场景按钮
+  $$('.scene-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const scene = btn.dataset.scene;
+      if (store.paused && scene !== 's3'){
+        toast('Agent 已暂停，先恢复再演示');
+        go('console');
+        return;
+      }
+      if (scene === 's1') openS1();
+      if (scene === 's2') openS2(store.tasks.find(t => t.id === 't2'));
+      if (scene === 's3') openS3(store.tasks.find(t => t.id === 't3'));
+      if (scene === 's4') openS4(store.tasks.find(t => t.id === 't4'));
+    });
+  });
+
+  // Esc 关闭浮层（S2 关闭等于不发送）
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && store.overlay) closeOverlay();
+  });
+}
+
+function init(){
+  $('#flowDate').textContent = dateText();
+  $('#sbTime').textContent = clockText();
+  setInterval(() => { $('#sbTime').textContent = clockText(); }, 20000);
+
+  bindEvents();
+  renderGates();
+  renderCaps();
+  renderLogs();
+  renderTasks(false);
+  updateCounts();
+  updateAgentUI();
+  go('home');
+}
+
+init();
+</script>
+</body>
+</html>
