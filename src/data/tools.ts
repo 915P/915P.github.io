@@ -203,6 +203,15 @@ export const builtinTools: Tool[] = [
 		status: 'app',
 		href: '/apps/it-tools/index.html',
 	},
+	{
+		slug: 'moping',
+		name: '墨评 · 书法临写',
+		desc: '拍照比对逐笔判分、7552 字真迹库、在线教材与集字创作（11 种形制，可导出 PNG）',
+		icon: 'brush',
+		category: '工具',
+		status: 'app',
+		href: '/apps/moping/index.html',
+	},
 ];
 
 /*

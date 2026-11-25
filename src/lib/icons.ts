@@ -78,6 +78,9 @@ import '@mdui/icons/video-file.js';
 
 // IT-Tools 工具集（第三方应用卡片）
 import '@mdui/icons/handyman.js';
+
+// 墨评 · 书法临写（自研应用卡片）
+import '@mdui/icons/brush.js';
 import '@mdui/icons/audio-file.js';
 import '@mdui/icons/image.js';
 import '@mdui/icons/warning.js';

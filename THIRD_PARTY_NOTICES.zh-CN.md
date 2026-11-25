@@ -22,6 +22,7 @@
 | Unicode License v3 | 数据 | ✅ | ✅（需保留 Unicode 版权声明、不得暗示背书） | 无 |
 | EUPL-1.2 | 著佐权 | ✅ | ✅（需保留声明、说明是否修改） | 有（衍生作品须沿用 EUPL-1.2，或落入兼容许可清单） |
 | GPL-3.0 | 著佐权 | ✅ | ✅（保留许可、说明修改、提供对应源码） | 有（修改版及其所依据的作品须保持 GPL-3.0） |
+| CC BY-NC 4.0 | 内容 / 数据 | ❌ | ✅（署名、链接许可、注明修改、不暗示背书） | 无，但限非商业 |
 | CC BY-NC-SA 4.0 | 内容 | ❌ | ✅（需说明是否修改） | 有（相同方式共享 + 非商业） |
 
 ---
@@ -710,3 +711,103 @@ ffmpeg.wasm 的 `exec()` 只在 worker 本身死掉时才 reject；ffmpeg 自己
 >   工具页与文章中均已标注「第三方」，不得表述为自研。
 > - 工具列表中的示波器是**本站自研**（`src/lib/oscope/`），不是
 > `public/apps/oscope/` 里那个授权未确认、已下线的旧应用，见 §6。
+
+---
+
+## 20. 墨评 moping（书法临写与比对工具）⚠️ **字形数据包含 CC BY-NC 4.0**
+
+- **位置**：`public/apps/moping/` —— 自包含的前端（`index.html`、`icons.bundle.js`、
+  `icons/`）加上 `db/` 字形库（57,301 张 PNG、7,557 条 JSON 记录、`search.masks.bin`、
+  `search.meta.json`、`gallery.meta.json`、`lessons.json`、`conv.json`）。已在
+  `src/data/tools.ts`（slug `moping`，图标 `brush`）与 `src/lib/icons.ts` 中注册。
+- **来源**：改编自作者本人在同济大学选修课《书法艺术与心身健康》（2026 秋季学期）的
+  课程作业。**工具代码为原创，字形数据不是。**
+- **以静态文件提供**：与 `public/apps/phishing-email/` 一样，本目录不经过 Astro 管线——
+  无打包器、不从 `src/` 导入。
+- **范围说明**：`数据源/`（HCSU、ccd 的原始下载件）只存在于课程作业仓库，
+  **不属于本站**。
+
+### 20.1 HCSU —— 专家标注来源（占样本 12.6%）⚠️ CC BY-NC 4.0（限非商业）
+
+- **上游**：[`209-Tongji/HCSU`](https://github.com/209-Tongji/HCSU)，另见
+  [Hugging Face](https://huggingface.co/datasets/Tongji209/HCSU) 与
+  [ModelScope](https://modelscope.cn/datasets/Tongji209/HCSU_Fine-Grained_Historical_Calligraphy_Style_Understanding_Dataset)。
+- **论文**：Yinsheng Yao, Yan Liu, Chen Ye. *HCSU: A Dataset and Benchmark for
+  Fine-Grained Historical Calligraphy Style Understanding.* **ECCV 2026**，
+  LNCS vol. 17025，DOI
+  [`10.1007/978-3-032-37461-5_5`](https://doi.org/10.1007/978-3-032-37461-5_5)，
+  arXiv:2607.04147。同济大学 209 实验室构建。
+- **数据许可**：**CC BY-NC 4.0**。**代码许可**：Apache-2.0。
+- **本站使用范围**：**碑刻（Bei）子集 3,240 张**（统一规范至 256×256）及其
+  `bei_annotations.json`（`char`、`script_type`、`calligrapher`、`dynasty`、
+  `birth_year`/`death_year`、`source_type`、`quality`、`ink_style`、`stroke_style`、
+  `character_structure`、专家评述）。**未使用**帖（Tie）子集与加密的原始（Wild）子集。
+- **在本站字库中的占比（实测）**：`db/` 的 57,504 个样本中，**HCSU 派生 7,249 条
+  （12.6%）**（`quality` 为 `clear`/`blurry`/`sharp`），**ccd 贡献 50,485 条
+  （87.8%）**（见 §20.2）。7,249 与 HCSU 已发布 Bei+Tie 合计 7,020 张数量级吻合。
+  **HCSU 并非字形的主体，它的贡献是专家标注层**（书家、朝代、书体、墨法、笔法、
+  结体与书面评述），驱动真迹库的筛选与每个样本的说明；**字量来自 §20.2**。
+- **CC BY-NC 4.0 义务（已履行）**：
+  - **署名**——工具页的「致谢与版权」区块与本节 §20.5
+  - **链接许可**：<https://creativecommons.org/licenses/by-nc/4.0/>
+  - **注明是否修改**：是，见 §20.6
+  - **不暗示背书**：本站任何位置都未暗示原作者或同济大学认可本工具
+  - **非商业**：本站无广告、不销售、本工具不收费。⚠️ **若本站将来商业化，
+    必须移除全部 HCSU 派生数据。**
+- ⚠️ 上游分发部分为受控获取（ModelScope 需申请；Wild 压缩包需邮件申请），
+  Bei/Tie 压缩包密码已在上游 README 公开。本站再分发的是**已处理的** Bei 图片，
+  而非原始压缩包。
+
+### 20.2 chinese-calligraphy-dataset（即 `ccd` 样本）—— Apache-2.0
+
+- **位置**：为 `db/*.json` 中 `quality: "ccd"` 的样本及其 `db/imgs/` 图片提供来源——
+  即 19 个 `<书体>-<书家／碑帖>` 目录（如 `楷-多宝塔`、`行-米芾`、`隶-邓石如`）。
+- **上游**：[`zhuojg/chinese-calligraphy-dataset`](https://github.com/zhuojg/chinese-calligraphy-dataset)，
+  **Apache-2.0**。其 README 记载 *138,499 张书法字图，出自 **19 位书法家**，
+  覆盖 **7,328** 个不同汉字*，采集自互联网——与 `build_db.py` 中记录的
+  「19 家/碑帖、7328 字」**完全吻合**。上游提供「按字」与「按书家」两种目录组织，
+  本站用的是按书家那一版。
+- **在本站字库中的占比（实测）**：**57,504 个样本中的 50,485 条（87.8%）**——
+  字量的主体。
+- **本站修改**：经 `build_db.py` 的 `CCD_MAP` 由按书家目录重组为 19 个
+  `<书体>-<书家>` 目录，再走与 §20.1 相同的归一化／二值化流水线（每字最多 8 个样本、
+  与 HCSU 重复者让位、书体轮转取样）。
+- **Apache-2.0 义务（已履行）**：保留上游版权与许可声明（上游仓库不随本站分发，
+  本站只分发派生图片），并在本节**注明已作修改**。
+- 与 §20.1 同样的学习与研究用途。
+
+### 20.3 OpenCC 单字表 —— BSD-3-Clause
+
+- **文件**：`STCharacters.txt` / `TSCharacters.txt`（位于课程作业仓库 `数据源/`，
+  浏览器端为合并后的 `db/conv.json`）。
+- **上游**：[BYVoid/OpenCC](https://github.com/BYVoid/OpenCC)，**BSD-3-Clause**。
+- **用途**：搜索框后的单字繁↔简查询（先繁→简，再简→繁）。**仅使用单字表**，
+  未使用词组词典，表内容未作修改。
+
+### 20.4 OpenCV.js —— Apache-2.0
+
+- **位置**：`public/vendor/opencv.js`（全站共用，非墨评专属）。
+- **上游**：<https://opencv.org/>，**Apache-2.0**，© OpenCV 团队。
+- **用途**：拍照比对流程中的去格线（`HoughLinesP`、`distanceTransform`）、
+  自适应二值化与轮廓提取。全部在访客浏览器内运行，唯一网络请求是本地的
+  `vendor/opencv.js` 文件本身。
+
+### 20.5 mdui / @mdui/icons —— MIT
+
+见 §0 与 §0.1，此处不重复。墨评页面加载全站共用的 `/vendor/mdui/mdui.css` 与
+`/vendor/mdui/mdui.global.js`，并自带 `icons.bundle.js` —— 由仓库根目录的
+`.icons-entry.mjs` 经 esbuild 打包的 15 个 `@mdui/icons` 入口。
+
+### 20.6 本站对数据的修改
+
+- `build_db.py`（保存在课程作业仓库，不随本站分发）把 HCSU/ccd 图片做本地流水线处理：
+  极性归一、裁切到带边距的 256×256 画布、二值化、生成用于 IoU 检索的 64×64 位打包
+  mask、检索索引，以及前端所需的 JSON/JS 导出。
+- **未改动原始像素**：mask 由展示图重新提取，所分发的 PNG 仅用 `optipng` 做了**无损**
+  重编码（8-bit 灰度 → 1-bit 调色板，像素完全一致）。
+- 界面、IoU 评分、集字排版引擎与页面渲染代码均为本站原创，受仓库根目录的 MIT 许可约束。
+
+> **许可边界**：仓库根目录的 [LICENSE](LICENSE) 只覆盖本站自有代码，
+> **不构成对以下内容的再许可**：HCSU 数据（CC BY-NC 4.0）、
+> chinese-calligraphy-dataset（Apache-2.0）、OpenCC（BSD-3-Clause）、
+> OpenCV（Apache-2.0）。

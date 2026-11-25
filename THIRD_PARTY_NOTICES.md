@@ -26,6 +26,7 @@ package metadata, not merely against claims in the local copies.
 | Unicode License v3 | Data | Yes | Yes (keep Unicode copyright, do not imply endorsement) | No |
 | EUPL-1.2 | Copyleft | Yes | Yes (keep notices; state modifications) | Yes (derivative Works stay EUPL-1.2; covered by a compatibility list) |
 | GPL-3.0 | Copyleft | Yes | Yes (keep license, state modifications, provide corresponding source) | Yes (modified versions and the work they are based on must stay GPL-3.0) |
+| CC BY-NC 4.0 | Content / data | **No** | Yes (credit, link license, state changes, no endorsement) | No, but NonCommercial |
 | CC BY-NC-SA 4.0 | Content | **No** | Yes (state whether modified) | Yes (ShareAlike + NonCommercial) |
 
 ---
@@ -847,3 +848,116 @@ root [LICENSE](LICENSE):
 > - The oscilloscope listed in the tool index is **this site's own work**
 >   (`src/lib/oscope/`), not the legacy app in `public/apps/oscope/`, whose
 >   licensing remains unconfirmed and which is offline; see §6.
+
+## 20. 墨评 moping (calligraphy practice & comparison tool) ⚠️ **glyph data includes CC BY-NC 4.0**
+
+- **Location**: `public/apps/moping/` — a self-contained front end (`index.html`,
+  `icons.bundle.js`, `icons/`) plus the glyph database under `db/` (57,301 PNGs,
+  7,557 JSON records, `search.masks.bin`, `search.meta.json`, `gallery.meta.json`,
+  `lessons.json`, `conv.json`). Registered in `src/data/tools.ts` (slug `moping`,
+  icon `brush`) and `src/lib/icons.ts`.
+- **Origin**: adapted from the author's own coursework project for the Tongji University
+  elective 《书法艺术与心身健康》 (autumn 2026 term). **The tool code is original work;
+  the glyph data is not.**
+- **Served as static files**: like `public/apps/phishing-email/`, this directory bypasses
+  the Astro pipeline — no bundler, no imports from `src/`.
+- **Scope note**: `数据源/` (the raw HCSU/ccd downloads) lives only in the coursework
+  repository and is **not** part of this site.
+
+### 20.1 HCSU — expert-annotation source (12.6% of samples) ⚠️ CC BY-NC 4.0 (non-commercial)
+
+- **Upstream**: [`209-Tongji/HCSU`](https://github.com/209-Tongji/HCSU); also on
+  [Hugging Face](https://huggingface.co/datasets/Tongji209/HCSU) and
+  [ModelScope](https://modelscope.cn/datasets/Tongji209/HCSU_Fine-Grained_Historical_Calligraphy_Style_Understanding_Dataset).
+- **Paper**: Yinsheng Yao, Yan Liu, Chen Ye. *HCSU: A Dataset and Benchmark for
+  Fine-Grained Historical Calligraphy Style Understanding.* **ECCV 2026**, LNCS vol.
+  17025, DOI [`10.1007/978-3-032-37461-5_5`](https://doi.org/10.1007/978-3-032-37461-5_5),
+  arXiv:2607.04147. Built by the 209 lab, Tongji University.
+- **Data license**: **CC BY-NC 4.0**. **Code license**: Apache-2.0.
+- **What this site uses**: the **Bei (stone-rubbing) subset — 3,240 images** normalized
+  to 256×256, plus `bei_annotations.json` (`char`, `script_type`, `calligrapher`,
+  `dynasty`, `birth_year`/`death_year`, `source_type`, `quality`, `ink_style`,
+  `stroke_style`, `character_structure`, expert description). The Tie subset and the
+  encrypted Wild subset are **not** used.
+- **Share of the shipped library (measured)**: of the 57,504 samples in `db/`, **7,249
+  (12.6%) derive from HCSU** (the `quality` values `clear`/`blurry`/`sharp`), against
+  **50,485 (87.8%) from `ccd`** (§20.2). 7,249 closely matches HCSU's released
+  Bei+Tie total of 7,020. **HCSU is not the bulk of the glyph data — its contribution
+  is the expert annotation layer** (calligrapher, dynasty, script, ink/stroke style,
+  structure, and the written appraisal) that powers the 真迹库 filters and the
+  per-sample descriptions. The volume comes from §20.2.
+- **CC BY-NC 4.0 obligations (fulfilled)**:
+  - **Credit the creators** — the in-page 致谢与版权 section on the tool page and §20.5
+  - **Link the license**: <https://creativecommons.org/licenses/by-nc/4.0/>
+  - **State whether modified**: yes — see §20.6
+  - **No endorsement**: nothing on this site implies the authors or Tongji University
+    endorse this tool
+  - **NonCommercial**: this site runs no ads, sells nothing and accepts no payment for
+    this tool. ⚠️ **If the site ever becomes commercial, the HCSU-derived data must be
+    removed.**
+- ⚠️ Upstream distribution is partly gated (ModelScope requires an application; the Wild
+  archives require an emailed request). The Bei/Tie archive passwords are published in
+  the upstream README. This site redistributes the **processed** Bei images, not the
+  original archives.
+
+### 20.2 chinese-calligraphy-dataset (the `ccd` samples) — Apache-2.0
+
+- **Location**: provides the `quality: "ccd"` samples in `db/*.json` and `db/imgs/` —
+  the 19 directories named `<书体>-<书家／碑帖>` (e.g. `楷-多宝塔`, `行-米芾`,
+  `隶-邓石如`).
+- **Share of the shipped library (measured)**: **50,485 of 57,504 samples (87.8%)** —
+  the bulk of the glyph volume.
+- **Upstream**: [`zhuojg/chinese-calligraphy-dataset`](https://github.com/zhuojg/chinese-calligraphy-dataset),
+  **Apache-2.0**. Its README records *138,499 images of Chinese calligraphy characters
+  written by **19 calligraphers** … covering **7,328** different characters*, collected
+  from the Internet — matching the `19 家/碑帖, 7328 字` recorded in `build_db.py`
+  exactly. The upstream ships two layouts (per-character and per-calligrapher); the
+  per-calligrapher one was used.
+- **Site modifications**: reorganised from per-calligrapher folders into 19
+  `<书体>-<书家>` folders via `CCD_MAP` in `build_db.py`, then run through the same
+  normalization/binarization pipeline as §20.1 (≤8 samples per character, deduplicated
+  against HCSU, one script per character rotating).
+- **Apache-2.0 obligations (fulfilled)**: retain the upstream copyright notice and
+  licence text (the upstream repository is not redistributed here — only derived images
+  are), and **state that modifications were made** (this section).
+- Used for the same study purposes as §20.1.
+
+### 20.3 OpenCC character tables — BSD-3-Clause
+
+- **Files**: `STCharacters.txt` / `TSCharacters.txt` (in the coursework repo under
+  `数据源/`; the browser build is the merged `db/conv.json`).
+- **Upstream**: [BYVoid/OpenCC](https://github.com/BYVoid/OpenCC), **BSD-3-Clause**.
+- **Use**: single-character simplified↔traditional lookup behind the search box
+  (繁→简 tried first, then 简→繁). Only the per-character tables are used — **not** the
+  phrase dictionaries — and the table content is unmodified.
+
+### 20.4 OpenCV.js — Apache-2.0
+
+- **Location**: `public/vendor/opencv.js` (shared site-wide, not moping-specific).
+- **Upstream**: <https://opencv.org/>, **Apache-2.0**, © the OpenCV team.
+- **Use**: grid-line removal (`HoughLinesP`, `distanceTransform`), adaptive thresholding
+  and contour extraction in the photo-comparison pipeline. Runs entirely in the visitor's
+  browser; the only fetch is the local `vendor/opencv.js` file itself.
+
+### 20.5 mdui / @mdui/icons — MIT
+
+Covered by §0 and §0.1, not repeated. The moping page loads the site-wide
+`/vendor/mdui/mdui.css` and `/vendor/mdui/mdui.global.js`, and ships `icons.bundle.js` —
+an esbuild bundle of fifteen `@mdui/icons` entry files generated by `.icons-entry.mjs`
+at the repository root.
+
+### 20.6 Site modifications to the data
+
+- `build_db.py` (kept in the coursework repo, not shipped here) runs the HCSU/ccd images
+  through a local pipeline: polarity normalization, crop to a 256×256 padded canvas,
+  binarization, a 64×64 bit-packed mask for IoU search, a search index, and JSON/JS
+  exports for the front end.
+- **No original pixels are altered**: masks are re-derived from the display images, and
+  the shipped PNGs were only losslessly re-encoded with `optipng` (8-bit grayscale →
+  1-bit palette; identical pixels).
+- The UI, the IoU scoring, the 集字 layout engine and the page rendering code are
+  written from scratch for this site and are covered by the repository MIT license.
+
+> **Licensing boundary**: the [LICENSE](LICENSE) at the repository root covers this
+> site's own code only. It does **not** relicense the HCSU data (CC BY-NC 4.0),
+> chinese-calligraphy-dataset (Apache-2.0), OpenCC (BSD-3-Clause) or OpenCV (Apache-2.0).
