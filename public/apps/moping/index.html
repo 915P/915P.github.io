@@ -1,0 +1,2467 @@
+<!DOCTYPE html>
+<html lang="zh-CN" class="mdui-theme-auto">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>墨评 · 在线书法临写评价系统</title>
+<!-- MDUI 运行时：与站内共用同一份 /vendor/mdui（同源，命中同一份 HTTP 缓存）。
+     刻意不加 defer —— 页面末尾的内联 JS 会立刻读写 mdui 组件的属性与 .value。
+     mdui 2 的组件样式由组件 JS 经 lit 注入 shadow DOM，只引 mdui.css 拿不到组件样式（AGENT.md §3.1）。 -->
+<link rel="stylesheet" href="/vendor/mdui/mdui.css">
+<script src="/vendor/mdui/mdui.global.js"></script>
+<!-- 图标：apps/ 下页面不经过 Astro 构建，无法 import 裸说明符，故用 esbuild 把
+     @mdui/icons + lit 打成单文件（生成命令见 .icons-entry.mjs 头部注释）。 -->
+<script type="module" src="./icons.bundle.js"></script>
+<style>
+  /* 结构色一律由 mdui 设计令牌推导：主题一切换整页跟着换色（含明暗自动切换，见 docs/zh-cn/styles/dark-mode.md）。
+     画布绘制色（宣纸、米字格、印泥红）刻意不令牌化 —— 那是纸与墨，不是界面。 */
+  :root {
+    --ink: rgb(var(--mdui-color-on-surface));
+    --paper: rgb(var(--mdui-color-background));
+    --verm: rgb(var(--mdui-color-error));
+    --line: rgb(var(--mdui-color-outline-variant));
+    --gold: rgb(var(--mdui-color-primary));
+    --panel: rgb(var(--mdui-color-surface-container));
+    --panel2: rgb(var(--mdui-color-surface-container-high));
+    --dim: rgb(var(--mdui-color-on-surface-variant));
+    /* 「纸」：亮色沿用原设计的暖纸白，暗色换成暖深色 —— 直接用 #fffdf8 在暗色下是一块刺眼白板 */
+    --card-paper: #fffdf8;
+  }
+  .mdui-theme-dark { --card-paper: #241f18; }
+  @media (prefers-color-scheme: dark) {
+    .mdui-theme-auto { --card-paper: #241f18; }
+  }
+  /*
+     【重要】不要用 `* { margin: 0; padding: 0 }`：外部文档样式的优先级高于组件 shadow DOM 里的
+     `:host` 规则（CSS Shadow DOM 规范），通配重置会把 mdui 组件自带的内边距全部抹掉
+     —— 实测 top-app-bar 的 `:host { padding: 12px 8px }` 被打成 0，内容顶格。
+     站内 global.css §3 也只重置 box-sizing，不重置 margin/padding。
+     这里只清浏览器对文本/列表类元素的默认边距，mdui-* 一律不碰。 */
+  * { box-sizing: border-box; }
+  body, p, h1, h2, h3, h4, h5, h6, ul, ol, li, dl, dt, dd,
+  figure, figcaption, blockquote, fieldset, legend, pre {
+    margin: 0; padding: 0;
+  }
+  ul, ol { list-style: none; }
+  /* 界面文字用站内同款字体栈（global.css §3）；汉字内容（字格 / 识别字 / 例字）仍按原设计走楷宋，见下方相关选择器。 */
+  body {
+    font-family: system-ui, -apple-system, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB',
+      'Microsoft YaHei', 'Noto Sans CJK SC', sans-serif;
+    font-size: var(--mdui-typescale-body-medium-size);
+    line-height: var(--mdui-typescale-body-medium-line-height);
+    background: var(--paper);
+    color: var(--ink);
+    min-height: 100vh;
+  }
+  /* mdui 组件注册完成前隐藏，避免自定义元素闪现（同站内 global.css §4） */
+  :not(:defined) { visibility: hidden; }
+  /* 顶栏：两侧 mdui-button-icon + 居中标题（top-app-bar 标准结构，见 docs/zh-cn/components/top-app-bar.md） */
+  .tagline {
+    color: var(--dim);
+    font-size: var(--mdui-typescale-body-small-size);
+    line-height: var(--mdui-typescale-body-small-line-height);
+    text-align: center; letter-spacing: 2px;
+    padding: 14px 16px 0;
+  }
+
+  /* layout-main 由 mdui 提供定位骨架；这里只补内容宽度与上下留白 */
+  .site-main { padding-top: 8px; padding-bottom: 8px; }
+  /* 72rem 对齐站内 Page.astro 的 .page 限宽（原 980px，宽屏下白白留边） */
+  .layout {
+    display: flex; gap: 20px; max-width: 72rem;
+    margin: 18px auto; padding: 0 16px; align-items: flex-start;
+  }
+  .panel { flex: 1; }
+
+  /* ---- 字选择 ---- */
+  .charbar { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+  .charbar button {
+    /* 汉字内容按原设计走楷/宋，不随界面字体变成黑体 */
+    font-family: "Kaiti SC", "KaiTi", "STKaiti", serif;
+    font-size: 20px; width: 42px; height: 42px;
+    border: 1px solid var(--line); background: var(--panel); cursor: pointer;
+    border-radius: 4px; transition: all .15s;
+  }
+  .charbar button:hover { border-color: var(--verm); }
+  .charbar button.active { background: var(--ink); color: #fff; border-color: var(--ink); }
+
+  /* ---- 评价面板 ---- */
+  /* 外观（底色/描边/圆角/投影）由 mdui-card 提供，这里只管内边距与标题排版 */
+  .score-card { padding: 16px; margin-bottom: 14px; }
+  .score-card h2 {
+    font-size: var(--mdui-typescale-title-medium-size);
+    font-weight: var(--mdui-typescale-title-medium-weight);
+    letter-spacing: 3px; border-left: 4px solid var(--verm);
+    padding-left: 8px; margin-bottom: 12px;
+  }
+  .bigscore { text-align: center; margin: 6px 0 12px; }
+  .bigscore .num { font-size: var(--mdui-typescale-display-medium-size); color: var(--verm); }
+  .bigscore .unit { font-size: var(--mdui-typescale-body-medium-size); color: var(--dim); }
+  /* 致谢 hero：校友数据集的感谢是主体，字号与留白都比其余条目重一级 */
+  .credits .credit-hero {
+    padding: 14px 16px;
+    background: var(--panel);
+    border-left: 4px solid var(--gold);
+    border-radius: 0 var(--mdui-shape-corner-small) var(--mdui-shape-corner-small) 0;
+    margin-bottom: 14px;
+  }
+  .credits .credit-lead {
+    font-size: var(--mdui-typescale-title-medium-size);
+    line-height: 1.75;
+    color: var(--ink);
+    margin-bottom: 10px;
+  }
+  .credits .credit-cite {
+    font-size: var(--mdui-typescale-body-small-size);
+    line-height: 1.7;
+    color: var(--dim);
+    font-style: normal;
+    padding-left: 1em; text-indent: -1em;   /* 引文悬挂缩进 */
+    margin-bottom: 8px;
+  }
+  .credits .credit-meta {
+    font-size: var(--mdui-typescale-body-small-size);
+    line-height: 1.8;
+    color: var(--ink);
+    margin-bottom: 8px;
+  }
+  .credits .credit-license {
+    font-size: var(--mdui-typescale-label-medium-size);
+    color: var(--dim);
+    padding-top: 8px;
+    border-top: 1px dashed var(--line);
+  }
+
+  /* 其余条目：标签列 + 说明列两栏式 */
+  .credits .credit-row {
+    display: flex; gap: 14px;
+    padding: 9px 0; border-top: 1px solid var(--line);
+  }
+  .credits .credit-row:first-of-type { border-top: none; padding-top: 2px; }
+  .credits .credit-row > span {
+    flex: 0 0 4.6em;
+    font-size: var(--mdui-typescale-label-medium-size);
+    font-weight: var(--mdui-typescale-label-large-weight);
+    color: var(--dim); letter-spacing: 2px;
+    padding-top: 2px;
+  }
+  .credits .credit-row p {
+    flex: 1; min-width: 0;
+    font-size: var(--mdui-typescale-body-small-size);
+    line-height: var(--mdui-typescale-body-medium-line-height);
+    color: var(--ink);
+  }
+  .credits a { color: var(--gold); text-decoration: none; }
+  .credits a:hover { text-decoration: underline; }
+  .credits code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: .88em; padding: 1px 4px;
+    background: var(--panel2); border-radius: 4px;
+  }
+  @media (max-width: 560px) {
+    .credits .credit-row { flex-direction: column; gap: 3px; }
+    .credits .credit-row > span { flex: none; }
+    .credits .credit-hero { padding: 12px 12px; }
+  }
+
+  #launchNotice p {
+    font-size: var(--mdui-typescale-body-medium-size);
+    line-height: var(--mdui-typescale-body-medium-line-height);
+    margin: 10px 0;
+  }
+  #launchNotice p:first-child { margin-top: 2px; }
+
+  .footnote { text-align: center; font-size: var(--mdui-typescale-label-small-size);
+    color: var(--dim); padding: 14px 0 24px; letter-spacing: 1px; }
+
+  /* ---- 大师匹配 ---- */
+  .match-hint { font-size: var(--mdui-typescale-body-small-size);
+    line-height: var(--mdui-typescale-body-small-line-height); color: var(--dim); }
+
+  /* ---- Tabs ---- */
+  .tabs {
+    display: flex; justify-content: center; padding: 12px 0 0;
+    max-width: 560px; margin: 0 auto;
+  }
+  /* 窄屏：收起 emoji（实测 4 段带 emoji 共 426px，超出 360px 视口 66px），
+     并允许横向滚动兜底，避免整页横向溢出 */
+  @media (max-width: 560px) {
+    .tabs { max-width: 100%; padding-inline: 8px; overflow-x: auto; }
+  }
+
+  /* ---- 拍照裁剪 ---- */
+  /* 外观交给 mdui-card；这里只管布局与纸色（书写区刻意保留纸的质感） */
+  .upload-box {
+    background: var(--card-paper);
+    min-height: 200px; display: flex; align-items: center; justify-content: center;
+    cursor: pointer; overflow: hidden; position: relative;
+  }
+  .photo-pick { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; flex-wrap: wrap; }
+  .pick-label { font-size: 14px; font-weight: bold; }
+  .photo-pick .charbar { margin-bottom: 0; }
+  /* checkbox 是 custom element（约 40px 触摸目标），block + baseline 会把 12px 文字拽到脚底 → 改 flex 垂直居中 */
+  .auto-pick {
+    display: flex; align-items: center; gap: 2px;
+    font-size: 12px; color: var(--dim); margin-bottom: 8px;
+    cursor: pointer;
+  }
+  .auto-pick mdui-checkbox { --checkbox-size: 20px; }
+  /* ---- 全字库选择器 ---- */
+  .lib-tools { width: 100%; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 6px; }
+  .lib-tools mdui-text-field {
+    width: 8.5rem; --text-field-font-size: 1rem; --text-field-height: 2.4rem;
+  }
+  .lib-toggle { --button-font-size: .72rem; --button-height: 30px; }
+  .lib-hint { font-size: 12px; color: var(--verm); }
+  .lib-grid {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(36px, 1fr));
+    gap: 4px; max-height: 250px; overflow-y: auto; width: 100%;
+    border: 1px solid var(--line); border-radius: 6px; padding: 6px; background: var(--card-paper);
+  }
+  .lib-grid[hidden] { display: none; }
+  .lib-grid button {
+    font-family: "Kaiti SC", "KaiTi", serif; font-size: 16px; height: 34px;
+    border: 1px solid var(--line); background: var(--panel); color: var(--ink);
+    border-radius: 3px; cursor: pointer;
+  }
+  .lib-grid button:hover { border-color: var(--verm); }
+  .lib-grid button.active { background: var(--ink); color: #fff; }
+  .upload-inner { text-align: center; color: var(--dim); padding: 30px 10px; }
+  .upload-icon {
+    font-size: 48px; color: rgb(var(--mdui-color-primary));
+    --mdc-icon-size: 48px;
+  }
+  .upload-inner p { margin-top: 6px; font-size: 15px; color: var(--ink); }
+  .upload-inner .tip { font-size: 12px; color: var(--dim); }
+  .crop-stage { position: relative; width: 100%; }
+  .crop-stage canvas { display: block; width: 100%; }
+  .crop-frame {
+    position: absolute; border: 2px solid var(--verm);
+    box-shadow: 0 0 0 9999px rgba(0,0,0,.35);
+    cursor: move; left: 50%; top: 50%; transform: translate(-50%,-50%);
+    width: 150px; height: 150px;
+  }
+  .crop-frame::before, .crop-frame::after {
+    content: ""; position: absolute; background: rgba(179,58,58,.5);
+  }
+  .crop-frame::before { left: 50%; top: 0; bottom: 0; width: 1px; }
+  .crop-frame::after { top: 50%; left: 0; right: 0; height: 1px; }
+  .crop-ctrl { display: flex; gap: 12px; align-items: center; justify-content: center; margin: 12px 0; flex-wrap: wrap; font-size: 13px; color: var(--dim); }
+  .crop-ctrl mdui-slider { width: 160px; vertical-align: middle; }
+
+  /* ---- 识别结果 ---- */
+  .recognize-row { display: flex; gap: 14px; align-items: center; margin-bottom: 6px; }
+  .recognize-char {
+    font-size: 64px; width: 96px; height: 96px; line-height: 92px; text-align: center;
+    border: 1.5px solid var(--ink); background: var(--card-paper); font-family: "Kaiti SC", "KaiTi", serif;
+  }
+  .rec-alts { font-size: 12px; color: var(--dim); margin-top: 6px; }
+  .rec-alts.alts-top { margin: 8px 0 2px; }
+  .rec-alts.alts-top::before { content: "可能还有："; color: var(--dim); }
+  .rec-alts mdui-chip { margin: 0 6px 6px 0; }
+  .proc-view { display: flex; gap: 10px; }
+  .proc-view figure { flex: 1; margin: 0; text-align: center; min-width: 0; }
+  .proc-view canvas {
+    width: 100%; border: 1px solid var(--line); background: #fff;
+    image-rendering: pixelated; aspect-ratio: 1;
+  }
+  .proc-view figcaption { font-size: 11px; color: var(--dim); margin-top: 4px; line-height: 1.4; }
+  .rec-alts em { font-style: normal; font-weight: bold; color: var(--ink); }
+  /* 识别候选是 mdui-chip variant="suggestion"（§3.14：可点的示例用 suggestion） */
+  .rec-alts mdui-chip {
+    font-family: "Kaiti SC", "KaiTi", "STKaiti", serif;
+    font-size: .95rem; margin: 0 6px 6px 0;
+    --mdc-chip-outline-color: var(--line);
+  }
+  .rec-masters { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+  .rec-masters figure { width: 72px; text-align: center; }
+  .rec-masters img { width: 68px; height: 68px; border: 1px solid var(--line); background: #fff; }
+  .rec-masters figcaption { font-size: 11px; color: var(--dim); margin-top: 2px; }
+
+  /* ---- 真迹库 ---- */
+  .browse-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 12px; }
+  .browse-card {
+    padding: 8px; cursor: pointer; transition: border-color .15s, box-shadow .15s;
+    text-align: center; display: block;
+  }
+  .browse-card:hover { border-color: var(--verm); box-shadow: 0 2px 8px rgba(0,0,0,.12); }
+  .browse-card img { width: 100%; aspect-ratio: 1; background: #fff; }
+  .browse-card .bc-master { font-size: var(--mdui-typescale-body-medium-size);
+    font-weight: var(--mdui-typescale-title-medium-weight); margin-top: 4px; }
+  .browse-card .bc-meta { font-size: var(--mdui-typescale-label-small-size); color: var(--dim); }
+
+  /* ---- 在线教材 ---- */
+  /* 宽屏：列表定宽、正文吃掉剩余全部宽度 */
+  .lesson-wrap { display: flex; gap: 16px; align-items: flex-start; }
+  .lesson-nav {
+    display: flex; flex-direction: column; gap: 6px; min-width: 150px;
+    max-height: 580px; overflow-y: auto; flex-shrink: 0;
+  }
+  /* 教材导航用 mdui-list + mdui-list-item（MD3 标准导航列表）；
+     外观（涟漪/选中态/分隔线）全部由组件提供，这里只管容器尺寸与滚动 */
+  .lesson-nav {
+    flex: 0 0 16rem; width: 16rem; min-width: 16rem;
+    max-height: 42rem; overflow-y: auto;
+    border: 1px solid var(--line);
+    border-radius: var(--mdui-shape-corner-medium);
+    padding: 4px 0;
+  }
+  .lesson-body {
+    flex: 1 1 auto; min-width: 0; max-height: 42rem; overflow-y: auto;
+    padding: 20px 24px;
+    font-size: var(--mdui-typescale-body-medium-size);
+    line-height: 1.85;   /* 正文行距放宽，长文更易读 */
+  }
+  /* 宽屏下正文每行控制在约 46 个汉字，避免一行拉通难读 */
+  .lesson-body > * { max-width: 46em; }
+  .lesson-body h3 { font-size: var(--mdui-typescale-title-large-size);
+    font-weight: var(--mdui-typescale-title-large-weight); margin: 0 0 6px; }
+  .lesson-body h4 {
+    font-size: var(--mdui-typescale-title-small-size);
+    font-weight: var(--mdui-typescale-title-small-weight);
+    color: var(--verm); margin: 16px 0 6px;
+    border-left: 3px solid var(--verm); padding-left: 8px;
+  }
+  .lesson-body .ls-note { color: var(--dim); font-size: 13px; margin: 4px 0; }
+  .lesson-body .ls-quote {
+    background: var(--panel2); border: 1px dashed var(--line); padding: 8px 10px;
+    font-size: 13px; color: var(--dim); border-radius: 4px; margin: 6px 0;
+  }
+  .lesson-body ol.howto { padding-left: 22px; margin: 4px 0; }
+  .lesson-body ol.howto li { margin: 3px 0; }
+  .lesson-body ul.tips { padding-left: 20px; margin: 4px 0; color: var(--dim); }
+  .lesson-chars .char-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+  /* 例字是 mdui-chip variant="filter"（有选中态）；汉字本体仍走楷体 */
+  .char-chips mdui-chip {
+    font-family: "Kaiti SC", "KaiTi", serif;
+    font-size: 1.35rem;
+    --mdc-chip-outline-color: var(--line);
+  }
+  .lesson-jump { display: flex; gap: 8px; margin-top: 14px; flex-wrap: wrap; }
+  .lesson-jump mdui-button { --button-font-size: .8rem; }
+
+  /* ---- 真迹库筛选 ---- */
+  .filter-bar { display: flex; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; align-items: center; }
+  /* 分组标题：书体分节、节内按朝代 */
+  .gal-head {
+    grid-column: 1 / -1;
+    font-family: "Kaiti SC", "STKaiti", "SimSun", serif;
+    font-size: var(--mdui-typescale-title-large-size);
+    font-weight: var(--mdui-typescale-title-large-weight); letter-spacing: 3px;
+    margin-top: 16px; padding: 2px 0 4px;
+    border-bottom: 2px solid var(--verm);
+    display: flex; align-items: baseline; gap: 10px;
+  }
+  .gal-head:first-child { margin-top: 0; }
+  .gal-head .gh-n { font-size: var(--mdui-typescale-label-medium-size); font-weight: normal;
+    color: var(--dim); letter-spacing: 0; }
+  .gal-subhead {
+    grid-column: 1 / -1;
+    font-size: var(--mdui-typescale-body-medium-size); color: var(--dim); letter-spacing: 4px;
+    margin-top: 10px;
+  }
+  .gal-subhead::before { content: "· "; color: var(--verm); }
+  .filter-bar mdui-select { min-width: 7.5rem; --text-field-font-size: .82rem; }
+  .load-more { grid-column: 1 / -1; width: 100%; }
+
+  /* ---- 集字创作 ---- */
+  .collect-ctrl { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; font-size: 14px; }
+  .collect-ctrl mdui-select { min-width: 9rem; }
+  .collect-ctrl .col-text-label { display: flex; align-items: center; gap: 6px; }
+  .collect-ctrl mdui-text-field { width: 17rem; --text-field-font-size: .9rem; }
+  .preset-row { display: flex; gap: 6px; flex-wrap: wrap; margin: 10px 0 12px; }
+  .preset-row mdui-chip { --mdc-chip-outline-color: var(--line); }
+  .col-stage {
+    background: var(--panel2); border: 1px solid var(--line); border-radius: 6px;
+    padding: 14px; display: flex; justify-content: center; overflow: auto;
+  }
+  .col-stage canvas {
+    max-width: 100%; height: auto; box-shadow: 0 3px 14px rgba(0, 0, 0, .18); background: #fff;
+  }
+  .match-top { display: flex; gap: 12px; align-items: center; margin-bottom: 10px; }
+  .match-top img { width: 84px; height: 84px; border: 1px solid var(--line); background: #fff; }
+  .match-master { font-size: var(--mdui-typescale-title-large-size);
+    font-weight: var(--mdui-typescale-title-large-weight); }
+  .match-dyn { font-size: var(--mdui-typescale-body-small-size); color: var(--dim); margin: 3px 0; }
+  .match-sim { font-size: var(--mdui-typescale-body-medium-size); color: var(--verm); }
+  .match-sim b { font-size: var(--mdui-typescale-headline-small-size);
+    font-weight: var(--mdui-typescale-headline-small-weight); }
+  .match-rank { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
+  .match-rank span {
+    font-size: 12px; border: 1px solid var(--line); border-radius: 3px;
+    padding: 2px 6px; background: var(--panel2);
+  }
+  .match-desc { font-size: 13px; line-height: 1.7; color: var(--dim); border-left: 3px solid var(--gold); padding-left: 8px; }
+  .match-desc em { color: var(--gold); font-style: normal; font-weight: bold; }
+  @media (min-width: 1024px) {
+    /* 宽屏：主区（section.panel）吃更多宽度，右侧说明栏保持够用即可 */
+    .layout > section.panel { flex: 1 1 auto; min-width: 0; }
+    .layout > aside.panel { flex: 0 0 21rem; max-width: 21rem; }
+  }
+  @media (max-width: 760px) {
+    .layout { flex-direction: column; } .panel { width: 100%; }
+    .lesson-wrap { flex-direction: column; }
+    .lesson-nav { flex: 0 0 auto; width: 100%; min-width: 0; max-height: 240px; }
+    .lesson-body { max-height: none; }
+    .lesson-body > * { max-width: none; }
+  }
+</style>
+</head>
+<body>
+
+<mdui-top-app-bar>
+  <mdui-button-icon><mdui-icon-brush></mdui-icon-brush></mdui-button-icon>
+  <mdui-top-app-bar-title>墨评</mdui-top-app-bar-title>
+  <div style="flex-grow: 1"></div>
+</mdui-top-app-bar>
+<p class="tagline">看真迹 · 拍照比对 · 逐笔判分 —— 纯前端书法学习系统</p>
+
+<mdui-layout>
+<mdui-layout-main class="site-main">
+<nav class="tabs">
+  <mdui-segmented-button-group selects="single" value="browse" full-width aria-label="功能切换">
+    <mdui-segmented-button value="browse">真迹库</mdui-segmented-button>
+    <mdui-segmented-button value="lessons">在线教材</mdui-segmented-button>
+    <mdui-segmented-button value="collect">集字创作</mdui-segmented-button>
+    <mdui-segmented-button value="photo">拍照比对</mdui-segmented-button>
+  </mdui-segmented-button-group>
+</nav>
+
+<!-- 启动须知：拍照比对的准确性与数据下载量（仅首次打开，localStorage 记录） -->
+<mdui-dialog id="launchNotice" close-on-esc>
+  <div slot="headline">使用前须知：拍照比对</div>
+  <div slot="description">
+    <p><b>结果仅供参考，可能不准确。</b>算法比对的是字形轮廓（IoU 相似度），
+    会受拍摄角度、光线、背景格线以及个人书写差异影响，形似度分数不能作为鉴定依据。</p>
+    <p><b>首次使用需要下载数据：</b>图像处理库约 3.5&nbsp;MB；若再勾选「自动识别（全库检索）」，
+    还需下载约 6&nbsp;MB 的检索索引（2.6 万个范本的轮廓）。两者都只在首次下载，之后由浏览器缓存。</p>
+    <p>全部计算都在你本地浏览器完成，照片与书写内容不会上传到任何服务器。</p>
+  </div>
+  <div slot="action">
+    <mdui-button id="noticeOK" variant="filled">我知道了</mdui-button>
+  </div>
+</mdui-dialog>
+
+<!-- ===== 拍照比对 ===== -->
+<div class="layout tab-page" id="page-photo" style="display:none">
+  <section class="panel">
+    <div class="photo-pick">
+      <span class="pick-label">比对的字：</span>
+      <div class="charbar" id="charbarPhoto"></div>
+    </div>
+    <label class="auto-pick"><mdui-checkbox id="autoRecognize"></mdui-checkbox> 不选字，自动识别这是什么字（全库检索，较慢）</label>
+    <mdui-card variant="outlined" class="upload-box" id="uploadBox">
+      <input type="file" id="photoInput" accept="image/*" hidden>
+      <div class="upload-inner" id="uploadInner">
+        <mdui-icon-cloud-upload class="upload-icon"></mdui-icon-cloud-upload>
+        <p>拍照或从相册选择照片</p>
+        <p class="tip">请将单个字置于框内，系统自动去背景并识别</p>
+        <p class="tip">建议白纸书写；若在格纸上书写，格线会自动去除</p>
+        <mdui-button variant="tonal" id="btnPickPhoto">选择照片</mdui-button>
+      </div>
+      <div class="crop-stage" id="cropStage" style="display:none">
+        <canvas id="photoCanvas"></canvas>
+        <div class="crop-frame" id="cropFrame"></div>
+      </div>
+    </mdui-card>
+    <div class="crop-ctrl" id="cropCtrl" style="display:none">
+      <label class="crop-slider">选框大小 <mdui-slider id="cropSize" min="60" max="200" value="150"></mdui-slider></label>
+      <mdui-button variant="filled" id="btnAnalyze"><mdui-icon-crop slot="icon"></mdui-icon-crop>截取并识别</mdui-button>
+      <mdui-button variant="outlined" id="btnReupload">↻ 换一张</mdui-button>
+    </div>
+    <p class="tip" style="text-align:center">拖动红框移动选区 · 滑块调整大小</p>
+  </section>
+
+  <aside class="panel">
+    <mdui-card variant="outlined" class="score-card">
+      <h2>识别结果</h2>
+      <div class="match-hint" id="photoHint">先选择要比对的字，拍照框选后将与该字历代范本比对</div>
+      <div id="photoResult" style="display:none">
+        <div class="recognize-row">
+          <div class="recognize-char" id="recChar">--</div>
+          <div class="recognize-meta">
+            <div class="match-master" id="recMaster">--</div>
+            <div class="match-dyn" id="recDyn">--</div>
+            <div class="match-sim">形似度 <b id="recSim">--</b></div>
+          </div>
+        </div>
+        <div class="rec-alts alts-top" id="recAlts" style="display:none"></div>
+        <div class="bigscore" style="margin:4px 0 10px">
+          <span class="num" id="recScore">--</span><span class="unit"> / 100</span>
+        </div>
+        <div class="match-rank" id="recRank"></div>
+        <div class="match-desc" id="recDesc"></div>
+        <div class="rec-masters" id="recMasters"></div>
+      </div>
+    </mdui-card>
+    <mdui-card variant="outlined" class="score-card" id="procCard">
+      <h2>处理结果</h2>
+      <div class="proc-view">
+        <figure><canvas id="procBin"></canvas><figcaption>① 二值化 + 去格线 + 去噪</figcaption></figure>
+        <figure><canvas id="procMask" width="128" height="128"></canvas><figcaption>② 归一化形状（实际比对用）</figcaption></figure>
+      </div>
+      <div class="match-hint" style="margin-top:6px">① 里应只有干净的字——若见格线残留/杂点/断笔即为问题；② 是最终拿去比对的形状。</div>
+    </mdui-card>
+  </aside>
+</div>
+
+<!-- ===== 真迹库 ===== -->
+<div class="layout tab-page" id="page-browse">
+  <section class="panel" style="max-width:64rem">
+    <div class="charbar" id="charbarBrowse"></div>
+    <div class="filter-bar">
+      <mdui-select id="fltDynasty" variant="outlined" value=""><mdui-menu-item value="">全部朝代</mdui-menu-item></mdui-select>
+      <mdui-select id="fltScript" variant="outlined" value=""><mdui-menu-item value="">全部书体</mdui-menu-item></mdui-select>
+      <mdui-select id="fltMaster" variant="outlined" value=""><mdui-menu-item value="">再选书家</mdui-menu-item></mdui-select>
+      <mdui-button variant="text" id="fltReset" style="display:none"><mdui-icon-close slot="icon"></mdui-icon-close>清除筛选</mdui-button>
+      <span class="lib-hint" id="fltCount"></span>
+    </div>
+    <div class="browse-grid" id="browseGrid"></div>
+  </section>
+  <aside class="panel">
+    <mdui-card variant="outlined" class="score-card">
+      <h2>书家小传</h2>
+      <div class="match-hint" id="browseHint">选择一个字，查看历代书家真迹与评语</div>
+      <div id="browseInfo" style="display:none">
+        <img id="browseImg" alt="真迹" style="width:120px;height:120px;border:1px solid var(--line);background:#fff">
+        <div class="match-master" id="browseMaster" style="margin-top:8px">--</div>
+        <div class="match-dyn" id="browseDyn">--</div>
+        <div class="match-desc" id="browseDesc" style="margin-top:8px"></div>
+      </div>
+    </mdui-card>
+  </aside>
+</div>
+
+<!-- ===== 在线教材 ===== -->
+<div class="layout tab-page" id="page-lessons" style="display:none">
+  <section class="panel">
+    <div class="lesson-wrap">
+      <mdui-list class="lesson-nav" id="lessonNav"></mdui-list>
+      <mdui-card variant="outlined" class="lesson-body" id="lessonBody"></mdui-card>
+    </div>
+  </section>
+  <aside class="panel">
+    <mdui-card variant="outlined" class="score-card">
+      <h2>例字联动</h2>
+      <div class="match-hint" id="lessonHint">左侧选择讲次与小节；点击例字可一键带入真迹浏览 / 拍照比对 / 临写。</div>
+      <div class="lesson-chars" id="lessonChars" style="display:none">
+        <div class="char-chips" id="lessonCharChips"></div>
+        <div class="lesson-jump">
+          <mdui-button variant="filled" id="jumpBrowse">看真迹</mdui-button>
+          <mdui-button variant="filled" id="jumpPhoto">拍照比对</mdui-button>
+        </div>
+      </div>
+    </mdui-card>
+  </aside>
+</div>
+
+<!-- ===== 临写评价（原有布局） ===== -->
+<!-- ===== 集字创作 ===== -->
+<div class="layout tab-page" id="page-collect" style="display:none">
+  <section class="panel">
+    <div class="collect-ctrl">
+      <label>形式
+        <mdui-select id="colForm" variant="outlined" value="zhongtang">
+          <mdui-menu-item value="zhongtang">中堂（立轴·大）</mdui-menu-item>
+          <mdui-menu-item value="tiaofu">条幅（窄长）</mdui-menu-item>
+          <mdui-menu-item value="pingtiao">屏条（四条屏）</mdui-menu-item>
+          <mdui-menu-item value="couplet">楹联（对联·两行）</mdui-menu-item>
+          <mdui-menu-item value="banner">横披（横幅·一行）</mdui-menu-item>
+          <mdui-menu-item value="fan">扇面（弧形）</mdui-menu-item>
+          <mdui-menu-item value="doufang">斗方（单字）</mdui-menu-item>
+          <mdui-menu-item value="shoujuan">手卷（横卷·留款）</mdui-menu-item>
+          <mdui-menu-item value="ceye">册页（对开两页）</mdui-menu-item>
+          <mdui-menu-item value="shuxin">书信（尺牍·竖排笺）</mdui-menu-item>
+          <mdui-menu-item value="guji">古籍（版框行格）</mdui-menu-item>
+        </mdui-select>
+      </label>
+      <label>书体
+        <mdui-select id="colScript" variant="outlined" value="">
+          <mdui-menu-item value="">全部书体</mdui-menu-item>
+          <mdui-menu-item value="楷书">楷书</mdui-menu-item><mdui-menu-item value="行书">行书</mdui-menu-item><mdui-menu-item value="草书">草书</mdui-menu-item><mdui-menu-item value="隶书">隶书</mdui-menu-item><mdui-menu-item value="篆书">篆书</mdui-menu-item>
+        </mdui-select>
+      </label>
+      <label>书家
+        <mdui-select id="colMasterSel" variant="outlined" value=""><mdui-menu-item value="">自动（全库优选）</mdui-menu-item></mdui-select>
+      </label>
+      <label class="col-text-label">内容 <mdui-text-field id="colText" variant="outlined" placeholder="输入 1–14 字，空格分联/分栏" maxlength="40"></mdui-text-field></label>
+      <mdui-button variant="filled" id="btnCompose">生成</mdui-button>
+      <mdui-button variant="outlined" id="btnExport"><mdui-icon-download slot="icon"></mdui-icon-download>导出 PNG</mdui-button>
+    </div>
+    <div class="preset-row" id="colPresets"></div>
+    <div class="col-stage"><canvas id="colCanvas" width="1000" height="760"></canvas></div>
+    <div class="lib-hint" id="colHint" style="text-align:center"></div>
+  </section>
+  <aside class="panel">
+    <mdui-card variant="outlined" class="score-card">
+      <h2>取字来源</h2>
+      <div class="match-hint" id="colInfo">九种形制：中堂·条幅·屏条·楹联·横披·扇面·斗方·手卷·册页。可自选书体与书家（缺字自动换用并提示）；不选则全库清晰优先、覆盖最多者为主集书家。朱墨底色可导出 PNG，适合打印。</div>
+      <div class="rec-masters" id="colSources" style="margin-top:8px"></div>
+    </mdui-card>
+  </aside>
+</div>
+
+<!-- 致谢与版权：HCSU 为同济校友数据集，致谢为主体，许可声明其次。
+     完整声明见仓库 THIRD_PARTY_NOTICES.md §20 -->
+<mdui-card variant="outlined" class="score-card credits">
+  <h2>致谢与版权</h2>
+
+  <div class="credit-hero">
+    <p class="credit-lead">
+      <b>本工具受同济校友构建的 HCSU 启发（inspired by）而作——谨致以诚挚感谢。</b>
+      它证明了「细粒度书法感知」是一个值得认真对待的问题；
+      本工具的字形与全部专家标注，也直接建立在这份工作之上。
+    </p>
+    <p class="credit-cite">
+      Yinsheng Yao, Yan Liu, Chen Ye.
+      <i>HCSU: A Dataset and Benchmark for Fine-Grained Historical Calligraphy
+      Style Understanding.</i>
+      <b>ECCV 2026</b>, LNCS vol. 17025.
+      <a href="https://doi.org/10.1007/978-3-032-37461-5_5" target="_blank" rel="noopener">DOI</a> ·
+      <a href="https://arxiv.org/abs/2607.04147" target="_blank" rel="noopener">arXiv</a>
+    </p>
+    <p class="credit-meta">
+      同济大学 209 实验室出品 · 数据集收录 <b>39,307</b> 张标注汉字图像，覆盖 49 位书法家、10 个朝代、5 大书体；
+      本工具取其中<b>碑刻（Bei）子集 3,240 张</b>（256×256）与专家标注。
+      实测全库 57,504 个样本中，HCSU 派生占 <b>12.6%</b>（提供标注），字量主体由下方
+      chinese-calligraphy-dataset 贡献（<b>87.8%</b>）。
+      <br>
+      <a href="https://github.com/209-Tongji/HCSU" target="_blank" rel="noopener">GitHub</a> ·
+      <a href="https://huggingface.co/datasets/Tongji209/HCSU" target="_blank" rel="noopener">Hugging Face</a> ·
+      <a href="https://modelscope.cn/datasets/Tongji209/HCSU_Fine-Grained_Historical_Calligraphy_Style_Understanding_Dataset" target="_blank" rel="noopener">ModelScope</a>
+    </p>
+    <p class="credit-license">
+      数据许可 <a href="https://creativecommons.org/licenses/by-nc/4.0/" target="_blank" rel="noopener"><b>CC BY-NC 4.0</b></a>
+      （非商业）· 代码 Apache-2.0 · 依许可要求署名、注明修改、不暗示原作者认可本工具。
+    </p>
+  </div>
+
+  <div class="credit-row"><span>补充字形</span><p>
+    <a href="https://github.com/zhuojg/chinese-calligraphy-dataset" target="_blank" rel="noopener">chinese-calligraphy-dataset</a>
+    （138,499 张、19 位书法家、7,328 个汉字，<b>Apache-2.0</b>）是<b>字量的主体</b>——
+    实测占全库 57,504 个样本的 <b>87.8%</b>，提供书家／朝代／书体维度与网络书法原图；
+    经本地流水线重组为 19 个「书体-书家」目录并已注明修改。
+  </p></div>
+
+  <div class="credit-row"><span>简繁映射</span><p>
+    <a href="https://github.com/BYVoid/OpenCC" target="_blank" rel="noopener">OpenCC</a>
+    单字对照表（STCharacters / TSCharacters），<b>BSD-3-Clause</b>。
+  </p></div>
+
+  <div class="credit-row"><span>图像处理</span><p>
+    <a href="https://opencv.org/" target="_blank" rel="noopener">OpenCV</a>
+    本地运行（<b>Apache-2.0</b>），用于格线去除与二值化；照片全部在浏览器内计算，
+    <b>不上传任何服务器</b>。
+  </p></div>
+
+  <div class="credit-row"><span>界面组件</span><p>
+    <a href="https://mdui.org" target="_blank" rel="noopener">mdui 2</a> 与
+    <a href="https://mdui.org/material-design-icons/" target="_blank" rel="noopener">@mdui/icons</a>，
+    均为 <b>MIT</b> 许可，本地分发。
+  </p></div>
+
+  <div class="credit-row"><span>工具代码</span><p>
+    界面、字形比对与集字排版代码为本项目原创，按仓库根目录 <code>LICENSE</code>（<b>MIT</b>）授权；
+    第三方组件各自保留其原有许可，不因本仓库的 MIT 而改变。完整清单与溯源见
+    <code>THIRD_PARTY_NOTICES.md</code> 第 20 节。
+  </p></div>
+
+  <div class="credit-row"><span>字库管线</span><p>
+    从原始字集到本页所用 <code>db/</code> 的构建流程已单独开源：
+    <a href="https://github.com/915P/calligraphy-glyph-pipeline" target="_blank" rel="noopener">calligraphy-glyph-pipeline</a>
+    （<b>MIT</b>，含 <code>build_db.py</code>、数据获取说明与输出格式文档）。
+    仓库<b>不含任何数据集</b>——运行前需按其 README 自行下载上游数据，
+    数据许可仍归各上游（<a href="https://creativecommons.org/licenses/by-nc/4.0/" target="_blank" rel="noopener">CC BY-NC 4.0</a> 等）。
+  </p></div>
+</mdui-card>
+
+<p class="footnote">纯前端运行 · 字形比对 IoU · 简繁映射 OpenCC · 数据许可与致谢见上</p>
+</mdui-layout-main>
+</mdui-layout>
+
+<script src="vendor/opencv.js"></script>
+<script>
+(function () {
+  var CHARS = ["永","书","法","心","静","山","国","中","人","大","一","十"];
+  var currentChar = "永";
+  var drawnPaths = [];   // 用户笔迹 path 字符串（rasterizeUser 用，IoU 比对基础设施）
+
+  /* ---------- 大师相似度匹配（纯前端 IoU） ---------- */
+  function unpackMask(b64) {
+    var bin = atob(b64);
+    var out = new Uint8Array(4096);
+    for (var i = 0; i < 4096; i++) {
+      out[i] = (bin.charCodeAt(i >> 3) >> (7 - (i & 7))) & 1;
+    }
+    return out;
+  }
+
+  function rasterizeUser() {
+    var c = document.createElement("canvas");
+    c.width = 320; c.height = 320;
+    var ctx = c.getContext("2d");
+    ctx.fillStyle = "#000"; ctx.strokeStyle = "#000";
+    ctx.lineWidth = 14; ctx.lineCap = "round"; ctx.lineJoin = "round";
+    var n = 0;
+    drawnPaths.forEach(function (p) {
+      if (typeof p !== "string") return;
+      try { ctx.stroke(new Path2D(p)); n++; } catch (e) {}
+    });
+    if (!n) return null;
+    var data = ctx.getImageData(0, 0, 320, 320).data;
+    var minx = 320, miny = 320, maxx = 0, maxy = 0, cnt = 0;
+    var bin = new Uint8Array(320 * 320);
+    for (var i = 0; i < 320 * 320; i++) {
+      if (data[i * 4 + 3] > 64) {
+        bin[i] = 1; cnt++;
+        var x = i % 320, y = (i / 320) | 0;
+        if (x < minx) minx = x; if (x > maxx) maxx = x;
+        if (y < miny) miny = y; if (y > maxy) maxy = y;
+      }
+    }
+    if (cnt < 5) return null;
+    // 与库内相同的 bbox 归一化：等比缩放至 64×64 居中
+    var w = maxx - minx + 1, h = maxy - miny + 1;
+    var scale = Math.min(64 / h, 64 / w);
+    var nh = Math.max(1, Math.round(h * scale)), nw = Math.max(1, Math.round(w * scale));
+    var oy = Math.floor((64 - nh) / 2), ox = Math.floor((64 - nw) / 2);
+    var mask = new Uint8Array(4096);
+    for (var y = miny; y <= maxy; y++) {
+      for (var x2 = minx; x2 <= maxx; x2++) {
+        if (!bin[y * 320 + x2]) continue;
+        var ny = Math.min(nh - 1, Math.trunc((y - miny) * scale));
+        var nx = Math.min(nw - 1, Math.trunc((x2 - minx) * scale));
+        mask[(oy + ny) * 64 + (ox + nx)] = 1;
+      }
+    }
+    return mask;
+  }
+
+  function iou(a, b) {
+    var inter = 0, uni = 0;
+    for (var i = 0; i < 4096; i++) {
+      var x = a[i], y = b[i];
+      if (x && y) inter++;
+      if (x || y) uni++;
+    }
+    return uni ? inter / uni : 0;
+  }
+
+  /* ---- OpenCV 就绪探测（失败/超时 → 纯 JS 降级） ---- */
+  var cvOK = false;
+  function ensureCv(timeoutMs) {
+    return new Promise(function (resolve) {
+      if (typeof cv === "undefined") return resolve(false);
+      if (cv.Mat) { cvOK = true; return resolve(true); }
+      var t0 = Date.now();
+      var timer = setInterval(function () {
+        if (cv.Mat) { clearInterval(timer); cvOK = true; resolve(true); }
+        else if (Date.now() - t0 > (timeoutMs || 5000)) { clearInterval(timer); resolve(false); }
+      }, 50);
+    });
+  }
+
+  /* ---- Chamfer 距离形状相似度（OpenCV distanceTransform）----
+     对笔画粗细、微小错位鲁棒；不可用时降级 IoU */
+  var CHAMFER_D0 = 6;   // 标定：sim = 1/(1+d/D0)
+
+  function maskToMat(m01) {
+    var bytes = new Uint8Array(4096);
+    for (var i = 0; i < 4096; i++) bytes[i] = m01[i] ? 255 : 0;
+    var mat = new cv.Mat(64, 64, cv.CV_8UC1);
+    mat.data.set(bytes);
+    return mat;
+  }
+
+  function chamferOneWay(from, to) {   // mean dist from `from` pixels to nearest `to` pixel
+    var inv = new cv.Mat(), dist = new cv.Mat(), masked = new cv.Mat(), fm = null;
+    try {
+      cv.bitwise_not(to, inv);
+      cv.distanceTransform(inv, dist, cv.DIST_L2, 3);
+      fm = maskToMat(from);
+      cv.bitwise_and(dist, fm, masked);
+      var s = cv.sumElems(masked)[0];
+      var cnt = 0;
+      for (var i = 0; i < 4096; i++) if (from[i]) cnt++;
+      return cnt ? s / cnt : 99;
+    } finally {
+      inv.delete(); dist.delete(); masked.delete();
+      if (fm) fm.delete();
+    }
+  }
+
+  function chamferSim(a, b) {
+    var ca = 0, cb = 0;
+    for (var i = 0; i < 4096; i++) { if (a[i]) ca++; if (b[i]) cb++; }
+    if (!ca || !cb) return 0;
+    var ma = maskToMat(a), mb = maskToMat(b);
+    try {
+      var d = (chamferOneWay(a, mb) + chamferOneWay(b, ma)) / 2;
+      return 1 / (1 + d / CHAMFER_D0);
+    } finally { ma.delete(); mb.delete(); }
+  }
+
+  function simScore(a, b) {
+    // 拍照与临写统一用 IoU。chamferSim 实测长期抛异常被 catch 吞掉（从未真正生效），
+    // 且恢复运行后的消融实验也表明 Chamfer 动态范围压缩（自比仅 61%），排序不如 IoU 稳。
+    return iou(a, b);
+  }
+
+  // 诊断探针（内部函数导出，供 DOM 外像素级验证）
+  window.__MP = { maskFromImageData: maskFromImageData, simScore: simScore,
+                  loadFile: loadFile, unpackMask: unpackMask };
+
+  async function matchMasters(char) {
+    var user = rasterizeUser();
+    if (!user) return null;
+    var code = String(char.codePointAt(0)).padStart(5, "0");
+    try {
+      var db = await loadFile("db/" + code + ".json");
+      if (!db.samples || !db.samples.length) return null;
+      var scored = db.samples.map(function (s) {
+        var sc = simScore(user, unpackMask(s.mask));
+        if (s.quality === "blurry") sc *= 0.9;   // 模糊样本降权
+        return { s: s, sim: sc };
+      });
+      scored.sort(function (a, b) { return b.sim - a.sim; });
+      return scored;
+    } catch (e) { return null; }
+  }
+
+  function renderMatch(scored) {
+    var hint = document.getElementById("matchHint");
+    var body = document.getElementById("matchBody");
+    if (!scored) {
+      hint.style.display = "";
+      body.style.display = "none";
+      hint.textContent = "此字暂无大师样本入库（或笔迹过少），可换「中、书、人、山」等字临写匹配。";
+      return;
+    }
+    var top = scored[0].s, pct = Math.round(scored[0].sim * 100);
+    hint.style.display = "none";
+    body.style.display = "";
+    document.getElementById("matchImg").src = "db/" + top.img;
+    document.getElementById("matchMaster").textContent = top.master + " · " + (top.script || "");
+    document.getElementById("matchDyn").textContent = (top.dynasty || "") + " · " + (top.source === "碑" ? "碑刻" : "墨迹");
+    document.getElementById("matchSim").textContent = pct + "%";
+    var rank = document.getElementById("matchRank");
+    rank.innerHTML = "";
+    scored.slice(0, 4).forEach(function (it, i) {
+      var sp = document.createElement("span");
+      sp.textContent = (i + 1) + ". " + it.s.master + " " + Math.round(it.sim * 100) + "%";
+      rank.appendChild(sp);
+    });
+    var desc = document.getElementById("matchDesc");
+    var parts = [];
+    if (top.stroke_style) parts.push("<em>笔法：</em>" + top.stroke_style);
+    if (top.structure) parts.push("<em>结体：</em>" + top.structure);
+    if (top.desc) parts.push("<em>古人评：</em>" + top.desc);
+    desc.innerHTML = parts.join("　") || "暂无评语";
+  }
+
+
+
+  /* ================= Tabs 切换 ================= */
+  function showPage(name) {
+    document.querySelectorAll(".tab-page").forEach(function (p) { p.style.display = "none"; });
+    var pg = document.getElementById("page-" + name);
+    if (pg) pg.style.display = "";
+  }
+  var tabGroup = document.querySelector(".tabs mdui-segmented-button-group");
+  tabGroup.onchange = function () { showPage(tabGroup.value); };
+
+  /* ================= 双路径加载（fetch 优先，file:// 被禁时降级 script） ================= */
+  function injectScript(src) {
+    return new Promise(function (res, rej) {
+      var s = document.createElement("script");
+      s.src = src;
+      s.onload = res;
+      s.onerror = function () { rej(new Error("script 加载失败: " + src)); };
+      document.head.appendChild(s);
+    });
+  }
+
+  function loadFile(name) {   // "db/index.json" → json 对象
+    return fetch(name, { cache: "no-store" }).then(function (r) {
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      return r.json();
+    }).catch(function () {
+      return injectScript(name.replace(/\.json$/, ".js")).then(function () {
+        var v = (window.__DB_FILES__ || {})[name.split("/").pop()];
+        if (v === undefined) throw new Error("数据未注册: " + name);
+        return v;
+      });
+    });
+  }
+
+  function loadBin(name) {    // "db/search.masks.bin" → ArrayBuffer
+    return fetch(name, { cache: "no-store" }).then(function (r) {
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      return r.arrayBuffer();
+    }).catch(function () {
+      return injectScript(name.replace(/\.bin$/, ".js")).then(function () {
+        var b64 = (window.__DB_FILES__ || {})[name.split("/").pop() + ".b64"];
+        if (!b64) throw new Error("数据未注册: " + name);
+        var bin = atob(b64), u = new Uint8Array(bin.length);
+        for (var i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i);
+        return u.buffer;
+      });
+    });
+  }
+
+  /* ================= 拍照比对 ================= */
+  var photoImg = null;          // 原始 Image
+  var frame = { x: 0, y: 0, size: 150 };  // 选框（显示坐标，相对 stage）
+
+  var uploadBox = document.getElementById("uploadBox");
+  document.getElementById("btnPickPhoto").onclick = function (e) {
+    e.stopPropagation();          // 避免冒泡到 uploadBox 触发第二次 click
+    photoInput.click();
+  };
+  var photoInput = document.getElementById("photoInput");
+  var cropStage = document.getElementById("cropStage");
+  var cropFrame = document.getElementById("cropFrame");
+  var photoCanvas = document.getElementById("photoCanvas");
+
+  uploadBox.onclick = function (e) {
+    if (e.target === cropStage || cropStage.contains(e.target)) return;
+    if (cropStage.style.display === "none") photoInput.click();
+  };
+  photoInput.onchange = function () {
+    var f = photoInput.files && photoInput.files[0];
+    if (!f) return;
+    var url = URL.createObjectURL(f);
+    var img = new Image();
+    img.onload = function () {
+      photoImg = img;
+      document.getElementById("uploadInner").style.display = "none";
+      cropStage.style.display = "";
+      document.getElementById("cropCtrl").style.display = "";
+      // 预览画布：宽按容器，高按比例
+      var stageW = uploadBox.clientWidth - 4;
+      var scale = stageW / img.naturalWidth;
+      photoCanvas.width = stageW;
+      photoCanvas.height = Math.round(img.naturalHeight * scale);
+      photoCanvas.getContext("2d").drawImage(img, 0, 0, stageW, photoCanvas.height);
+      // 默认选框：居中，短边 80%
+      var side = Math.min(stageW, photoCanvas.height) * 0.8;
+      frame.size = side;
+      frame.x = (stageW - side) / 2;
+      frame.y = (photoCanvas.height - side) / 2;
+      applyFrame();
+      document.getElementById("cropSize").value = Math.round(side);
+      document.getElementById("cropSize").max = Math.round(Math.min(stageW, photoCanvas.height));
+    };
+    img.src = url;
+  };
+
+  function applyFrame() {
+    cropFrame.style.width = cropFrame.style.height = frame.size + "px";
+    cropFrame.style.left = frame.x + "px";
+    cropFrame.style.top = frame.y + "px";
+    cropFrame.style.transform = "none";
+  }
+
+  // 拖拽移动
+  var dragging = false, offx = 0, offy = 0;
+  cropFrame.addEventListener("pointerdown", function (e) {
+    dragging = true;
+    offx = e.clientX - cropFrame.getBoundingClientRect().left;
+    offy = e.clientY - cropFrame.getBoundingClientRect().top;
+    cropFrame.setPointerCapture(e.pointerId);
+    e.preventDefault(); e.stopPropagation();
+  });
+  cropFrame.addEventListener("pointermove", function (e) {
+    if (!dragging) return;
+    var r = cropStage.getBoundingClientRect();
+    frame.x = Math.max(0, Math.min(r.width - frame.size, e.clientX - r.left - offx));
+    frame.y = Math.max(0, Math.min(r.height - frame.size, e.clientY - r.top - offy));
+    applyFrame();
+  });
+  cropFrame.addEventListener("pointerup", function () { dragging = false; });
+  document.getElementById("cropSize").oninput = function () {
+    var r = cropStage.getBoundingClientRect();
+    var cx = frame.x + frame.size / 2, cy = frame.y + frame.size / 2;
+    frame.size = Math.min(parseFloat(this.value), r.width, r.height);
+    frame.x = Math.max(0, Math.min(r.width - frame.size, cx - frame.size / 2));
+    frame.y = Math.max(0, Math.min(r.height - frame.size, cy - frame.size / 2));
+    applyFrame();
+  };
+  document.getElementById("btnReupload").onclick = function (e) {
+    e.stopPropagation();
+    photoInput.value = "";
+    photoInput.click();
+  };
+
+  /* ---- 图像处理：灰度→Otsu→极性→去碎点→归一化 ---- */
+  function otsu(hist, total) {
+    var sum = 0, t;
+    for (t = 0; t < 256; t++) sum += t * hist[t];
+    var sumB = 0, wB = 0, maxV = 0, thr = 128;
+    for (t = 0; t < 256; t++) {
+      wB += hist[t]; if (!wB) continue;
+      var wF = total - wB; if (!wF) break;
+      sumB += t * hist[t];
+      var mB = sumB / wB, mF = (sum - sumB) / wF;
+      var between = wB * wF * (mB - mF) * (mB - mF);
+      if (between > maxV) { maxV = between; thr = t; }
+    }
+    return thr;
+  }
+
+  // 米字格直线去除：HoughLinesP 跨虚线段找贯穿线，端点须贴近图缘
+  // （手写笔画两头都有留白，不会同时顶到裁剪边），dt 细度门限保护粗笔画
+  function removeGridLines(bin, w, h) {
+    if (!cvOK) return;
+    var m = null, edges = null, lines = null, dt = null;
+    try {
+      m = new cv.Mat(h, w, cv.CV_8UC1);
+      var bytes = new Uint8Array(w * h);
+      for (var i = 0; i < w * h; i++) bytes[i] = bin[i] ? 255 : 0;
+      m.data.set(bytes);
+      edges = new cv.Mat(); lines = new cv.Mat();
+      cv.Canny(m, edges, 50, 150);
+      var minDim = Math.min(w, h);
+      cv.HoughLinesP(edges, lines, 1, Math.PI / 180, 40,
+                     minDim * 0.35, minDim * 0.15);
+      if (lines.empty()) return;
+      dt = new cv.Mat();
+      cv.distanceTransform(m, dt, cv.DIST_L2, 3);
+      var dts = dt.data32F;
+      var pts = lines.data32S, n = lines.rows, E = 8;
+      for (var li = 0; li < n; li++) {
+        var x1 = pts[li * 4], y1 = pts[li * 4 + 1];
+        var x2 = pts[li * 4 + 2], y2 = pts[li * 4 + 3];
+        var e1 = (x1 <= E || y1 <= E || x1 >= w - 1 - E || y1 >= h - 1 - E);
+        var e2 = (x2 <= E || y2 <= E || x2 >= w - 1 - E || y2 >= h - 1 - E);
+        var len = Math.sqrt((x2 - x1) * (x2 - x1) + (y2 - y1) * (y2 - y1));
+        if (!((e1 && e2) || ((e1 || e2) && len >= minDim * 0.5))) continue;
+        var steps = Math.max(Math.abs(x2 - x1), Math.abs(y2 - y1)) + 1;
+        for (var t = 0; t <= steps; t++) {
+          var px = Math.round(x1 + (x2 - x1) * t / steps);
+          var py = Math.round(y1 + (y2 - y1) * t / steps);
+          for (var oy = -2; oy <= 2; oy++) {
+            for (var ox = -2; ox <= 2; ox++) {
+              var qx = px + ox, qy = py + oy;
+              if (qx < 1 || qy < 1 || qx >= w - 1 || qy >= h - 1) continue;
+              var qi = qy * w + qx;
+              if (bin[qi] && dts[qi] < 3.2) bin[qi] = 0;
+            }
+          }
+        }
+      }
+    } catch (e) { /* 静默降级到无去线模式 */ }
+    finally {
+      if (m) m.delete();
+      if (edges) edges.delete();
+      if (lines) lines.delete();
+      if (dt) dt.delete();
+    }
+  }
+
+  function despeckle(bin, w, h, minArea) {
+    var label = new Int32Array(w * h);
+    var sizes = [0];
+    var bbs = [null];   // 每域 [x0,y0,x1,y1]
+    var stack = [];
+    var lab = 0;
+    var i, p, px, py, np, nx, ny, dx, dy;
+    for (i = 0; i < w * h; i++) {
+      if (bin[i] && !label[i]) {
+        lab++; var cnt = 0; stack.length = 0;
+        stack.push(i); label[i] = lab;
+        var x0 = w, y0 = h, x1 = -1, y1 = -1;
+        while (stack.length) {
+          p = stack.pop(); cnt++;
+          px = p % w; py = (p / w) | 0;
+          if (px < x0) x0 = px; if (px > x1) x1 = px;
+          if (py < y0) y0 = py; if (py > y1) y1 = py;
+          for (dy = -1; dy <= 1; dy++) for (dx = -1; dx <= 1; dx++) {
+            nx = px + dx; ny = py + dy;
+            if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
+            np = ny * w + nx;
+            if (bin[np] && !label[np]) { label[np] = lab; stack.push(np); }
+          }
+        }
+        sizes[lab] = cnt;
+        bbs[lab] = [x0, y0, x1, y1];
+      }
+    }
+    // ---- Phase 1：明显垃圾（碎点/贯穿线/外框）----
+    var kill = new Uint8Array(lab + 1);
+    var i2, b, bw, bh, edges, fill;
+    for (i2 = 1; i2 <= lab; i2++) {
+      if (!bbs[i2]) continue;
+      b = bbs[i2];
+      bw = b[2] - b[0] + 1; bh = b[3] - b[1] + 1;
+      if (sizes[i2] < minArea) { kill[i2] = 1; continue; }
+      // 贯穿线（贴两对边）
+      if (bh <= 14 && bw >= w * 0.95 && b[0] <= 3 && b[2] >= w - 4) { kill[i2] = 1; continue; }
+      if (bw <= 14 && bh >= h * 0.95 && b[1] <= 3 && b[3] >= h - 4) { kill[i2] = 1; continue; }
+      // 外框：bbox≥85% + 触≥3边 + 空心（填充<25%）
+      if (bw >= w * 0.85 && bh >= h * 0.85) {
+        edges = 0;
+        if (b[0] <= 3) edges++;
+        if (b[2] >= w - 4) edges++;
+        if (b[1] <= 3) edges++;
+        if (b[3] >= h - 4) edges++;
+        fill = sizes[i2] / (bw * bh);
+        if (edges >= 3 && fill < 0.25) { kill[i2] = 1; continue; }
+      }
+    }
+    // ---- Phase 2：字区域 = 幸存大域联合 bbox（外扩12%）----
+    var survMax = 0;
+    for (i2 = 1; i2 <= lab; i2++) if (!kill[i2] && sizes[i2] > survMax) survMax = sizes[i2];
+    var bigTh = Math.max(40, survMax * 0.15);
+    var wx0 = w, wy0 = h, wx1 = -1, wy1 = -1, hasBig = false;
+    for (i2 = 1; i2 <= lab; i2++) {
+      if (!kill[i2] && sizes[i2] >= bigTh && bbs[i2]) {
+        hasBig = true; b = bbs[i2];
+        if (b[0] < wx0) wx0 = b[0]; if (b[1] < wy0) wy0 = b[1];
+        if (b[2] > wx1) wx1 = b[2]; if (b[3] > wy1) wy1 = b[3];
+      }
+    }
+    if (hasBig) {
+      var pad = Math.round(Math.max(wx1 - wx0, wy1 - wy0) * 0.12);
+      wx0 = Math.max(0, wx0 - pad); wy0 = Math.max(0, wy0 - pad);
+      wx1 = Math.min(w - 1, wx1 + pad); wy1 = Math.min(h - 1, wy1 + pad);
+      // ---- Phase 3：字区域外中小残留（虚线段/噪声块）----
+      for (i2 = 1; i2 <= lab; i2++) {
+        if (kill[i2] || !bbs[i2]) continue;
+        b = bbs[i2];
+        if (sizes[i2] < bigTh &&
+            (b[2] < wx0 || b[0] > wx1 || b[3] < wy0 || b[1] > wy1)) kill[i2] = 1;
+      }
+    }
+    for (var q = 0; q < w * h; q++) {
+      if (bin[q] && kill[label[q]]) bin[q] = 0;
+    }
+  }
+
+  var lastProc = null;   // 最近一次处理的二值图（供「处理结果」展示）
+
+  function maskFromImageData(imgData) {
+    var w = imgData.width, h = imgData.height, d = imgData.data;
+    var gray = new Uint8Array(w * h);
+    var hist = new Uint32Array(256);
+    for (var i = 0; i < w * h; i++) {
+      var g = (d[i * 4] * 299 + d[i * 4 + 1] * 587 + d[i * 4 + 2] * 114) / 1000 | 0;
+      gray[i] = g; hist[g]++;
+    }
+    // 与 build_db 的 process_raw 严格一致：不做高斯模糊——
+    // 曾加过 3×3 blur（"去拍照噪点"），导致同一张图的 mask 相对库内错位：
+    // 自比 IoU 从 100% 跌到 61%，全部候选挤在一起 → 识别频繁出错。
+    // 噪声照片交给 adaptiveThreshold 分支（ink>40%）处理。
+    var thr = otsu(hist, w * h);
+    var bin = new Uint8Array(w * h);
+    for (i = 0; i < w * h; i++) bin[i] = gray[i] <= thr ? 1 : 0;
+    // 极性：墨迹占比 >50% 说明反了（照片暗底/黑纸）
+    var ink = 0;
+    for (i = 0; i < w * h; i++) ink += bin[i];
+    if (ink > w * h * 0.5) { for (i = 0; i < w * h; i++) bin[i] = 1 - bin[i]; ink = w * h - ink; }
+    if (ink === 0) {
+      // Otsu 在纯二值双峰图上可能返回 0，兜底固定阈值重来
+      thr = 128;
+      for (i = 0; i < w * h; i++) bin[i] = gray[i] <= thr ? 1 : 0;
+      ink = 0;
+      for (i = 0; i < w * h; i++) ink += bin[i];
+      if (ink > w * h * 0.5) { for (i = 0; i < w * h; i++) bin[i] = 1 - bin[i]; }
+    }
+    // 全局 Otsu 结果疯狂（墨迹>40%，光照不均）→ 自适应阈值
+    if (ink > w * h * 0.4 && cvOK) {
+      try {
+        var g2 = new cv.Mat(h, w, cv.CV_8UC1); g2.data.set(gray);
+        var at = new cv.Mat();
+        var bs = Math.max(3, ((Math.min(w, h) / 8) | 1) | 1);  // 奇数块
+        cv.adaptiveThreshold(g2, at, 255, cv.ADAPTIVE_THRESH_GAUSSIAN_C,
+                             cv.THRESH_BINARY, bs, 10);
+        for (i = 0; i < w * h; i++) bin[i] = at.data[i] ? 0 : 1;
+        g2.delete(); at.delete();
+        ink = 0;
+        for (i = 0; i < w * h; i++) ink += bin[i];
+        if (ink > w * h * 0.5) { for (i = 0; i < w * h; i++) bin[i] = 1 - bin[i]; ink = w * h - ink; }
+      } catch (e) { /* 保留 Otsu 结果 */ }
+    }
+    // 去贯穿格线（米字格十字/对角虚线）+ 清边 + 去碎点
+    removeGridLines(bin, w, h);
+    for (i = 0; i < w; i++) { bin[i] = 0; bin[(h - 1) * w + i] = 0; }
+    for (i = 0; i < h; i++) { bin[i * w] = 0; bin[i * w + w - 1] = 0; }
+    despeckle(bin, w, h, 20);
+    lastProc = { bin: bin, w: w, h: h };
+    // bbox 归一化 64×64（与库内一致）
+    var minx = w, miny = h, maxx = -1, maxy = -1;
+    for (var y = 0; y < h; y++) for (var x = 0; x < w; x++) {
+      if (bin[y * w + x]) {
+        if (x < minx) minx = x; if (x > maxx) maxx = x;
+        if (y < miny) miny = y; if (y > maxy) maxy = y;
+      }
+    }
+    if (maxx < 0) return null;
+    var cw = maxx - minx + 1, ch = maxy - miny + 1;
+    var scale = Math.min(64 / ch, 64 / cw);
+    var nh = Math.max(1, Math.round(ch * scale)), nw = Math.max(1, Math.round(cw * scale));
+    var oy = Math.floor((64 - nh) / 2), ox = Math.floor((64 - nw) / 2);
+    var mask = new Uint8Array(4096);
+    for (y = miny; y <= maxy; y++) for (x = minx; x <= maxx; x++) {
+      if (!bin[y * w + x]) continue;
+      var ny = Math.min(nh - 1, Math.trunc((y - miny) * scale));
+      var nx = Math.min(nw - 1, Math.trunc((x - minx) * scale));
+      mask[(oy + ny) * 64 + (ox + nx)] = 1;
+    }
+    return mask;
+  }
+
+  // 「处理结果」可视化：① 二值图（去格线去噪后） ② 归一化 64×64 比对形状
+  function drawProcView(mask) {
+    document.getElementById("procCard").style.display = "";
+    var lp = lastProc;
+    var binCv = document.getElementById("procBin");
+    if (lp) {
+      binCv.width = lp.w; binCv.height = lp.h;
+      var ctx = binCv.getContext("2d");
+      var img = ctx.createImageData(lp.w, lp.h);
+      for (var i = 0; i < lp.w * lp.h; i++) {
+        var v = lp.bin[i] ? 0 : 255, j = i * 4;
+        img.data[j] = img.data[j + 1] = img.data[j + 2] = v;
+        img.data[j + 3] = 255;
+      }
+      ctx.putImageData(img, 0, 0);
+    }
+    var mCv = document.getElementById("procMask");
+    var mctx = mCv.getContext("2d");
+    mctx.fillStyle = "#fff"; mctx.fillRect(0, 0, 128, 128);
+    if (mask) {
+      var off = document.createElement("canvas");
+      off.width = off.height = 64;
+      var octx = off.getContext("2d");
+      var id = octx.createImageData(64, 64);
+      for (var k = 0; k < 4096; k++) {
+        var vv = mask[k] ? 0 : 255, kk = k * 4;
+        id.data[kk] = id.data[kk + 1] = id.data[kk + 2] = vv;
+        id.data[kk + 3] = 255;
+      }
+      octx.putImageData(id, 0, 0);
+      mctx.imageSmoothingEnabled = false;
+      mctx.drawImage(off, 0, 0, 128, 128);
+    } else {
+      mctx.fillStyle = "#a39a8c";
+      mctx.font = "12px sans-serif";
+      mctx.fillText("未生成字形", 36, 68);
+    }
+  }
+
+  function packBits(mask) {
+    var out = new Uint8Array(512);
+    for (var i = 0; i < 4096; i++) if (mask[i]) out[i >> 3] |= 1 << (7 - (i & 7));
+    return out;
+  }
+
+  /* ---- 全库检索 ---- */
+  var SEARCH = null;
+  var PC = (function () {
+    var t = new Uint8Array(256);
+    for (var i = 0; i < 256; i++) { var v = i, c = 0; while (v) { c += v & 1; v >>= 1; } t[i] = c; }
+    return t;
+  })();
+
+  function loadSearch() {
+    if (SEARCH) return Promise.resolve(SEARCH);
+    return Promise.all([
+      loadFile("db/search.meta.json"),
+      loadBin("db/search.masks.bin")
+    ]).then(function (res) {
+      SEARCH = { meta: res[0], masks: new Uint8Array(res[1]) };
+      return SEARCH;
+    });
+  }
+
+  function searchAll(userPack) {
+    var meta = SEARCH.meta, masks = SEARCH.masks, rows = [];
+    for (var k = 0; k < meta.n; k++) {
+      var off = k * 512, inter = 0, uni = 0;
+      for (var j = 0; j < 512; j++) {
+        var a = userPack[j], b = masks[off + j];
+        inter += PC[a & b]; uni += PC[a | b];
+      }
+      rows.push({ i: k, sim: uni ? inter / uni : 0 });
+    }
+    rows.sort(function (x, y) { return y.sim - x.sim; });
+    return rows;
+  }
+
+  function simToScore(sim) {
+    // 伸缩：0.15→0 分，0.70→100 分（拍照字与碑帖的常态 IoU 区间）
+    return Math.round(Math.max(0, Math.min(100, (sim - 0.15) / 0.55 * 100)));
+  }
+
+  document.getElementById("btnAnalyze").onclick = async function (e) {
+    e.stopPropagation();
+    if (!photoImg) return;
+    await ensureCv(3000);   // 等 OpenCV 就绪（已完成则立即返回）
+    var hint = document.getElementById("photoHint");
+    hint.style.display = "";
+    hint.textContent = "处理中……";
+    document.getElementById("photoResult").style.display = "none";
+    var auto = document.getElementById("autoRecognize").checked;
+    if (!auto && !photoChar) {
+      hint.textContent = "请先选择要比对的字（或勾选自动识别）。";
+      return;
+    }
+
+    // 1) 按选框裁剪到 256×256
+    var stageW = photoCanvas.width, s = stageW / photoImg.naturalWidth;
+    var sx = frame.x / s, sy = frame.y / s, sw = frame.size / s;
+    var cut = document.createElement("canvas");
+    cut.width = cut.height = 256;
+    var cctx = cut.getContext("2d");
+    cctx.fillStyle = "#fff"; cctx.fillRect(0, 0, 256, 256);
+    cctx.drawImage(photoImg, sx, sy, sw, sw, 0, 0, 256, 256);
+
+    // 2) 处理
+    var userMask = maskFromImageData(cctx.getImageData(0, 0, 256, 256));
+    drawProcView(userMask);
+    if (!userMask) { hint.textContent = "未检测到字迹，请把选框对准文字后重试。"; return; }
+    var userPack = packBits(userMask);
+
+    if (auto) {
+      // —— 自动识别：IoU 粗筛定字 → Top-8 全样本 IoU 精排（两段式）——
+      lastUserMask = userMask;
+      loadSearch().then(function () {
+        var rows = searchAll(userPack);
+        var meta = SEARCH.meta;
+        var charBest = {};
+        rows.forEach(function (r) {
+          var row = meta.rows[r.i];
+          var sim = row.q === "blurry" ? r.sim * 0.9 : r.sim;
+          if (!charBest[row.c] || charBest[row.c] < sim) charBest[row.c] = sim;
+        });
+        var charRank = Object.keys(charBest).map(function (c) {
+          return { c: c, sim: charBest[c] };
+        }).sort(function (a, b) { return b.sim - a.sim; });
+        // 两段式第二段：Top-8 候选字用全样本 IoU 重打分精排（比粗筛的≤4样本更全，排序稳定）
+        var topN = charRank.slice(0, 8);
+        return Promise.all(topN.map(function (alt) {
+          var cd = String(alt.c.codePointAt(0)).padStart(5, "0");
+          return loadFile("db/" + cd + ".json").then(function (d) {
+            if (!d.samples || !d.samples.length) return null;
+            var best = 0;
+            d.samples.forEach(function (sample) {
+              var sc = iou(userMask, unpackMask(sample.mask));
+              if (sample.quality === "blurry") sc *= 0.9;
+              if (sc > best) best = sc;
+            });
+            return { c: alt.c, sim: best };
+          }).catch(function () { return null; });
+        })).then(function (reranked) {
+          var list = reranked.filter(Boolean)
+            .sort(function (a, b) { return b.sim - a.sim; });
+          if (!list.length) throw new Error("候选字均无比对样本");
+          return showCharResult(list[0].c, list);
+        });
+      }).catch(function (err) {
+        hint.textContent = "检索失败：" + err.message;
+      });
+    } else {
+      // —— 指定字模式：只与该字的范本比对（快、稳）——
+      lastUserMask = userMask;
+      showCharResult(photoChar, null).catch(function (err) {
+        hint.textContent = "比对失败：" + err.message;
+      });
+    }
+  };
+
+  var lastUserMask = null;
+
+  function showCharResult(char, alts) {
+    var hint = document.getElementById("photoHint");
+    var code = String(char.codePointAt(0)).padStart(5, "0");
+    return loadFile("db/" + code + ".json").then(function (db) {
+      if (!db.samples || !db.samples.length) {
+        hint.style.display = "";
+        hint.textContent = alts
+          ? "识别候选「" + char + "」暂无范本，可点其他候选。"
+          : "「" + char + "」暂无范本入库，可换一个字或勾选自动识别。";
+        return null;
+      }
+      var scored = db.samples.map(function (sample) {
+        var sc = iou(lastUserMask, unpackMask(sample.mask));   // 拍照比对用 IoU（Chamfer 实测排序更差，见论文实验）
+        if (sample.quality === "blurry") sc *= 0.9;   // 模糊样本降权
+        return { s: sample, sim: sc };
+      }).sort(function (a, b) { return b.sim - a.sim; });
+      renderPhoto(scored, { char: char, conf: alts ? alts[0].sim : null, alts: alts });
+      return true;
+    });
+  }
+
+  function renderPhoto(sameChar, recInfo) {
+    var hint = document.getElementById("photoHint");
+    hint.style.display = "none";
+    var box = document.getElementById("photoResult");
+    box.style.display = "";
+
+    var top = sameChar[0].s;
+    var shownChar = recInfo ? recInfo.char : photoChar;
+    document.getElementById("recChar").textContent = shownChar;
+    document.getElementById("recMaster").textContent = top.master + " · " + (top.script || top.sc || "");
+    var dynTxt = (top.dynasty || top.dy || "") + " · " +
+      ((top.source || top.src) === "碑" ? "碑刻" : "墨迹");
+    if (recInfo && recInfo.conf != null) dynTxt += " · 识别置信 " + Math.round(recInfo.conf * 100) + "%";
+    else dynTxt += " · 与范本比对";
+    document.getElementById("recDyn").textContent = dynTxt;
+    document.getElementById("recSim").textContent = Math.round(sameChar[0].sim * 100) + "%";
+    document.getElementById("recScore").textContent = simToScore(sameChar[0].sim);
+
+    var rank = document.getElementById("recRank");
+    rank.innerHTML = "";
+    sameChar.slice(0, 5).forEach(function (it, i) {
+      var sp = document.createElement("span");
+      sp.textContent = (i + 1) + ". " + it.s.master + " " + Math.round(it.sim * 100) + "%" +
+        (it.s.quality === "blurry" ? "（糊）" : "");
+      rank.appendChild(sp);
+    });
+
+    var parts = [];
+    if (top.stroke_style || top.ss) parts.push("<em>笔法：</em>" + (top.stroke_style || top.ss));
+    if (top.structure || top.st) parts.push("<em>结体：</em>" + (top.structure || top.st));
+    if (top.desc || top.d) parts.push("<em>古人评：</em>" + (top.desc || top.d));
+    document.getElementById("recDesc").innerHTML = parts.join("　") || "暂无评语";
+
+    // 其他识别候选（点击切换比对目标）
+    var altsDiv = document.getElementById("recAlts");
+    if (recInfo && recInfo.alts && recInfo.alts.length > 1) {
+      altsDiv.innerHTML = "<em>其他可能：</em>";
+      recInfo.alts.slice(0, 4).forEach(function (alt) {
+        if (alt.c === recInfo.char) return;
+        var btn = document.createElement("mdui-chip");
+        btn.variant = "suggestion";
+        btn.textContent = alt.c + " " + Math.round(alt.sim * 100) + "%";
+        btn.onclick = function () { showCharResult(alt.c, recInfo.alts); };
+        altsDiv.appendChild(btn);
+      });
+      altsDiv.style.display = "";
+    } else {
+      altsDiv.style.display = "none";
+      altsDiv.innerHTML = "";
+    }
+
+    var wrap = document.getElementById("recMasters");
+    wrap.innerHTML = "";
+    sameChar.slice(0, 6).forEach(function (it) {
+      var fig = document.createElement("figure");
+      fig.innerHTML = "<img src='db/" + it.s.img + "' alt=''><figcaption>" + it.s.master + " " +
+        Math.round(it.sim * 100) + "%" + (it.s.quality === "blurry" ? "（糊）" : "") + "</figcaption>";
+      wrap.appendChild(fig);
+    });
+  }
+
+  /* ================= 真迹库 ================= */
+  var COMMON = "的一是了我不人在他有这个上们来到时大地为子中你说生国年着就那和要她出也得里后自以会家可下而过天去能对小多然于心学么之都好看起发当没成只如事把还用第样道想作种开美总从无情己面最女但现前些所同日手又行意动方期它头经长儿回位分爱老因很给名法间斯知世什两次使身者被高已亲其进此话常与活正感见明问力理尔点文几定本公特做外孩相西果走将书山大小一十静永";
+  var browseChar = null;
+  var photoChar = null;
+
+  // 通用字选择器：快捷行（16常用字）+ 搜索框 + 全字库网格
+  function buildCharbar(barId, onPick) {
+    var bar = document.getElementById(barId);
+    loadFile("db/index.json").then(function (idx) {
+      var all = Object.keys(idx);
+      var sorted = all.slice().sort(function (a, b) {
+        return (idx[b].n || 0) - (idx[a].n || 0);
+      });
+      var grid, quick;
+
+      function pick(c, btn) {
+        // 高亮同步（快捷行 + 网格）
+        [bar, grid].forEach(function (box) {
+          if (!box) return;
+          [].forEach.call(box.children, function (x) {
+            x.className = (x === btn) ? "active" : "";
+          });
+        });
+        onPick(c);
+      }
+
+      // —— 快捷行 ——
+      quick = sorted.filter(function (c) {
+        return COMMON.indexOf(c) >= 0 && idx[c].n >= 2;
+      }).slice(0, 16);
+      if (!quick.length) quick = ["中", "书", "人"];
+      quick.forEach(function (c, i) {
+        var b = document.createElement("button");
+        b.textContent = c;
+        b.onclick = function () { pick(c, b); };
+        bar.appendChild(b);
+        if (i === 0) { b.className = "active"; onPick(c); }
+      });
+
+      // —— 搜索框（带简繁兜底：条目为简体键，繁体字形映射后命中）——
+      var wrap = document.createElement("div");
+      wrap.className = "lib-tools";
+      var input = document.createElement("mdui-text-field");
+      input.variant = "outlined";
+      input.maxLength = 2;
+      input.placeholder = "输入任意字";
+      var hint = document.createElement("span");
+      hint.className = "lib-hint";
+      var convCache = null;
+      function loadConv() {
+        if (convCache) return Promise.resolve(convCache);
+        return loadFile("db/conv.json").then(function (cv) {
+          convCache = cv; return cv;
+        }).catch(function () { convCache = {}; return convCache; });
+      }
+      function doPick(c) {
+        var cell = grid.querySelector("button[data-c='" + c + "']");
+        pick(c, cell || null);
+        if (cell && grid.hidden === false) grid.scrollTop = cell.offsetTop - grid.offsetTop;
+      }
+      input.oninput = function () {
+        var arr = Array.from((input.value || "").trim());
+        var c = arr[arr.length - 1] || "";
+        hint.textContent = "";
+        if (!c) return;
+        if (idx[c]) { doPick(c); return; }
+        loadConv().then(function (cv) {
+          if (Array.from((input.value || "").trim()).slice(-1)[0] !== c) return; // 输入已变，丢弃过期解析
+          var cands = [];
+          if (cv.t2s && cv.t2s[c]) cands.push(cv.t2s[c]);   // 繁 → 简（图片多为繁体形，条目是简体键）
+          if (cv.s2t && cv.s2t[c]) cands.push(cv.s2t[c]);
+          for (var i = 0; i < cands.length; i++) {
+            if (idx[cands[i]]) {
+              doPick(cands[i]);
+              hint.textContent = "「" + c + "」按简繁对应到「" + cands[i] + "」";
+              return;
+            }
+          }
+          hint.textContent = "「" + c + "」不在字库";
+        });
+      };
+
+      // —— 全字库网格 ——
+      var toggle = document.createElement("mdui-button");
+      toggle.variant = "outlined";
+      toggle.className = "lib-toggle";
+      toggle.innerHTML = '<mdui-icon-expand-more slot="icon"></mdui-icon-expand-more>字库全 ' +
+        all.length + ' 字';
+      grid = document.createElement("div");
+      grid.className = "lib-grid";
+      grid.hidden = true;
+      sorted.forEach(function (c) {
+        var b = document.createElement("button");
+        b.textContent = c;
+        b.dataset.c = c;
+        b.title = c + " · " + (idx[c].n || 0) + " 样本";
+        b.onclick = function () { pick(c, b); };
+        grid.appendChild(b);
+      });
+      toggle.onclick = function () {
+        grid.hidden = !grid.hidden;
+        // 展开时把箭头转 180°，避免 textContent 覆盖掉 slot 里的图标
+        var ic = toggle.querySelector("mdui-icon-expand-more");
+        if (ic) ic.style.transform = grid.hidden ? "" : "rotate(180deg)";
+      };
+
+      wrap.appendChild(input);
+      wrap.appendChild(toggle);
+      wrap.appendChild(hint);
+      wrap.appendChild(grid);
+      bar.parentNode.insertBefore(wrap, bar.nextSibling);
+    }).catch(function () {
+      bar.innerHTML = "<span style='color:#a39a8c;font-size:13px'>字形库未就绪</span>";
+    });
+  }
+
+  buildCharbar("charbarPhoto", function (c) { photoChar = c; });
+
+  function initBrowseBar() {
+    buildCharbar("charbarBrowse", function (c) { browseChar = c; loadBrowse(c); });
+  }
+
+  /* ================= 在线教材 ================= */
+  var LESSONS = null, lessonChar = null;
+
+  function initLessons() {
+    loadFile("db/lessons.json").then(function (ls) {
+      LESSONS = ls;
+      var nav = document.getElementById("lessonNav");
+      var items = [];
+      ls.lessons.forEach(function (L) { items.push({ kind: "lesson", id: L.id, label: L.title }); });
+      ls.works.forEach(function (w) { items.push({ kind: "work", w: w, label: "例作 · " + w.title }); });
+      items.forEach(function (it, i) {
+        var b = document.createElement("mdui-list-item");
+        b.setAttribute("headline", it.label);
+        b.onclick = function () {
+          // list-item 的 active 属性即 MD3 选中态，无需自己维护样式类
+          [].forEach.call(nav.children, function (x) { x.removeAttribute("active"); });
+          b.setAttribute("active", "");
+          renderLessonItem(it);
+        };
+        nav.appendChild(b);
+        if (i === 0) { b.setAttribute("active", ""); renderLessonItem(it); }
+      });
+    }).catch(function () {
+      document.getElementById("lessonBody").textContent = "教材数据未就绪（db/lessons.json）";
+    });
+  }
+
+  function renderLessonItem(it) {
+    var body = document.getElementById("lessonBody");
+    var html = "", chars = [];
+    if (it.kind === "lesson") {
+      var L = LESSONS.lessons.filter(function (x) { return x.id === it.id; })[0];
+      html += "<h3>" + L.title + "</h3>";
+      if (L.note) html += "<div class='ls-note'>" + L.note + "</div>";
+      L.sections.forEach(function (s) {
+        html += "<h4>" + s.title + "</h4>";
+        if (s.quote) html += "<div class='ls-quote'>" + s.quote + "</div>";
+        if (s.note) html += "<div class='ls-note'>" + s.note + "</div>";
+        if (s.types) html += "<div class='ls-note'><b>常见类型：</b>" + s.types + "</div>";
+        if (s.howto && s.howto.length) {
+          html += "<div style='margin-top:4px'><b>" + "写法要点" + "：</b></div><ol class='howto'>";
+          s.howto.forEach(function (x) { html += "<li>" + x + "</li>"; });
+          html += "</ol>";
+        }
+        if (s.tips && s.tips.length) {
+          html += "<div style='margin-top:4px'><b>注意：</b></div><ul class='tips'>";
+          s.tips.forEach(function (x) { html += "<li>" + x + "</li>"; });
+          html += "</ul>";
+        }
+        if (s.chars && s.chars.length) chars = chars.concat(s.chars);
+      });
+    } else {
+      var w = it.w;
+      html += "<h3>" + w.title + "</h3>";
+      html += "<div class='ls-note'><b>分析：</b>" + w.points + "</div>";
+      html += "<div class='ls-quote'><b>提示：</b>" + w.tip + "</div>";
+      chars = Array.from(w.chars || "");
+    }
+    body.innerHTML = html;
+    body.scrollTop = 0;
+    renderLessonChars(chars);
+  }
+
+  function renderLessonChars(chars) {
+    var chips = document.getElementById("lessonCharChips");
+    var hint = document.getElementById("lessonHint");
+    var box = document.getElementById("lessonChars");
+    chips.innerHTML = "";
+    chars = chars.filter(function (c, i) { return chars.indexOf(c) === i; });
+    if (!chars.length) {
+      box.style.display = "none";
+      hint.style.display = "";
+      hint.textContent = "本节为笔画或理论讲解，无固定例字；前四讲可配合临写页练习笔画。";
+      return;
+    }
+    hint.style.display = "none";
+    box.style.display = "";
+    chars.forEach(function (c, i) {
+      var b = document.createElement("mdui-chip");
+      b.variant = "filter";
+      b.textContent = c;
+      b.onclick = function () {
+        [].forEach.call(chips.children, function (x) { x.selected = false; });
+        b.selected = true;
+        lessonChar = c;
+        syncCharAllTabs(c);
+      };
+      chips.appendChild(b);
+      if (i === 0) b.selected = true;
+    });
+    lessonChar = chars[0];
+    syncCharAllTabs(lessonChar);
+  }
+
+  // 教材选字 → 同步拍照/真迹/临写的当前字
+  function syncCharAllTabs(c) {
+    photoChar = c;
+    browseChar = c;
+    ["charbarPhoto", "charbarBrowse"].forEach(function (id) {
+      var bar = document.getElementById(id);
+      [].forEach.call(bar.children, function (x) {
+        x.className = (x.textContent === c) ? "active" : "";
+      });
+      // 字不在快捷行时，用搜索框+全字库网格给选中反馈
+      var tools = document.getElementById(id).nextElementSibling;
+      if (tools && tools.classList && tools.classList.contains("lib-tools")) {
+        var inp = tools.querySelector("input");
+        if (inp) inp.value = c;
+        var grid = tools.querySelector(".lib-grid");
+        if (grid) [].forEach.call(grid.children, function (g) {
+          g.className = (g.dataset.c === c) ? "active" : "";
+        });
+      }
+    });
+    loadBrowse(c);   // 真迹页静默预加载
+  }
+
+  function switchTab(name) {
+    showPage(name);
+    // 页面可能不在顶部导航里：只切页面，不污染分段按钮的选中态
+    if (document.querySelector('.tabs mdui-segmented-button[value="' + name + '"]')) {
+      tabGroup.value = name;
+    }
+  }
+  document.getElementById("jumpBrowse").onclick = function () { switchTab("browse"); };
+  document.getElementById("jumpPhoto").onclick = function () { switchTab("photo"); };
+
+  /* ================= 真迹库筛选（全库画廊） ================= */
+  var GAL = null, galFiltered = null, galShown = 0;
+
+  function loadGallery() {
+    if (GAL) return Promise.resolve(GAL);
+    return loadFile("db/gallery.meta.json").then(function (g) { GAL = g; return g; });
+  }
+
+  function fillSelect(sel, dict, keyIdx, rankFn) {
+    var counts = {};
+    GAL.rows.forEach(function (r) { counts[r[keyIdx]] = (counts[r[keyIdx]] || 0) + 1; });
+    var keys = Object.keys(counts).map(Number);
+    if (rankFn) {
+      // 按时间顺序（书体按 楷行草隶篆）
+      keys.sort(function (a, b) {
+        var d = rankFn(dict[a]) - rankFn(dict[b]);
+        return d || counts[b] - counts[a];
+      });
+    } else {
+      keys.sort(function (a, b) { return counts[b] - counts[a]; });
+    }
+    keys.forEach(function (i) {
+        var o = document.createElement("mdui-menu-item");
+        /* value 用名字而非索引：mdui-select 会把 "0" 异步重置成 ""，
+           而 scripts[0]=草书、dynasties[0]=明代 正好是 0 号索引 */
+        o.value = dict[i];
+        o.textContent = dict[i] + "（" + counts[i] + "）";
+        sel.appendChild(o);
+      });
+  }
+
+  // 书体/朝代的规范排序（分组展示用）
+  var SCR_ORDER = ["楷书", "行书", "草书", "隶书", "篆书"];
+  var DY_ORDER = ["三国", "晋", "南北朝", "隋", "唐", "五代", "宋", "辽", "金", "元", "明", "清", "民国", "近现代"];
+  function scrRank(name) {
+    var i = SCR_ORDER.indexOf(name);
+    return i < 0 ? 999 : i;
+  }
+  function dyRank(name) {
+    for (var i = 0; i < DY_ORDER.length; i++) if (name.indexOf(DY_ORDER[i]) >= 0) return i;
+    return 999;
+  }
+
+  // 书家下拉级联：按当前朝代×书体子集重建选项（先选朝代/书体，再选书家）
+  function rebuildMasterSelect(keepVal) {
+    var sel = document.getElementById("fltMaster");
+    var dy = document.getElementById("fltDynasty").value;   // 朝代名
+    var sc = document.getElementById("fltScript").value;    // 书体名
+    sel.innerHTML = '<mdui-menu-item value="">再选书家</mdui-menu-item>';
+    if (!GAL) return;
+    var counts = {};
+    GAL.rows.forEach(function (r) {
+      if (dy !== "" && GAL.dynasties[r[2]] !== dy) return;
+      if (sc !== "" && GAL.scripts[r[3]] !== sc) return;
+      var nm = GAL.masters[r[1]];
+      counts[nm] = (counts[nm] || 0) + 1;
+    });
+    Object.keys(counts)
+      .sort(function (a, b) { return counts[b] - counts[a]; })
+      .forEach(function (nm) {
+        var o = document.createElement("mdui-menu-item");
+        o.value = nm;                       // 书家名（同上，避开 "0"）
+        o.textContent = nm + "（" + counts[nm] + "）";
+        sel.appendChild(o);
+      });
+    if (keepVal !== undefined && keepVal !== "" && counts[keepVal]) sel.value = keepVal;
+  }
+
+  function initFilters() {
+    loadGallery().then(function (g) {
+      fillSelect(document.getElementById("fltDynasty"), g.dynasties, 2, dyRank);
+      fillSelect(document.getElementById("fltScript"), g.scripts, 3, scrRank);
+      rebuildMasterSelect();
+      // 朝代/书体变化 → 书家选项随之收窄（且需重选）
+      ["fltDynasty", "fltScript"].forEach(function (id) {
+        document.getElementById(id).onchange = function () {
+          document.getElementById("fltMaster").value = "";
+          rebuildMasterSelect();
+          applyFilter();
+        };
+      });
+      document.getElementById("fltMaster").onchange = applyFilter;
+      document.getElementById("fltReset").onclick = function () {
+        ["fltMaster", "fltDynasty", "fltScript"].forEach(function (id) {
+          document.getElementById(id).value = "";
+        });
+        rebuildMasterSelect();
+        applyFilter();
+      };
+    }).catch(function () {
+      document.getElementById("fltCount").textContent = "筛选索引未就绪";
+    });
+  }
+
+  function applyFilter() {
+    var m = document.getElementById("fltMaster").value;
+    var dy = document.getElementById("fltDynasty").value;
+    var sc = document.getElementById("fltScript").value;
+    var active = m !== "" || dy !== "" || sc !== "";
+    document.getElementById("fltReset").style.display = active ? "" : "none";
+    var grid = document.getElementById("browseGrid");
+    if (!active) {
+      galFiltered = null;
+      document.getElementById("fltCount").textContent = "";
+      if (browseChar) loadBrowse(browseChar);
+      return;
+    }
+    /* 三个筛选值都是名字（不是索引），逐一查表比较 */
+    galFiltered = GAL.rows.filter(function (r) {
+      return (m === "" || GAL.masters[r[1]] === m) &&
+             (dy === "" || GAL.dynasties[r[2]] === dy) &&
+             (sc === "" || GAL.scripts[r[3]] === sc);
+    });
+    // 先按书体分节，节内按朝代（时序）
+    galFiltered.sort(function (a, b) {
+      var s = scrRank(GAL.scripts[a[3]]) - scrRank(GAL.scripts[b[3]]);
+      if (s) return s;
+      return dyRank(GAL.dynasties[a[2]]) - dyRank(GAL.dynasties[b[2]]);
+    });
+    document.getElementById("fltCount").textContent = "共 " + galFiltered.length + " 张";
+    document.getElementById("browseInfo").style.display = "none";
+    document.getElementById("browseHint").style.display = "";
+    document.getElementById("browseHint").textContent =
+      "筛选模式：" + galFiltered.length + " 张符合条件，按书体分节、节内按朝代排列；点击缩略图回到该字的完整视图。";
+    galShown = 0;
+    grid.innerHTML = "";
+    galHeadScr = null; galHeadDy = null;
+    renderMore();
+  }
+
+  var galHeadScr = null, galHeadDy = null;
+
+  function renderMore() {
+    var g = GAL, grid = document.getElementById("browseGrid");
+    var end = Math.min(galShown + 60, galFiltered.length);
+    for (var i = galShown; i < end; i++) {
+      (function (r) {
+        // 书体分节标题
+        if (r[3] !== galHeadScr) {
+          galHeadScr = r[3]; galHeadDy = null;
+          var cnt = galFiltered.filter(function (x) { return x[3] === galHeadScr; }).length;
+          var h = document.createElement("div");
+          h.className = "gal-head";
+          h.textContent = g.scripts[r[3]];
+          var n = document.createElement("span");
+          n.className = "gh-n";
+          n.textContent = cnt + " 张";
+          h.appendChild(n);
+          grid.appendChild(h);
+        }
+        // 节内朝代标题
+        if (r[2] !== galHeadDy) {
+          galHeadDy = r[2];
+          var sh = document.createElement("div");
+          sh.className = "gal-subhead";
+          sh.textContent = g.dynasties[r[2]];
+          grid.appendChild(sh);
+        }
+        var card = document.createElement("mdui-card");
+        card.variant = "elevated";
+        card.className = "browse-card";
+        card.innerHTML = "<img src='db/" + r[5] + "' alt='" + r[0] + "' loading='lazy'>" +
+          "<div class='bc-master'>" + r[0] + " · " + g.masters[r[1]] + "</div>" +
+          "<div class='bc-meta'>" + g.dynasties[r[2]] + " · " + g.scripts[r[3]] + "</div>";
+        card.onclick = function () {
+          ["fltMaster", "fltDynasty", "fltScript"].forEach(function (id) {
+            document.getElementById(id).value = "";
+          });
+          rebuildMasterSelect();
+          galFiltered = null;
+          document.getElementById("fltCount").textContent = "";
+          loadBrowse(r[0]);
+        };
+        grid.appendChild(card);
+      })(galFiltered[i]);
+    }
+    galShown = end;
+    var old = document.getElementById("galMore");
+    if (old) old.remove();
+    if (galShown < galFiltered.length) {
+      var more = document.createElement("mdui-button");
+      more.variant = "outlined";
+      more.id = "galMore";
+      more.className = "load-more";
+      more.textContent = "再显示 " + Math.min(60, galFiltered.length - galShown) +
+        " 张（已显示 " + galShown + "/" + galFiltered.length + "）";
+      more.onclick = renderMore;
+      grid.appendChild(more);
+    }
+  }
+
+  /* ================= 集字创作（楹联/横幅/扇面/斗方 · 导出 PNG） ================= */
+  var COL_PRESETS = {
+    zhongtang: ["上善若水", "室雅兰香", "天道酬勤", "惠风和畅"],
+    tiaofu: ["宁静致远", "厚德载物", "自强不息", "业精于勤"],
+    pingtiao: ["春华秋实 澄怀观道 惠风和畅 室雅兰香", "梅兰竹菊 松风泉韵 云蒸霞蔚 月白风清"],
+    couplet: [
+      { label: "海纳百川·有容乃大", text: "海纳百川 有容乃大" },
+      { label: "书山学海联", text: "书山有路勤为径 学海无涯苦作舟" },
+      { label: "室雅兰香·花好月圆", text: "室雅兰香 花好月圆" },
+      { label: "业精于勤·行成于思", text: "业精于勤 行成于思" }
+    ],
+    banner: ["自强不息", "厚德载物", "上善若水", "天道酬勤", "宁静致远", "业精于勤"],
+    fan: ["惠风和畅", "室雅兰香", "春华秋实", "澄怀观道"],
+    doufang: ["福", "寿", "和", "艺"],
+    shoujuan: ["天朗气清 惠风和畅", "曲水流觞 群贤毕至", "清风明月 我师造物"],
+    ceye: ["梅 兰 竹 菊", "福 寿", "风 雅 颂"],
+    shuxin: ["见字如晤 敬请 钟安", "别来无恙 顺颂 时祺", "见字如面 秋凉 自爱"],
+    guji: ["天地玄黄 宇宙洪荒", "大学之道 在明明德"]
+  };
+  var colConv = null;
+  var colMaster = null;   // 本次集字主书家
+
+  function loadConvGlobal() {
+    if (colConv) return Promise.resolve(colConv);
+    return loadFile("db/conv.json").then(function (cv) { colConv = cv; return cv; })
+      .catch(function () { colConv = {}; return colConv; });
+  }
+
+  // 取字：按用户选的书体/书家过滤；缺字逐级回退（书家→任意家，书体→全部），fb 记录回退级别
+  function pickLibSample(c) {
+    var prio = { sharp: 0, ccd: 1, blurry: 2 };
+    var wantSc = document.getElementById("colScript").value;
+    var wantMs = document.getElementById("colMasterSel").value;
+    var code = String(c.codePointAt(0)).padStart(5, "0");
+    return loadFile("db/" + code + ".json").then(function (db) {
+      if (!db.samples || !db.samples.length) return { samples: null, fb: 0 };
+      var sorted = db.samples.slice().sort(function (a, b) {
+        return (prio[a.quality] !== undefined ? prio[a.quality] : 3) -
+               (prio[b.quality] !== undefined ? prio[b.quality] : 3);
+      });
+      var strict = sorted.filter(function (s) {
+        return (!wantSc || s.script === wantSc) && (!wantMs || s.master === wantMs);
+      });
+      if (strict.length) return { samples: strict, fb: 0 };
+      var bySc = wantSc ? sorted.filter(function (s) { return s.script === wantSc; }) : [];
+      if (bySc.length) return { samples: bySc, fb: 1 };     // 指定书家缺此字
+      if (wantSc || wantMs) return { samples: sorted, fb: 2 }; // 书体缺/全缺，回退全库
+      return { samples: sorted, fb: 0 };
+    }).catch(function () { return { samples: null, fb: 0 }; });
+  }
+
+  function loadImage(src) {
+    return new Promise(function (res, rej) {
+      var im = new Image();
+      im.onload = function () { res(im); };
+      im.onerror = rej;
+      im.src = src;
+    });
+  }
+
+  function renderPresets() {
+    var form = document.getElementById("colForm").value;
+    var row = document.getElementById("colPresets");
+    row.innerHTML = "";
+    var list = COL_PRESETS[form] || [];
+    list.forEach(function (p) {
+      var text = typeof p === "string" ? p : p.text;
+      var b = document.createElement("mdui-chip");
+      b.variant = "suggestion";
+      b.textContent = typeof p === "string" ? p : p.label;
+      b.onclick = function () {
+        document.getElementById("colText").value = text;
+        collectCompose();
+      };
+      row.appendChild(b);
+    });
+  }
+
+  document.getElementById("colForm").onchange = renderPresets;
+  document.getElementById("btnCompose").onclick = function () { collectCompose(); };
+
+  document.getElementById("btnExport").onclick = function () {
+    var hint = document.getElementById("colHint");
+    var cv = document.getElementById("colCanvas");
+    try {
+      cv.toBlob(function (blob) {
+        if (!blob) { hint.textContent = "导出失败：画布为空，请先点「生成」"; return; }
+        try {
+          var url = URL.createObjectURL(blob);
+          var a = document.createElement("a");
+          a.href = url;
+          a.download = "集字_" + document.getElementById("colForm").value + "_" +
+            Date.now() + ".png";
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+          setTimeout(function () { URL.revokeObjectURL(url); }, 3000);
+          hint.textContent = "已导出 PNG（若浏览器未自动下载，请查看下载提示/弹窗拦截）";
+        } catch (e2) {
+          hint.textContent = "导出失败（下载）：" + e2.message;
+        }
+      }, "image/png");
+    } catch (e) {
+      hint.textContent = e.name === "SecurityError"
+        ? "导出失败：浏览器安全限制——本地文件(file://)模式下画布被图片污染，无法读像素（生成与显示不受影响）。解法①：改用 Chrome/Edge 打开本文件；解法②（推荐，一劳永逸）：关掉本页，在 04_系统 目录运行 python3 -m http.server 8000，浏览器开 http://localhost:8000/index.html"
+        : "导出失败：" + e.message;
+    }
+  };
+
+  function collectCompose() {
+    var form = document.getElementById("colForm").value;
+    var raw = (document.getElementById("colText").value || "").trim();
+    var hint = document.getElementById("colHint");
+    if (!raw) { hint.textContent = "请输入内容，或点下方示例"; return; }
+    var segs = raw.split(/[\s，,、|/]+/).filter(Boolean);
+    if (form === "couplet" && segs.length < 2) {
+      hint.textContent = "楹联需要上下两联，用空格分开（如：海纳百川 有容乃大）";
+      return;
+    }
+    var segArrs = segs.map(function (s) { return Array.from(s); });
+    var uniq = [];
+    segArrs.forEach(function (arr) {
+      arr.forEach(function (c) { if (uniq.indexOf(c) < 0) uniq.push(c); });
+    });
+    hint.textContent = "取字中……";
+
+    Promise.all(uniq.map(function (c) {
+      return pickLibSample(c).then(function (res) {
+        if (res.samples) return { c: c, samples: res.samples, fb: res.fb };
+        return loadConvGlobal().then(function (cv) {
+          var alt = (cv.t2s && cv.t2s[c]) || (cv.s2t && cv.s2t[c]) || "";
+          if (alt && alt !== c) {
+            return pickLibSample(alt).then(function (r2) {
+              return r2.samples ? { c: c, samples: r2.samples, mapped: alt, fb: r2.fb }
+                                : { c: c, samples: null, fb: 0 };
+            });
+          }
+          return { c: c, samples: null, fb: 0 };
+        });
+      });
+    })).then(function (resolved) {
+      var missing = resolved.filter(function (x) { return !x.samples; })
+        .map(function (x) { return x.c; });
+      if (missing.length) {
+        hint.textContent = "字库缺字（无范本）：" + missing.join(" ");
+        return;
+      }
+      var chosenMs = document.getElementById("colMasterSel").value;
+      var target;
+      if (chosenMs) {
+        target = chosenMs;   // 用户指定书家
+      } else {
+        // 主书家：覆盖本内容字数最多者优先
+        var cov = {};
+        resolved.forEach(function (x) {
+          var seen = {};
+          x.samples.forEach(function (s) {
+            if (!seen[s.master]) { cov[s.master] = (cov[s.master] || 0) + 1; seen[s.master] = 1; }
+          });
+        });
+        target = Object.keys(cov).sort(function (a, b) { return cov[b] - cov[a]; })[0];
+      }
+      colMaster = target;
+      var picks = {};
+      resolved.forEach(function (x) {
+        var prefer = x.samples.filter(function (s) { return s.master === target; });
+        picks[x.c] = (prefer.find(function (s) { return s.quality === "sharp"; }) ||
+                      prefer[0] || x.samples[0]);
+      });
+      var fbChars = resolved.filter(function (x) { return x.fb >= 1; }).map(function (x) { return x.c; });
+      resolved.fbChars = fbChars;
+      var uniqueImgs = {};
+      Object.keys(picks).forEach(function (c) { uniqueImgs[picks[c].img] = null; });
+      return Promise.all(Object.keys(uniqueImgs).map(function (p) {
+        return loadImage("db/" + p).then(function (im) { uniqueImgs[p] = im; });
+      })).then(function () {
+        drawCollect(form, segArrs, picks, uniqueImgs, resolved);
+      });
+    }).catch(function (err) {
+      hint.textContent = "生成失败：" + err.message;
+    });
+  }
+
+  function drawCollect(form, segArrs, picks, imgs, resolved) {
+    var cv = document.getElementById("colCanvas");
+    var ctx = cv.getContext("2d");
+    var hint = document.getElementById("colHint");
+    var paper, W, H;
+    if (form === "couplet" || form === "doufang") { paper = "#a83226"; }   // 朱红
+    else { paper = "#f6efdf"; }   // 宣纸
+    var flat = segArrs.reduce(function (a, b) { return a.concat(b); }, []);
+    var FORM_NAME = { zhongtang: "中堂", tiaofu: "条幅", pingtiao: "屏条", couplet: "楹联",
+                      banner: "横披", fan: "扇面", doufang: "斗方", shoujuan: "手卷", ceye: "册页",
+                      shuxin: "书信", guji: "古籍" };
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.globalCompositeOperation = "source-over";
+
+    function drawChar(c, x, y, w, h, rot) {
+      var im = imgs[picks[c].img];
+      if (!im) return;
+      ctx.save();
+      ctx.translate(x + w / 2, y + h / 2);
+      if (rot) ctx.rotate(rot);
+      // 等比适配
+      var sc = Math.min(w / im.width, h / im.height);
+      ctx.drawImage(im, -im.width * sc / 2, -im.height * sc / 2,
+                    im.width * sc, im.height * sc);
+      ctx.restore();
+    }
+
+    // 竖排分栏渲染（书信/古籍共用）：segs 从右到左为栏
+    function chunkCols(chars, maxRows) {
+      var a = Array.from(chars), out = [];
+      for (var i = 0; i < a.length; i += maxRows) {
+        out.push(a.slice(i, i + maxRows).join(""));
+      }
+      return out;
+    }
+
+    function drawVertSegs(segs, o) {
+      var cols = Math.max(segs.length, 1);
+      var rows = 1;
+      segs.forEach(function (s) { if (s.length > rows) rows = s.length; });
+      var cellV = Math.max(48, Math.min(o.cellMax,
+        Math.floor((o.maxH - o.padY * 2) / rows),
+        Math.floor((o.maxW - o.padX * 2 - o.gapX * (cols - 1)) / cols)));
+      W = o.padX * 2 + cols * cellV + (cols - 1) * o.gapX;
+      H = o.padY * 2 + rows * cellV;
+      cv.width = W; cv.height = H;
+      ctx.fillStyle = o.paper; ctx.fillRect(0, 0, W, H);
+      if (o.decor) o.decor(W, H, cols, rows, cellV, o.gapX);
+      ctx.globalCompositeOperation = "multiply";
+      segs.forEach(function (seg, ci) {
+        var x = W - o.padX - cellV - ci * (cellV + o.gapX);   // 右起第一栏
+        Array.from(seg).forEach(function (c, ri) {
+          drawChar(c, x, o.padY + ri * cellV, cellV, cellV, 0);
+        });
+      });
+    }
+
+    if (form === "couplet") {
+      var colN = Math.max(segArrs[0].length, segArrs[1].length);
+      var pad = 56, gap = 96;
+      var cell = Math.max(60, Math.min(150, Math.floor((900 - pad * 2) / colN)));
+      W = cell * 2 + gap + pad * 2;
+      H = cell * colN + pad * 2;
+      cv.width = W; cv.height = H;
+      ctx.fillStyle = paper; ctx.fillRect(0, 0, W, H);
+      ctx.globalCompositeOperation = "multiply";
+      segArrs.slice(0, 2).forEach(function (seg, ci) {
+        // 上联在右
+        var x = ci === 0 ? W - pad - cell : pad;
+        seg.forEach(function (c, i) {
+          drawChar(c, x, pad + i * cell, cell, cell, 0);
+        });
+      });
+    } else if (form === "banner") {
+      var chars = segArrs.reduce(function (a, b) { return a.concat(b); }, []);
+      var padB = 60, gapB = 24;
+      cell = Math.max(70, Math.min(200, Math.floor((1400 - padB * 2) / chars.length - gapB)));
+      W = cell * chars.length + gapB * (chars.length - 1) + padB * 2;
+      H = cell + padB * 2;
+      cv.width = W; cv.height = H;
+      ctx.fillStyle = paper; ctx.fillRect(0, 0, W, H);
+      ctx.globalCompositeOperation = "multiply";
+      chars.forEach(function (c, i) {
+        drawChar(c, padB + i * (cell + gapB), padB, cell, cell, 0);
+      });
+    } else if (form === "fan") {
+      var fchars = segArrs.reduce(function (a, b) { return a.concat(b); }, []);
+      W = 1000; H = 640;
+      cv.width = W; cv.height = H;
+      ctx.fillStyle = "#ffffff"; ctx.fillRect(0, 0, W, H);
+      var cx = W / 2, cy = 760, R2 = 700, R1 = 340;
+      var n = fchars.length;
+      // 弧度随字数自适应 + 两端安全角：保证字不越出扇边、不互相挤压
+      var span = Math.min(Math.PI * 0.56, Math.max(0.6, n * 0.30 + 0.2));
+      var rr = (R1 + R2) / 2;
+      var margin = (60 / rr);                       // 按预估字宽留端部角
+      var usable = span - margin * 2;
+      var spacing = n > 1 ? usable / (n - 1) : 0;
+      var fcell = Math.max(36, Math.min(110, spacing * rr * 0.86, (R2 - R1) * 0.55));
+      ctx.fillStyle = paper;
+      ctx.beginPath();
+      ctx.arc(cx, cy, R2, -Math.PI / 2 - span / 2, -Math.PI / 2 + span / 2);
+      ctx.arc(cx, cy, R1, Math.PI / 2 + span / 2, Math.PI / 2 - span / 2, true);
+      ctx.closePath();
+      ctx.fill();
+      ctx.strokeStyle = "#8a6a3a"; ctx.lineWidth = 3; ctx.stroke();
+      ctx.globalCompositeOperation = "multiply";
+      fchars.forEach(function (c, i) {
+        var th = -span / 2 + margin + (n === 1 ? usable / 2 : i * spacing);
+        var x = cx + rr * Math.sin(th);
+        var y = cy - rr * Math.cos(th);
+        var im = imgs[picks[c].img];
+        if (!im) return;
+        ctx.save();
+        ctx.translate(x, y);
+        ctx.rotate(th);
+        var sc = fcell / Math.max(im.width, im.height);
+        ctx.drawImage(im, -im.width * sc / 2, -im.height * sc / 2,
+                      im.width * sc, im.height * sc);
+        ctx.restore();
+      });
+    } else if (form === "shuxin") {
+      // 书信（尺牍）：浅色笺纸、乌丝栏行线，竖排右起；空格即分栏，单栏自动折行
+      var ssegs = segArrs.length >= 2 ? segArrs.map(function (a) { return a.join(""); })
+                                       : chunkCols(flat.join(""), 7);
+      var xopts = { paper: "#faf3e6", padX: 62, padY: 56, gapX: 36, cellMax: 104,
+                    maxW: 980, maxH: 940 };
+      xopts.decor = function (W2, H2, cols, rows, cellV, gapX) {
+        ctx.strokeStyle = "#cdb9a4"; ctx.lineWidth = 1;
+        for (var k = 0; k < cols - 1; k++) {
+          var lx = W2 - xopts.padX - cellV - k * (cellV + gapX) - gapX / 2;
+          ctx.beginPath();
+          ctx.moveTo(lx, xopts.padY * 0.4);
+          ctx.lineTo(lx, H2 - xopts.padY * 0.4);
+          ctx.stroke();
+        }
+      };
+      drawVertSegs(ssegs, xopts);
+    } else if (form === "guji") {
+      // 古籍：竹纸、四周双边版框、行格界线，竖排右起
+      var gsegs = segArrs.length >= 2 ? segArrs.map(function (a) { return a.join(""); })
+                                       : chunkCols(flat.join(""), 9);
+      var gopts = { paper: "#f7f1e0", padX: 66, padY: 60, gapX: 30, cellMax: 108,
+                    maxW: 1080, maxH: 960 };
+      gopts.decor = function (W2, H2, cols, rows, cellV, gapX) {
+        ctx.strokeStyle = "#5a4a30";
+        ctx.lineWidth = 6; ctx.strokeRect(15, 15, W2 - 30, H2 - 30);
+        ctx.lineWidth = 2; ctx.strokeRect(27, 27, W2 - 54, H2 - 54);
+        ctx.strokeStyle = "#b9a98a"; ctx.lineWidth = 1;
+        for (var k = 0; k < cols - 1; k++) {
+          var lx = W2 - gopts.padX - cellV - k * (cellV + gapX) - gapX / 2;
+          if (lx < 34) continue;
+          ctx.beginPath();
+          ctx.moveTo(lx, 34);
+          ctx.lineTo(lx, H2 - 34);
+          ctx.stroke();
+        }
+      };
+      drawVertSegs(gsegs, gopts);
+    } else if (form === "zhongtang") {
+      // 中堂：单列大字 + 双线边框
+      var zN = Math.max(flat.length, 1), padZ = 70;
+      var cellZ = Math.max(90, Math.min(230, Math.floor((980 - padZ * 2) / zN)));
+      W = cellZ + padZ * 2;
+      H = cellZ * zN + padZ * 2;
+      cv.width = W; cv.height = H;
+      ctx.fillStyle = paper; ctx.fillRect(0, 0, W, H);
+      ctx.strokeStyle = "#8a6a3a";
+      ctx.lineWidth = 3; ctx.strokeRect(padZ * 0.4, padZ * 0.4, W - padZ * 0.8, H - padZ * 0.8);
+      ctx.lineWidth = 1; ctx.strokeRect(padZ * 0.4 + 7, padZ * 0.4 + 7, W - padZ * 0.8 - 14, H - padZ * 0.8 - 14);
+      ctx.globalCompositeOperation = "multiply";
+      flat.forEach(function (c, i) { drawChar(c, padZ, padZ + i * cellZ, cellZ, cellZ, 0); });
+    } else if (form === "tiaofu") {
+      // 条幅：窄长单列
+      var tN = Math.max(flat.length, 1), padT = 46;
+      var cellT = Math.max(70, Math.min(135, Math.floor((980 - padT * 2) / tN)));
+      W = cellT + padT * 2;
+      H = cellT * tN + padT * 2;
+      cv.width = W; cv.height = H;
+      ctx.fillStyle = paper; ctx.fillRect(0, 0, W, H);
+      ctx.globalCompositeOperation = "multiply";
+      flat.forEach(function (c, i) { drawChar(c, padT, padT + i * cellT, cellT, cellT, 0); });
+    } else if (form === "pingtiao") {
+      // 屏条：四条屏，右起读，每条独立装裱边
+      var pN = Math.max(flat.length, 1);
+      var cols = 4, rowsP = Math.ceil(pN / cols);
+      var padP = 36, gP = 24;
+      var cellP = Math.max(64, Math.min(145, Math.floor((1040 - (padP * 2 * cols + gP * (cols - 1))) / cols)));
+      var stripW = cellP + padP * 2;
+      W = stripW * cols + gP * (cols - 1);
+      H = cellP * rowsP + padP * 2;
+      cv.width = W; cv.height = H;
+      ctx.fillStyle = "#ffffff"; ctx.fillRect(0, 0, W, H);
+      for (var sj = 0; sj < cols; sj++) {
+        var sx0 = W - stripW - sj * (stripW + gP);
+        ctx.fillStyle = paper;
+        ctx.fillRect(sx0, 0, stripW, H);
+        ctx.strokeStyle = "#8a6a3a"; ctx.lineWidth = 1.5;
+        ctx.strokeRect(sx0 + 1, 1, stripW - 2, H - 2);
+      }
+      ctx.globalCompositeOperation = "multiply";
+      flat.forEach(function (c, ci) {
+        var col = Math.floor(ci / rowsP), ri = ci % rowsP;
+        var x0 = W - stripW - col * (stripW + gP);
+        drawChar(c, x0 + padP, padP + ri * cellP, cellP, cellP, 0);
+      });
+    } else if (form === "shoujuan") {
+      // 手卷：横卷长幅 + 左端题款留白（虚线分隔）
+      var sN = Math.max(flat.length, 1), padS = 56, gS = 16;
+      var cellS = Math.max(64, Math.min(165, Math.floor((1560 - padS * 2 - 170 - gS * (sN - 1)) / sN)));
+      var charsEnd = padS + cellS * sN + gS * (sN - 1);
+      var divX = charsEnd + 34;
+      W = divX + 170 + 40;
+      H = cellS + padS * 2;
+      cv.width = W; cv.height = H;
+      ctx.fillStyle = paper; ctx.fillRect(0, 0, W, H);
+      ctx.strokeStyle = "#8a6a3a"; ctx.lineWidth = 2;
+      ctx.strokeRect(padS * 0.45, padS * 0.45, divX - 16 - padS * 0.45, H - padS * 0.9);
+      ctx.setLineDash([7, 7]); ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(divX, padS * 0.45);
+      ctx.lineTo(divX, H - padS * 0.45);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.globalCompositeOperation = "multiply";
+      flat.forEach(function (c, i) { drawChar(c, padS + i * (cellS + gS), padS, cellS, cellS, 0); });
+    } else if (form === "ceye") {
+      // 册页：对开两页（右页为前半），页内双框
+      var half = Math.ceil(Math.max(flat.length, 1) / 2);
+      var rightSeg = flat.slice(0, half), leftSeg = flat.slice(half);
+      var rowsC = Math.max(rightSeg.length, leftSeg.length, 1);
+      var padC = 34, outPad = 44, gC = 56, cellC = 140;
+      var leafW = cellC + padC * 2, leafH = cellC * rowsC + padC * 2;
+      W = outPad * 2 + leafW * 2 + gC;
+      H = outPad * 2 + leafH;
+      cv.width = W; cv.height = H;
+      ctx.fillStyle = "#ffffff"; ctx.fillRect(0, 0, W, H);
+      [{ x: W - outPad - leafW }, { x: outPad }].forEach(function (lf) {
+        ctx.fillStyle = paper;
+        ctx.fillRect(lf.x, outPad, leafW, leafH);
+        ctx.strokeStyle = "#8a6a3a";
+        ctx.lineWidth = 2; ctx.strokeRect(lf.x + 1, outPad + 1, leafW - 2, leafH - 2);
+        ctx.lineWidth = 1; ctx.strokeRect(lf.x + padC * 0.6, outPad + padC * 0.6,
+                                          leafW - padC * 1.2, leafH - padC * 1.2);
+      });
+      ctx.globalCompositeOperation = "multiply";
+      rightSeg.forEach(function (c, i) {
+        drawChar(c, W - outPad - leafW + padC, outPad + padC + i * cellC, cellC, cellC, 0);
+      });
+      leftSeg.forEach(function (c, i) {
+        drawChar(c, outPad + padC, outPad + padC + i * cellC, cellC, cellC, 0);
+      });
+    } else {   // doufang
+      var dch = Array.from(segArrs.join(""))[0];
+      W = 700; H = 700;
+      cv.width = W; cv.height = H;
+      ctx.fillStyle = paper; ctx.fillRect(0, 0, W, H);
+      ctx.globalCompositeOperation = "multiply";
+      drawChar(dch, 70, 70, W - 140, H - 140, 0);
+    }
+    ctx.globalCompositeOperation = "source-over";
+
+    // 取字来源面板
+    var wrap = document.getElementById("colSources");
+    wrap.innerHTML = "";
+    var shown = {};
+    resolved.forEach(function (x) {
+      var s = picks[x.c];
+      if (shown[s.img]) return;
+      shown[s.img] = 1;
+      var fig = document.createElement("figure");
+      fig.innerHTML = "<img src='db/" + s.img + "' alt=''><figcaption>" +
+        (x.mapped ? x.c + "→" + s.master : s.master) + "</figcaption>";
+      wrap.appendChild(fig);
+    });
+    var fbList = resolved.fbChars || [];
+    var chosenNow = document.getElementById("colMasterSel").value;
+    var mLabel = chosenNow ? ("指定书家 " + colMaster) : ("主集" + colMaster + "书风");
+    var fbNote = fbList.length ? ("（" + fbList.join("") + " 缺所选书体/书家，已自动换用）") : "";
+    hint.textContent = "已生成 · " + (FORM_NAME[form] || form) + " · " + mLabel + fbNote + "，可导出 PNG";
+  }
+
+  renderPresets();
+
+  // 集字创作：书体→书家 级联（书家下拉只列该书体下有范本的家，按数量排序）
+  function initCollectFilters() {
+    loadGallery().then(function (g) {
+      var selS = document.getElementById("colScript");
+      var selM = document.getElementById("colMasterSel");
+      function rebuild(keep) {
+        var sc = selS.value;
+        var counts = {};
+        g.rows.forEach(function (r) {
+          if (sc && g.scripts[r[3]] !== sc) return;
+          counts[r[1]] = (counts[r[1]] || 0) + 1;
+        });
+        selM.innerHTML = '<option value="">自动（全库优选）</option>';
+        Object.keys(counts).map(Number)
+          .sort(function (a, b) { return counts[b] - counts[a]; })
+          .forEach(function (i) {
+            var o = document.createElement("mdui-menu-item");
+            o.value = g.masters[i];
+            o.textContent = g.masters[i] + "（" + counts[i] + "）";
+            selM.appendChild(o);
+          });
+        if (keep && counts[Object.keys(counts).find(function (i) { return g.masters[i] === keep; })] !== undefined) {
+          selM.value = keep;
+        } else if (keep) {
+          // 所选书家不在该书体下 → 回到自动
+        }
+      }
+      rebuild();
+      selS.onchange = function () { rebuild(selM.value); };
+    }).catch(function () {});
+  }
+
+  function loadBrowse(char) {
+    browseChar = char;
+    var code = String(char.codePointAt(0)).padStart(5, "0");
+    loadFile("db/" + code + ".json").then(function (db) {
+      var grid = document.getElementById("browseGrid");
+      grid.innerHTML = "";
+      db.samples.forEach(function (s, i) {
+        var card = document.createElement("mdui-card");
+        card.variant = "elevated";
+        card.className = "browse-card";
+        card.innerHTML = "<img src='db/" + s.img + "' alt='" + char + "' loading='lazy'>" +
+          "<div class='bc-master'>" + s.master + "</div>" +
+          "<div class='bc-meta'>" + (s.dynasty || "") + " · " + (s.script || "") +
+          (s.quality === "blurry" ? " · 模糊" : "") +
+          (s.quality === "ccd" ? " · 网集" : "") + "</div>";
+        card.onclick = function () { showBrowseInfo(char, s); };
+        grid.appendChild(card);
+        if (i === 0) showBrowseInfo(char, s);
+      });
+    }).catch(function () {});
+  }
+
+  function showBrowseInfo(char, s) {
+    document.getElementById("browseHint").style.display = "none";
+    var box = document.getElementById("browseInfo");
+    box.style.display = "";
+    document.getElementById("browseImg").src = "db/" + s.img;
+    document.getElementById("browseMaster").textContent = char + " · " + s.master;
+    document.getElementById("browseDyn").textContent =
+      (s.dynasty || "") + " · " + (s.script || "") + " · " + (s.source === "碑" ? "碑刻拓本" : "墨迹真迹");
+    var parts = [];
+    if (s.stroke_style) parts.push("<em>笔法：</em>" + s.stroke_style);
+    if (s.structure) parts.push("<em>结体：</em>" + s.structure);
+    if (s.desc) parts.push("<em>评：</em>" + s.desc);
+    document.getElementById("browseDesc").innerHTML = parts.join("<br>") || "暂无评语";
+  }
+
+  initBrowseBar();
+  initLessons();
+  initFilters();
+
+  /* 启动须知：拍照比对的准确性 + 数据下载量。仅首次打开（localStorage 记录）。
+     组件可能尚未注册（:not(:defined) 会隐藏），用 whenDefined 兜住打开时机。 */
+  (function () {
+    var KEY = "moping_launch_notice_v1";
+    var dlg = document.getElementById("launchNotice");
+    var ok = document.getElementById("noticeOK");
+    if (!dlg || !ok) return;
+    ok.onclick = function () {
+      dlg.open = false;
+      try { localStorage.setItem(KEY, "1"); } catch (e) {}
+    };
+    var seen = false;
+    try { seen = !!localStorage.getItem(KEY); } catch (e) { seen = false; }
+    if (seen) return;
+    function show() { dlg.open = true; }
+    if (customElements.get("mdui-dialog")) show();
+    else customElements.whenDefined("mdui-dialog").then(show);
+  })();
+  initCollectFilters();
+  ensureCv();   // 预热 OpenCV（异步，失败自动走纯 JS 降级）
+
+  // 调试/测试钩子（不影响功能）
+  window.__moping = {
+    state: function () { return S; },
+    writer: function () { return writer; },
+    char: function () { return currentChar; }
+  };
+})();
+</script>
+</body>
+</html>
