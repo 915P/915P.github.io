@@ -709,6 +709,15 @@ export const navLinks: NavLink[] = [
 		group: 'toolbox',
 	},
 	{
+		id: 'tool-zip',
+		title: 'ZIP 工具箱',
+		desc: '创建与解压 ZIP，支持中文文件名、AES 加密与路径校验',
+		url: '/tools/zip/',
+		icon: '🔧',
+		materialIcon: 'folder-zip',
+		group: 'toolbox',
+	},
+	{
 		id: 'tool-latex',
 		title: 'LaTeX 编辑器',
 		desc: '输入 TeX 公式，实时渲染为排版结果',

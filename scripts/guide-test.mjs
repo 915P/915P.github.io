@@ -431,7 +431,7 @@ eq('非法网址原样返回', guide.tileLabel('::::', ''), '::::');
 // 小工具图标必须走 Material Icons，不能回落到本站 favicon
 {
 	const tools = guide.defaultTiles.filter((tile) => tile.group === 'toolbox');
-	eq('小工具 18 个', tools.length, 18);
+	eq('小工具 19 个', tools.length, 19);
 	ok(
 		'小工具都带 materialIcon',
 		tools.every((tile) => typeof tile.materialIcon === 'string' && /^[a-z0-9-]+$/.test(tile.materialIcon)),

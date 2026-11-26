@@ -838,6 +838,13 @@ root [LICENSE](LICENSE):
   (`captureStream` / `MediaRecorder` / `Blob` download); it contains no code from
   the legacy RT-Oscilloscope covered in §6. The FFT is a self-written radix-2
   Cooley–Tukey implementation, so no FFT library is bundled.
+- **The ZIP toolbox at `/tools/zip/`** — written from scratch for this site:
+  `src/lib/zip-ops.ts` (path cleaning, duplicate handling, extraction limits and
+  readable error messages, free of any browser API so it runs in Node),
+  `src/lib/zip-loader.ts` (lazy loading of the vendored zip.js UMD build) and
+  `src/pages/tools/zip.astro`, plus the Node regression test
+  `scripts/zip-test.mjs`. It bundles no third-party code; zip.js is used as an
+  unmodified upstream build (§21).
 
 > The third-party projects hosted on this site (CeJS, the 3D fluid simulation, the
 > mind mapping app) are **not original to this site** and are governed by the
@@ -961,3 +968,23 @@ at the repository root.
 > **Licensing boundary**: the [LICENSE](LICENSE) at the repository root covers this
 > site's own code only. It does **not** relicense the HCSU data (CC BY-NC 4.0),
 > chinese-calligraphy-dataset (Apache-2.0), OpenCC (BSD-3-Clause) or OpenCV (Apache-2.0).
+
+---
+
+## 21. zip.js (ZIP toolbox: create and extract ZIP in the browser)
+
+- **Location**: `public/vendor/zip/`
+- **Upstream**: <https://github.com/gildas-lormeau/zip.js> (npm package
+  `@zip.js/zip.js`)
+- **Version**: 2.25.0
+- **License**: **BSD-3-Clause**, Copyright (c) 2023 Gildas Lormeau
+- **Files**: `zip.min.js` (UMD bundle with embedded web worker and WASM),
+  `LICENSE`
+- **Purpose**: `/tools/zip/` uses `ZipReader` / `ZipWriter` to list, extract and
+  create ZIP archives. `filenameEncoding` decodes legacy GBK / Big5 / Shift-JIS
+  names, `filenameValidation` plus the site's own path checks block path
+  traversal, and the writer supports AES-256 encryption and ZIP64.
+- **Site modifications**: none (file copied from the package's
+  `dist/zip.min.js`).
+- **Notes**: loaded lazily only on `/tools/zip/`. The PDF toolbox keeps using
+  fflate (§13) for packaging its split output; the two libraries coexist.

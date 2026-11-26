@@ -73,6 +73,12 @@ import '@mdui/icons/content-copy.js';
 import '@mdui/icons/rotate-right.js';
 import '@mdui/icons/upload.js';
 
+// ZIP 工具箱
+import '@mdui/icons/folder-zip.js';
+import '@mdui/icons/folder-open.js';
+import '@mdui/icons/folder.js';
+import '@mdui/icons/description.js';
+
 // 音视频工具箱（movie-edit 在 @mdui/icons 里没有，改用 video-file）
 import '@mdui/icons/video-file.js';
 
