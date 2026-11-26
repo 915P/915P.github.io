@@ -1429,7 +1429,7 @@
     // 其他识别候选（点击切换比对目标）
     var altsDiv = document.getElementById("recAlts");
     if (recInfo && recInfo.alts && recInfo.alts.length > 1) {
-      altsDiv.innerHTML = "<em>其他可能：</em>";
+      altsDiv.innerHTML = "";  // 前缀由 CSS .alts-top::before「可能还有：」统一提供，勿在此重复
       recInfo.alts.slice(0, 4).forEach(function (alt) {
         if (alt.c === recInfo.char) return;
         var btn = document.createElement("mdui-chip");
