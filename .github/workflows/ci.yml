@@ -35,7 +35,7 @@ jobs:
       - name: 类型检查
         run: npm run check
 
-      # 四套纯 Node 回归测试；改动若只涉及其中一块，可留到 PR 里说明
+      # 五套纯 Node 回归测试；改动若只涉及其中一块，可留到 PR 里说明
       - name: 单元测试（eval）
         run: npm run test:eval
 
@@ -47,6 +47,9 @@ jobs:
 
       - name: 单元测试（guide）
         run: npm run test:guide
+
+      - name: 单元测试（mail）
+        run: npm run test:mail
 
       - name: 构建
         run: npm run build
