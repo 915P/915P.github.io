@@ -88,6 +88,14 @@
   /* ---- 评价面板 ---- */
   /* 外观（底色/描边/圆角/投影）由 mdui-card 提供，这里只管内边距与标题排版 */
   .score-card { padding: 16px; margin-bottom: 14px; }
+  /* 致谢卡在 .layout 之外（见 HTML 602 行后），吃不到 .layout 的限宽与左右 padding，
+     会通栏贴死视口两边。这里自行对齐：宽度 = 视口-32px，上限 72rem-32px，水平居中 */
+  .score-card.credits {
+    display: block;
+    width: calc(100% - 32px);
+    max-width: calc(72rem - 32px);
+    margin: 0 auto 14px;
+  }
   .score-card h2 {
     font-size: var(--mdui-typescale-title-medium-size);
     font-weight: var(--mdui-typescale-title-medium-weight);
