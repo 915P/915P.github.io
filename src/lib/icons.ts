@@ -64,6 +64,12 @@ import '@mdui/icons/add.js';
 import '@mdui/icons/delete.js';
 import '@mdui/icons/check-circle.js';
 
+// 邮件头分析器
+import '@mdui/icons/mail.js';
+import '@mdui/icons/shield.js';
+import '@mdui/icons/warning.js';
+import '@mdui/icons/info.js';
+
 // PDF 工具箱
 import '@mdui/icons/picture-as-pdf.js';
 import '@mdui/icons/lock.js';

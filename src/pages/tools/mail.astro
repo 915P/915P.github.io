@@ -1,0 +1,1397 @@
+---
+import Page from '../../layouts/Page.astro';
+---
+
+<Page
+	title="邮件头分析器"
+	description="在浏览器本地解析邮件头：认证结果、Received 传输路径、显示名伪装与常见伪造特征。文件不上传。"
+	active="tools"
+>
+	<div class="tool-head head-split">
+		<div class="head-title">
+			<h1>邮件头分析器</h1>
+			<p class="lede">
+				粘贴原始邮件头或选择 .eml，核对 SPF / DKIM / DMARC 声明、传输路径与常见伪装手法，全部在本地完成。
+			</p>
+		</div>
+		<div class="head-tools">
+			<mdui-chip variant="assist">
+				<mdui-icon-lock></mdui-icon-lock>
+				本地处理
+			</mdui-chip>
+		</div>
+	</div>
+
+	<section class="panel-lg mail-input-panel" id="inputPanel">
+		<div class="row-between mail-input-head">
+			<div>
+				<h2 class="block-title">粘贴原始邮件头</h2>
+				<p class="text-xs faint">
+					从邮件客户端的「显示原始邮件 / 查看邮件源码」里复制；只需要头字段，正文会被自动忽略。
+				</p>
+			</div>
+			<span class="text-xs faint" id="inputCount">0 行</span>
+		</div>
+
+		<mdui-text-field
+			id="rawInput"
+			variant="outlined"
+			rows="10"
+			class="mono mail-textarea"
+			label="From / Received / Authentication-Results …"
+			placeholder="From: Example <notice@example.org>&#10;Subject: …&#10;Received: from …"
+			spellcheck="false"
+		></mdui-text-field>
+
+		<div class="mail-actions">
+			<mdui-button variant="filled" id="analyzeBtn">
+				<mdui-icon-shield slot="icon"></mdui-icon-shield>
+				分析头部
+			</mdui-button>
+			<mdui-button variant="outlined" id="fileBtn">
+				<mdui-icon-upload slot="icon"></mdui-icon-upload>
+				选择 .eml 文件
+			</mdui-button>
+			<div class="mail-sample-group">
+				<mdui-button variant="text" id="normalSample">正常样例</mdui-button>
+				<mdui-button variant="text" id="suspiciousSample">可疑样例</mdui-button>
+				<mdui-button variant="text" id="clearBtn">清空</mdui-button>
+			</div>
+		</div>
+
+		<input
+			type="file"
+			id="fileInput"
+			accept=".eml,.txt,message/rfc822,text/plain"
+			hidden
+		/>
+		<p class="mail-drop" id="dropHint">
+			也可以把 .eml / .txt 拖到这里。文件只在本机读取，较大的文件只读开头 512 KB。
+		</p>
+		<p class="text-xs faint" id="fileNote" hidden></p>
+
+		<div class="mail-notice" id="inputNotice" hidden></div>
+
+		<p class="text-xs faint mail-local-note">
+			分析不会发起网络请求。认证结果是邮件服务商写入头部的一段“声明”，本工具不会重新做 DNS 查询或签名验算。
+		</p>
+	</section>
+
+	<section class="mail-results" id="results" hidden>
+		<div class="mail-verdict panel-lg" id="verdictBox" role="status">
+			<div class="mail-verdict-icon" id="verdictIcon"></div>
+			<div class="mail-verdict-body">
+				<div class="row-between mail-verdict-head">
+					<h2 id="verdictTitle"></h2>
+					<div class="mail-mini-chips" id="verdictChips"></div>
+				</div>
+				<p id="verdictDetail"></p>
+			</div>
+		</div>
+
+		<section class="panel mail-summary">
+			<div class="mail-subject-row">
+				<div class="mail-subject-block">
+					<p class="text-xs faint">主题</p>
+					<h2 class="mail-subject" id="subjectLine"></h2>
+				</div>
+				<div class="mail-summary-actions">
+					<div class="mail-mask-control">
+						<mdui-switch id="maskToggle" aria-label="遮罩邮箱与 IP"></mdui-switch>
+						<span class="text-xs">遮罩邮箱与 IP</span>
+					</div>
+					<mdui-button variant="outlined" id="copyBtn">
+						<mdui-icon-content-copy slot="icon"></mdui-icon-content-copy>
+						复制报告
+					</mdui-button>
+					<span class="text-xs faint" id="copyStatus"></span>
+				</div>
+			</div>
+
+			<dl class="mail-meta">
+				<div>
+					<dt>发件人</dt>
+					<dd id="fromLine"></dd>
+				</div>
+				<div>
+					<dt>收件人</dt>
+					<dd id="toLine"></dd>
+				</div>
+				<div>
+					<dt>时间</dt>
+					<dd id="dateLine"></dd>
+				</div>
+				<div>
+					<dt>Message-ID</dt>
+					<dd class="mono" id="messageIdLine"></dd>
+				</div>
+			</dl>
+
+			<div class="mail-auth-row">
+				<span class="text-xs faint">认证（接收方声明）</span>
+				<div class="mail-auth-badges" id="authBadges"></div>
+			</div>
+		</section>
+
+		<mdui-tabs value="checks" id="resultTabs" class="mail-tabs">
+			<mdui-tab value="checks">检查结果</mdui-tab>
+			<mdui-tab value="path">传输路径</mdui-tab>
+			<mdui-tab value="headers">全部字段</mdui-tab>
+
+			<mdui-tab-panel slot="panel" value="checks">
+				<div class="mail-tab-body">
+					<div class="mail-tab-head">
+						<p class="text-sm" id="checkSummary"></p>
+						<span class="text-xs faint">规则只基于头部，不能替代安全判断</span>
+					</div>
+					<ul class="mail-checks" id="checkList"></ul>
+					<p class="mail-empty" id="checkEmpty" hidden>没有检查项。</p>
+				</div>
+			</mdui-tab-panel>
+
+			<mdui-tab-panel slot="panel" value="path">
+				<div class="mail-tab-body">
+					<div class="mail-tab-head">
+						<p class="text-sm" id="pathSummary"></p>
+						<span class="text-xs faint">已按时间从早到晚排列</span>
+					</div>
+					<ol class="mail-path" id="pathList"></ol>
+					<p class="mail-empty" id="pathEmpty" hidden>
+						没有 Received 头，无法还原传输路径。可能只复制了部分头部。
+					</p>
+				</div>
+			</mdui-tab-panel>
+
+			<mdui-tab-panel slot="panel" value="headers">
+				<div class="mail-tab-body">
+					<div class="mail-header-tools">
+						<mdui-text-field
+							id="headerSearch"
+							variant="outlined"
+							label="搜索字段名或值"
+							clearable
+						></mdui-text-field>
+						<span class="text-xs faint" id="headerCount"></span>
+					</div>
+					<ul class="mail-headers" id="headerList"></ul>
+					<p class="mail-empty" id="headerEmpty" hidden>没有匹配的字段。</p>
+				</div>
+			</mdui-tab-panel>
+		</mdui-tabs>
+
+		<p class="footnote">
+			本页只读取并解析邮件头，不联网验证 SPF / DKIM / DMARC，也不会上传任何内容。
+			Authentication-Results 是接收方写入的声明，不能替代对链接、附件与业务背景的判断；
+			三项认证全绿也只说明域名对齐，不代表这个域名可信。想看一封真实钓鱼邮件的逐字节拆解，可以读站内的
+			<a href="/blog/20261118-phishing-email-forensics/">取证分析</a>。
+			页面内的样例均使用 .example 保留域名，人物与业务均为虚构。
+		</p>
+	</section>
+
+	<mdui-dialog id="reportDialog" headline="复制报告" close-on-esc>
+		<p class="text-sm muted">
+			自动复制被浏览器拦截了。可以点下方「复制」再试一次，或按 Ctrl+C（macOS 用 ⌘+C）手动复制。
+		</p>
+		<textarea id="reportText" class="mono mail-report-text" rows="12" readonly></textarea>
+		<p class="text-xs faint" id="reportCopyStatus" role="status" aria-live="polite"></p>
+		<mdui-button slot="action" variant="text" id="reportClose">关闭</mdui-button>
+		<mdui-button slot="action" variant="filled" id="reportCopy">
+			<mdui-icon-content-copy slot="icon"></mdui-icon-content-copy>
+			复制
+		</mdui-button>
+	</mdui-dialog>
+</Page>
+
+<style is:global>
+.mail-input-panel {
+	transition:
+		border-color var(--mdui-motion-duration-short2),
+		background-color var(--mdui-motion-duration-short2);
+	border: 1px solid transparent;
+}
+
+.mail-input-panel.is-over {
+	border-color: rgb(var(--mdui-color-primary));
+	background-color: rgb(var(--mdui-color-primary-container));
+}
+
+.mail-input-head {
+	align-items: flex-start;
+	gap: 0.75rem 1rem;
+	margin-bottom: 0.9rem;
+}
+
+.mail-input-head h2 {
+	margin-bottom: 0.25rem;
+}
+
+.mail-textarea {
+	width: 100%;
+	--mdui-text-field-textarea-height: 12rem;
+}
+
+.mail-actions {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 0.5rem;
+	margin-top: 0.9rem;
+}
+
+.mail-sample-group {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 0.2rem;
+	margin-left: auto;
+}
+
+.mail-mask-control {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.4rem;
+	color: rgb(var(--mdui-color-on-surface-variant));
+}
+
+.mail-drop {
+	margin-top: 0.7rem;
+	padding: 0.55rem 0.8rem;
+	border: 1px dashed rgb(var(--mdui-color-outline));
+	border-radius: var(--mdui-shape-corner-small);
+	font-size: var(--mdui-typescale-body-small-size);
+	color: rgb(var(--mdui-color-on-surface-variant));
+	text-align: center;
+	transition:
+		border-color var(--mdui-motion-duration-short2),
+		color var(--mdui-motion-duration-short2);
+}
+
+.mail-input-panel.is-over .mail-drop {
+	border-color: rgb(var(--mdui-color-primary));
+	color: rgb(var(--mdui-color-primary));
+}
+
+.mail-notice {
+	margin-top: 0.8rem;
+	padding: 0.65rem 0.85rem;
+	border-radius: var(--mdui-shape-corner-small);
+	background-color: rgb(var(--mdui-color-error-container));
+	color: rgb(var(--mdui-color-on-error-container));
+	font-size: var(--mdui-typescale-body-small-size);
+}
+
+.mail-notice[hidden],
+.mail-results[hidden],
+.mail-empty[hidden],
+#fileNote[hidden] {
+	display: none;
+}
+
+.mail-local-note {
+	margin-top: 0.7rem;
+}
+
+.mail-results {
+	margin-top: 1.25rem;
+}
+
+.mail-verdict {
+	display: flex;
+	align-items: flex-start;
+	gap: 0.9rem;
+	padding: 1.15rem 1.35rem;
+}
+
+.mail-verdict[data-level='high'] {
+	background-color: rgb(var(--mdui-color-error-container));
+	color: rgb(var(--mdui-color-on-error-container));
+}
+
+.mail-verdict[data-level='warn'] {
+	background-color: rgb(var(--mdui-color-secondary-container));
+	color: rgb(var(--mdui-color-on-secondary-container));
+}
+
+.mail-verdict[data-level='ok'] {
+	background-color: rgb(var(--mdui-color-tertiary-container));
+	color: rgb(var(--mdui-color-on-tertiary-container));
+}
+
+.mail-verdict-icon {
+	display: grid;
+	place-items: center;
+	width: 2.4rem;
+	height: 2.4rem;
+	flex: 0 0 auto;
+	border-radius: 50%;
+	background-color: rgba(255, 255, 255, 0.28);
+}
+
+.mail-verdict-icon mdui-icon-error,
+.mail-verdict-icon mdui-icon-warning,
+.mail-verdict-icon mdui-icon-check-circle {
+	font-size: 1.55rem;
+	width: 1.55rem;
+	height: 1.55rem;
+}
+
+.mail-verdict-body {
+	flex: 1 1 auto;
+	min-width: 0;
+}
+
+.mail-verdict-head {
+	align-items: center;
+	gap: 0.5rem 1rem;
+}
+
+.mail-verdict-head h2 {
+	font-size: var(--mdui-typescale-title-medium-size);
+	font-weight: 600;
+}
+
+.mail-verdict-body > p {
+	margin-top: 0.35rem;
+	font-size: var(--mdui-typescale-body-small-size);
+	opacity: 0.9;
+}
+
+.mail-mini-chips {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.35rem;
+}
+
+.mail-mini-chip {
+	padding: 0.12rem 0.5rem;
+	border-radius: 999px;
+	font-size: var(--mdui-typescale-label-small-size);
+	background-color: rgba(255, 255, 255, 0.24);
+	white-space: nowrap;
+}
+
+.mail-summary {
+	margin-top: 1rem;
+}
+
+.mail-subject-row {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: flex-start;
+	justify-content: space-between;
+	gap: 0.75rem 1.5rem;
+}
+
+.mail-subject-block {
+	flex: 1 1 20rem;
+	min-width: 0;
+}
+
+.mail-subject {
+	margin-top: 0.15rem;
+	font-size: var(--mdui-typescale-title-large-size);
+	font-weight: 600;
+	line-height: 1.45;
+	overflow-wrap: anywhere;
+}
+
+.mail-summary-actions {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 0.65rem 0.9rem;
+}
+
+.mail-meta {
+	margin-top: 0.9rem;
+}
+
+.mail-meta > div {
+	display: grid;
+	grid-template-columns: 6.2rem minmax(0, 1fr);
+	gap: 0.8rem;
+	padding: 0.5rem 0;
+	border-top: 1px solid rgb(var(--mdui-color-outline-variant));
+}
+
+.mail-meta > div:first-child {
+	border-top: 0;
+}
+
+.mail-meta dt {
+	color: rgb(var(--mdui-color-on-surface-variant));
+	font-size: var(--mdui-typescale-label-medium-size);
+}
+
+.mail-meta dd {
+	min-width: 0;
+	overflow-wrap: anywhere;
+	font-size: var(--mdui-typescale-body-medium-size);
+}
+
+#fromLine,
+#dateLine {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: baseline;
+	gap: 0.1rem 0.45rem;
+}
+
+.mail-address-value {
+	font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+	font-size: 0.88em;
+	color: rgb(var(--mdui-color-on-surface-variant));
+	overflow-wrap: anywhere;
+}
+
+.mail-zone-note {
+	font-size: var(--mdui-typescale-label-small-size);
+	color: rgb(var(--mdui-color-on-surface-variant));
+}
+
+.mail-auth-row {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 0.5rem 0.8rem;
+	margin-top: 0.65rem;
+	padding-top: 0.75rem;
+	border-top: 1px solid rgb(var(--mdui-color-outline-variant));
+}
+
+.mail-auth-badges {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.4rem;
+}
+
+.mail-auth-badge {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.35rem;
+	padding: 0.2rem 0.6rem;
+	border-radius: 999px;
+	font-size: var(--mdui-typescale-label-medium-size);
+	background-color: rgb(var(--mdui-color-surface-container-highest));
+	color: rgb(var(--mdui-color-on-surface-variant));
+}
+
+.mail-auth-badge strong {
+	font-weight: 600;
+}
+
+.mail-auth-badge[data-result='pass'] {
+	background-color: rgb(var(--mdui-color-tertiary-container));
+	color: rgb(var(--mdui-color-on-tertiary-container));
+}
+
+.mail-auth-badge[data-result='fail'],
+.mail-auth-badge[data-result='softfail'],
+.mail-auth-badge[data-result='permerror'] {
+	background-color: rgb(var(--mdui-color-error-container));
+	color: rgb(var(--mdui-color-on-error-container));
+}
+
+.mail-auth-badge[data-result='neutral'],
+.mail-auth-badge[data-result='temperror'],
+.mail-auth-badge[data-result='policy'] {
+	background-color: rgb(var(--mdui-color-secondary-container));
+	color: rgb(var(--mdui-color-on-secondary-container));
+}
+
+.mail-tabs {
+	margin-top: 1.25rem;
+}
+
+.mail-tab-body {
+	padding-top: 1rem;
+}
+
+.mail-tab-head {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: baseline;
+	justify-content: space-between;
+	gap: 0.35rem 1rem;
+	margin-bottom: 0.5rem;
+}
+
+.mail-checks {
+	list-style: none;
+	padding: 0;
+	margin: 0;
+}
+
+.mail-check {
+	display: grid;
+	grid-template-columns: 1.5rem minmax(0, 1fr);
+	gap: 0.65rem;
+	padding: 0.8rem 0;
+	border-top: 1px solid rgb(var(--mdui-color-outline-variant));
+}
+
+.mail-check:first-child {
+	border-top: 0;
+}
+
+.mail-check-icon {
+	display: grid;
+	place-items: center;
+	padding-top: 0.1rem;
+	color: rgb(var(--mdui-color-on-surface-variant));
+}
+
+.mail-check[data-level='high'] .mail-check-icon {
+	color: rgb(var(--mdui-color-error));
+}
+
+.mail-check[data-level='warn'] .mail-check-icon {
+	color: rgb(var(--mdui-color-secondary));
+}
+
+.mail-check[data-level='ok'] .mail-check-icon {
+	color: rgb(var(--mdui-color-tertiary));
+}
+
+.mail-check-icon mdui-icon-error,
+.mail-check-icon mdui-icon-warning,
+.mail-check-icon mdui-icon-info,
+.mail-check-icon mdui-icon-check-circle {
+	font-size: 1.3rem;
+	width: 1.3rem;
+	height: 1.3rem;
+}
+
+.mail-check-body {
+	min-width: 0;
+}
+
+.mail-check-title-row {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: baseline;
+	justify-content: space-between;
+	gap: 0.3rem 0.8rem;
+}
+
+.mail-check-title {
+	font-size: var(--mdui-typescale-body-medium-size);
+	font-weight: 600;
+}
+
+.mail-check-tag {
+	font-size: var(--mdui-typescale-label-small-size);
+	padding: 0.08rem 0.45rem;
+	border-radius: 999px;
+	background-color: rgb(var(--mdui-color-surface-container-highest));
+	color: rgb(var(--mdui-color-on-surface-variant));
+	white-space: nowrap;
+}
+
+.mail-check[data-level='high'] .mail-check-tag {
+	background-color: rgb(var(--mdui-color-error-container));
+	color: rgb(var(--mdui-color-on-error-container));
+}
+
+.mail-check[data-level='warn'] .mail-check-tag {
+	background-color: rgb(var(--mdui-color-secondary-container));
+	color: rgb(var(--mdui-color-on-secondary-container));
+}
+
+.mail-check[data-level='ok'] .mail-check-tag {
+	background-color: rgb(var(--mdui-color-tertiary-container));
+	color: rgb(var(--mdui-color-on-tertiary-container));
+}
+
+.mail-check-detail {
+	margin-top: 0.25rem;
+	font-size: var(--mdui-typescale-body-small-size);
+	color: rgb(var(--mdui-color-on-surface-variant));
+	line-height: 1.6;
+	overflow-wrap: anywhere;
+}
+
+.mail-path {
+	list-style: none;
+	padding: 0;
+	margin: 0.4rem 0 0;
+}
+
+.mail-hop {
+	position: relative;
+	margin-left: 0.35rem;
+	padding: 0 0 1.15rem 1.45rem;
+	border-left: 2px solid rgb(var(--mdui-color-outline-variant));
+}
+
+.mail-hop:last-child {
+	padding-bottom: 0;
+	border-left-color: transparent;
+}
+
+.mail-hop::before {
+	content: '';
+	position: absolute;
+	left: -0.42rem;
+	top: 0.35rem;
+	width: 0.7rem;
+	height: 0.7rem;
+	border-radius: 50%;
+	background-color: rgb(var(--mdui-color-primary));
+}
+
+.mail-hop-head {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: baseline;
+	justify-content: space-between;
+	gap: 0.25rem 1rem;
+}
+
+.mail-hop-index {
+	font-size: var(--mdui-typescale-label-large-size);
+	font-weight: 600;
+}
+
+.mail-hop-date {
+	font-size: var(--mdui-typescale-body-small-size);
+	color: rgb(var(--mdui-color-on-surface-variant));
+}
+
+.mail-hop-route {
+	margin-top: 0.2rem;
+	font-size: var(--mdui-typescale-body-medium-size);
+	overflow-wrap: anywhere;
+}
+
+.mail-hop-route .mono {
+	font-size: 0.92em;
+}
+
+.mail-hop-arrow {
+	margin-inline: 0.25rem;
+	color: rgb(var(--mdui-color-on-surface-variant));
+}
+
+.mail-hop-meta {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.3rem 0.5rem;
+	margin-top: 0.35rem;
+}
+
+.mail-badge {
+	padding: 0.08rem 0.45rem;
+	border-radius: 999px;
+	font-size: var(--mdui-typescale-label-small-size);
+	background-color: rgb(var(--mdui-color-surface-container-highest));
+	color: rgb(var(--mdui-color-on-surface-variant));
+	overflow-wrap: anywhere;
+}
+
+.mail-badge.is-warn {
+	background-color: rgb(var(--mdui-color-secondary-container));
+	color: rgb(var(--mdui-color-on-secondary-container));
+}
+
+.mail-hop details,
+.mail-header details {
+	margin-top: 0.4rem;
+}
+
+.mail-hop summary,
+.mail-header summary {
+	cursor: pointer;
+	color: rgb(var(--mdui-color-primary));
+	font-size: var(--mdui-typescale-label-small-size);
+	width: fit-content;
+}
+
+.mail-hop-raw,
+.mail-header-raw {
+	margin: 0.35rem 0 0;
+	padding: 0.6rem 0.75rem;
+	border-radius: var(--mdui-shape-corner-small);
+	background-color: rgb(var(--mdui-color-surface-container-highest));
+	font-size: var(--mdui-typescale-body-small-size);
+	line-height: 1.55;
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+}
+
+.mail-header-tools {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	justify-content: space-between;
+	gap: 0.5rem 1rem;
+}
+
+.mail-header-tools mdui-text-field {
+	flex: 1 1 16rem;
+}
+
+.mail-headers {
+	list-style: none;
+	padding: 0;
+	margin: 0.5rem 0 0;
+}
+
+.mail-header {
+	padding: 0.7rem 0;
+	border-top: 1px solid rgb(var(--mdui-color-outline-variant));
+}
+
+.mail-header:first-child {
+	border-top: 0;
+}
+
+.mail-header-top {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 0.35rem 0.6rem;
+}
+
+.mail-header-name {
+	font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+	font-size: var(--mdui-typescale-label-large-size);
+	font-weight: 600;
+	color: rgb(var(--mdui-color-primary));
+	overflow-wrap: anywhere;
+}
+
+.mail-header-dup {
+	padding: 0.05rem 0.4rem;
+	border-radius: 999px;
+	font-size: var(--mdui-typescale-label-small-size);
+	background-color: rgb(var(--mdui-color-secondary-container));
+	color: rgb(var(--mdui-color-on-secondary-container));
+}
+
+.mail-header-value {
+	margin-top: 0.25rem;
+	font-size: var(--mdui-typescale-body-small-size);
+	line-height: 1.6;
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+}
+
+.mail-empty {
+	margin-top: 0.8rem;
+	padding: 1rem;
+	border-radius: var(--mdui-shape-corner-small);
+	background-color: rgb(var(--mdui-color-surface-container-low));
+	color: rgb(var(--mdui-color-on-surface-variant));
+	font-size: var(--mdui-typescale-body-small-size);
+	text-align: center;
+}
+
+.mail-report-text {
+	width: 100%;
+	margin-top: 0.75rem;
+	font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+	font-size: var(--mdui-typescale-body-small-size);
+	line-height: 1.55;
+}
+
+@media (max-width: 599px) {
+	.mail-sample-group {
+		width: 100%;
+		margin-left: 0;
+	}
+
+	.mail-summary-actions {
+		width: 100%;
+		justify-content: flex-start;
+	}
+
+	.mail-meta > div {
+		grid-template-columns: 4.7rem minmax(0, 1fr);
+		gap: 0.6rem;
+	}
+
+	.mail-verdict {
+		padding: 1rem;
+	}
+
+	.mail-verdict-icon {
+		width: 2rem;
+		height: 2rem;
+	}
+}
+</style>
+
+<script>
+	import {
+		analyzeMail,
+		authLabel,
+		buildReport,
+		formatDateTime,
+		formatDelay,
+		filterHeaderFields,
+		maskText,
+		type CheckLevel,
+		type HeaderField,
+		type MailAnalysis,
+		type MailAddress,
+	} from '../../lib/mail-parse';
+
+	type FieldElement = HTMLElement & { value: string; checked: boolean };
+	type MduiButton = HTMLElement & { disabled: boolean };
+
+	const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
+	const input = $<FieldElement>('rawInput');
+	const fileInput = $<HTMLInputElement>('fileInput');
+	const inputCount = $('inputCount');
+	const inputNotice = $('inputNotice');
+	const fileNote = $('fileNote');
+	const results = $('results');
+	const verdictBox = $('verdictBox');
+	const verdictIcon = $('verdictIcon');
+	const verdictTitle = $('verdictTitle');
+	const verdictDetail = $('verdictDetail');
+	const verdictChips = $('verdictChips');
+	const subjectLine = $('subjectLine');
+	const fromLine = $('fromLine');
+	const toLine = $('toLine');
+	const dateLine = $('dateLine');
+	const messageIdLine = $('messageIdLine');
+	const authBadges = $('authBadges');
+	const maskToggle = $<FieldElement>('maskToggle');
+	const copyBtn = $<MduiButton>('copyBtn');
+	const copyStatus = $('copyStatus');
+	const checkSummary = $('checkSummary');
+	const checkList = $('checkList');
+	const checkEmpty = $('checkEmpty');
+	const pathSummary = $('pathSummary');
+	const pathList = $('pathList');
+	const pathEmpty = $('pathEmpty');
+	const headerSearch = $<FieldElement>('headerSearch');
+	const headerCount = $('headerCount');
+	const headerList = $('headerList');
+	const headerEmpty = $('headerEmpty');
+	const inputPanel = $('inputPanel');
+	const fileBtn = $('fileBtn');
+	const analysisButton = $('analyzeBtn');
+	const reportDialog = $<HTMLElement & { open: boolean }>('reportDialog');
+	const reportText = $<HTMLTextAreaElement>('reportText');
+	const reportCopy = $<MduiButton>('reportCopy');
+	const reportCopyStatus = $('reportCopyStatus');
+
+	const MAX_EML_READ = 512 * 1024;
+	const HEADER_RENDER_LIMIT = 500;
+
+	let analysis: MailAnalysis | null = null;
+	let masked = false;
+	let headerQuery = '';
+	let copyTimer = 0;
+
+	function textElement<K extends keyof HTMLElementTagNameMap>(
+		tag: K,
+		className = '',
+		value?: string,
+	): HTMLElementTagNameMap[K] {
+		const element = document.createElement(tag);
+		if (className) element.className = className;
+		if (value !== undefined) element.textContent = value;
+		return element;
+	}
+
+	function iconElement(name: string): HTMLElement {
+		return document.createElement(`mdui-icon-${name}`);
+	}
+
+	function display(value: string): string {
+		return masked ? maskText(value) : value;
+	}
+
+	function severityIcon(level: CheckLevel): string {
+		if (level === 'high') return 'error';
+		if (level === 'warn') return 'warning';
+		if (level === 'info') return 'info';
+		return 'check-circle';
+	}
+
+	function severityLabel(level: CheckLevel): string {
+		if (level === 'high') return '高风险';
+		if (level === 'warn') return '提醒';
+		if (level === 'info') return '提示';
+		return '正常';
+	}
+
+	function updateInputCount(): void {
+		const value = input.value ?? '';
+		const lines = value ? value.split(/\r\n?|\n/).length : 0;
+		const kb = value ? new TextEncoder().encode(value).length / 1024 : 0;
+		inputCount.textContent = `${lines} 行 · ${kb < 1 ? '<1' : kb.toFixed(0)} KB`;
+	}
+
+	function showNotice(message: string): void {
+		inputNotice.textContent = message;
+		inputNotice.hidden = false;
+	}
+
+	function hideNotice(): void {
+		inputNotice.hidden = true;
+		inputNotice.textContent = '';
+	}
+
+	function addressText(address: MailAddress): string {
+		const name = address.name ? display(address.name) : '';
+		const addr = address.address ? display(address.address) : '';
+		if (name && addr) return `${name} <${addr}>`;
+		return name || addr || '（无法解析）';
+	}
+
+	function renderAddressList(list: MailAddress[], limit = 3): string {
+		if (!list.length) return '—';
+		const shown = list.slice(0, limit).map(addressText).join('，');
+		return list.length > limit ? `${shown} 等 ${list.length} 个` : shown;
+	}
+
+	function renderVerdict(): void {
+		if (!analysis) return;
+		const verdict = analysis.verdict;
+		verdictBox.dataset.level = verdict.level;
+		verdictIcon.replaceChildren(iconElement(severityIcon(verdict.level)));
+		verdictTitle.textContent = verdict.title;
+		verdictDetail.textContent = verdict.detail;
+
+		const chips: HTMLElement[] = [];
+		if (verdict.highCount) chips.push(textElement('span', 'mail-mini-chip', `${verdict.highCount} 项高风险`));
+		if (verdict.warnCount) chips.push(textElement('span', 'mail-mini-chip', `${verdict.warnCount} 项提醒`));
+		if (verdict.infoCount) chips.push(textElement('span', 'mail-mini-chip', `${verdict.infoCount} 项提示`));
+		if (!chips.length) chips.push(textElement('span', 'mail-mini-chip', '未命中问题规则'));
+		verdictChips.replaceChildren(...chips);
+	}
+
+	function renderFromLine(address: MailAddress): void {
+		fromLine.replaceChildren();
+		if (address.name) fromLine.append(textElement('span', 'mail-address-name', display(address.name)));
+		if (address.address) {
+			fromLine.append(textElement('span', 'mail-address-value', `<${display(address.address)}>`));
+		}
+		if (!address.name && !address.address) fromLine.textContent = '（无法解析）';
+	}
+
+	function renderSummary(): void {
+		if (!analysis) return;
+		const { parsed, auth } = analysis;
+		subjectLine.textContent = parsed.subject ? display(parsed.subject) : '（无主题）';
+		if (parsed.from) renderFromLine(parsed.from);
+		else fromLine.textContent = '缺少 From 头';
+		toLine.textContent = renderAddressList(parsed.to);
+		if (parsed.date.date) {
+			dateLine.replaceChildren(
+				textElement('span', '', formatDateTime(parsed.date.date, false)),
+				parsed.date.zone ? textElement('span', 'mail-zone-note', `原始时区 ${parsed.date.zone}`) : document.createTextNode(''),
+			);
+		} else {
+			dateLine.textContent = parsed.date.raw || '缺少 Date 头';
+		}
+		messageIdLine.textContent = parsed.messageId ? display(parsed.messageId) : '—';
+
+		const badges = auth.badges.map((badge) => {
+			const element = textElement('span', 'mail-auth-badge');
+			element.dataset.result = badge.result;
+			const method = textElement('strong', '', badge.method.toUpperCase());
+			const count = badge.count > 1 ? ` ×${badge.count}` : '';
+			element.append(method, document.createTextNode(`${authLabel(badge.result)}${count}`));
+			if (badge.detail) element.title = display(badge.detail);
+			return element;
+		});
+		authBadges.replaceChildren(...badges);
+	}
+
+	function renderChecks(): void {
+		if (!analysis) return;
+		const { checks, verdict } = analysis;
+		checkSummary.textContent = `高风险 ${verdict.highCount} 项 · 提醒 ${verdict.warnCount} 项 · 提示 ${verdict.infoCount} 项`;
+		checkEmpty.hidden = checks.length > 0;
+		const items = checks.map((check) => {
+			const item = textElement('li', 'mail-check');
+			item.dataset.level = check.level;
+			const icon = textElement('span', 'mail-check-icon');
+			icon.append(iconElement(severityIcon(check.level)));
+			const body = textElement('div', 'mail-check-body');
+			const titleRow = textElement('div', 'mail-check-title-row');
+			titleRow.append(
+				textElement('span', 'mail-check-title', check.title),
+				textElement('span', 'mail-check-tag', severityLabel(check.level)),
+			);
+			body.append(titleRow, textElement('p', 'mail-check-detail', display(check.detail)));
+			item.append(icon, body);
+			return item;
+		});
+		checkList.replaceChildren(...items);
+	}
+
+	function renderPath(): void {
+		if (!analysis) return;
+		const hops = analysis.received;
+		pathEmpty.hidden = hops.length > 0;
+		const dated = hops.filter((hop) => hop.date.date);
+		if (!hops.length) {
+			pathSummary.textContent = '没有 Received 头';
+			pathList.replaceChildren();
+			return;
+		}
+		if (dated.length >= 2) {
+			const first = dated[0].date.date!;
+			const last = dated[dated.length - 1].date.date!;
+			pathSummary.textContent = `共 ${hops.length} 跳，首尾相隔 ${formatDelay(last.getTime() - first.getTime())}`;
+		} else {
+			pathSummary.textContent = `共 ${hops.length} 跳，部分时间无法解析`;
+		}
+
+		const items = hops.map((hop) => {
+			const item = textElement('li', 'mail-hop');
+			const head = textElement('div', 'mail-hop-head');
+			head.append(
+				textElement('span', 'mail-hop-index', `第 ${hop.chronological} 跳`),
+				textElement('span', 'mail-hop-date', hop.date.date ? formatDateTime(hop.date.date, false) : '时间未知'),
+			);
+			const route = textElement('p', 'mail-hop-route');
+			route.append(
+				textElement('span', 'mono', display(hop.fromNode || '?')),
+				textElement('span', 'mail-hop-arrow', '→'),
+				textElement('span', 'mono', display(hop.byNode || '?')),
+			);
+			const meta = textElement('div', 'mail-hop-meta');
+			if (hop.protocol) meta.append(textElement('span', 'mail-badge', display(hop.protocol)));
+			for (const ip of hop.ips) meta.append(textElement('span', 'mail-badge', display(ip)));
+			if (hop.delayMs !== null) {
+				const delay = textElement('span', `mail-badge${hop.delayMs < -60_000 ? ' is-warn' : ''}`, `距上一跳 ${formatDelay(hop.delayMs)}`);
+				meta.append(delay);
+			}
+			const details = textElement('details');
+			details.append(
+				textElement('summary', '', '原始 Received'),
+				textElement('pre', 'mail-hop-raw', display(hop.raw)),
+			);
+			const body = textElement('div', 'mail-hop-body');
+			body.append(head, route, meta, details);
+			item.append(body);
+			return item;
+		});
+		pathList.replaceChildren(...items);
+	}
+
+	function duplicateCount(field: HeaderField): number {
+		return analysis?.parsed.byKey[field.key]?.length ?? 1;
+	}
+
+	function renderHeaders(): void {
+		if (!analysis) return;
+		const all = analysis.parsed.fields;
+		const filtered = filterHeaderFields(all, headerQuery);
+		headerCount.textContent = headerQuery
+			? `匹配 ${filtered.length} / ${all.length} 个字段`
+			: `共 ${all.length} 个字段`;
+		headerEmpty.hidden = filtered.length > 0;
+		const shown = filtered.slice(0, HEADER_RENDER_LIMIT);
+		const items = shown.map((field) => {
+			const item = textElement('li', 'mail-header');
+			const top = textElement('div', 'mail-header-top');
+			top.append(textElement('span', 'mail-header-name', field.name));
+			const count = duplicateCount(field);
+			if (count > 1) top.append(textElement('span', 'mail-header-dup', `同名字段 ×${count}`));
+			const value = textElement('div', 'mail-header-value', display(field.decoded));
+			const details = textElement('details');
+			details.append(
+				textElement('summary', '', '原始值'),
+				textElement('pre', 'mail-header-raw', display(field.raw)),
+			);
+			item.append(top, value, details);
+			return item;
+		});
+		if (filtered.length > HEADER_RENDER_LIMIT) {
+			items.push(
+				textElement(
+					'li',
+					'mail-empty',
+					`字段太多，只显示前 ${HEADER_RENDER_LIMIT} 个。可以搜索缩小范围。`,
+				),
+			);
+		}
+		headerList.replaceChildren(...items);
+	}
+
+	function renderAll(): void {
+		renderVerdict();
+		renderSummary();
+		renderChecks();
+		renderPath();
+		renderHeaders();
+		copyStatus.textContent = '';
+	}
+
+	function runAnalysis(scroll = true): void {
+		const raw = input.value ?? '';
+		hideNotice();
+		if (!raw.trim()) {
+			showNotice('请先粘贴邮件头，或选择一个 .eml 文件。');
+			results.hidden = true;
+			input.focus();
+			return;
+		}
+		try {
+			analysis = analyzeMail(raw);
+		} catch (error) {
+			analysis = null;
+			results.hidden = true;
+			showNotice(error instanceof Error ? error.message : '无法解析这段内容。');
+			return;
+		}
+		masked = Boolean(maskToggle.checked);
+		results.hidden = false;
+		renderAll();
+		if (scroll) results.scrollIntoView({ behavior: 'smooth', block: 'start' });
+	}
+
+	function setInput(value: string, note = ''): void {
+		input.value = value;
+		updateInputCount();
+		fileNote.hidden = !note;
+		fileNote.textContent = note;
+		runAnalysis(false);
+	}
+
+	function encodedWord(value: string): string {
+		const bytes = new TextEncoder().encode(value);
+		let binary = '';
+		for (const byte of bytes) binary += String.fromCharCode(byte);
+		return `=?UTF-8?B?${btoa(binary)}?=`;
+	}
+
+	function rfcDate(date: Date): string {
+		const local = new Date(date.getTime() + 8 * 3600_000);
+		const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+		const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+		const pad = (value: number) => String(value).padStart(2, '0');
+		return `${days[local.getUTCDay()]}, ${pad(local.getUTCDate())} ${months[local.getUTCMonth()]} ${local.getUTCFullYear()} ${pad(local.getUTCHours())}:${pad(local.getUTCMinutes())}:${pad(local.getUTCSeconds())} +0800`;
+	}
+
+	function normalSample(now: Date): string {
+		const latest = new Date(now.getTime() - 6 * 60_000);
+		const earlier = new Date(latest.getTime() - 5_000);
+		return `Return-Path: <notifications@example.org>
+Received: from mx.example.org (mx.example.org [192.0.2.10])
+ by mail.example.net with ESMTPS id abc123
+ for <user@example.net>; ${rfcDate(latest)}
+Received: from app.example.org (app.example.org [192.0.2.11])
+ by mx.example.org with ESMTP id def456;
+ ${rfcDate(earlier)}
+Authentication-Results: mail.example.net;
+ spf=pass smtp.mailfrom=example.org;
+ dkim=pass header.d=example.org header.s=sel1;
+ dmarc=pass header.from=example.org;
+ arc=pass
+DKIM-Signature: v=1; a=rsa-sha256; d=example.org; s=sel1;
+ t=${Math.floor(earlier.getTime() / 1000)}; bh=example; b=example
+From: "Example 通知" <notifications@example.org>
+To: "测试用户" <user@example.net>
+Subject: ${encodedWord('你的订单已发货')}
+Date: ${rfcDate(earlier)}
+Message-ID: <${earlier.getTime()}.abc@example.org>
+MIME-Version: 1.0
+Content-Type: text/plain; charset=utf-8
+List-Unsubscribe: <https://example.org/unsubscribe>
+`;
+	}
+
+	function suspiciousSample(now: Date): string {
+		const latest = new Date(now.getTime() - 90_000);
+		const earlier = new Date(latest.getTime() - 1_000);
+		return `Return-Path: <bounce@bulk-sender.example>
+Received: from unknown (unknown [203.0.113.66])
+ by mx.example.net with SMTP id x1
+ for <user@example.net>; ${rfcDate(latest)}
+Received: from smtp.mail-relay.example (smtp.mail-relay.example [198.51.100.23])
+ by mx.example.org with ESMTP id y2;
+ ${rfcDate(earlier)}
+Authentication-Results: mx.example.net;
+ spf=fail smtp.mailfrom=mail-relay.example;
+ dkim=none;
+ dmarc=fail header.from=mail-relay.example
+From: "某支付平台安全中心 <security@pay.example>" <security@mail-relay.example>
+Reply-To: help@pay.example
+To: user@example.net
+Subject: ${encodedWord('【紧急】您的账户存在异常，请立即验证')}
+Date: ${rfcDate(earlier)}
+Message-ID: <${earlier.getTime()}.random@mail-relay.example>
+X-Spam-Status: Yes, score=12.4
+X-Spam-Flag: YES
+X-Mailer: BulkMailer 1.0
+
+正文不会被解析。
+`;
+	}
+
+	async function handleFile(file: File): Promise<void> {
+		hideNotice();
+		try {
+			const truncated = file.size > MAX_EML_READ;
+			const text = await file.slice(0, MAX_EML_READ).text();
+			if (!text.trim()) {
+				showNotice('这个文件是空的，或者无法作为文本读取。');
+				return;
+			}
+			setInput(
+				text,
+				truncated
+					? `${file.name} 共 ${(file.size / 1024 / 1024).toFixed(1)} MB，只读取了前 512 KB（邮件头通常在最前面）。`
+					: `${file.name} · ${(file.size / 1024).toFixed(1)} KB`,
+			);
+		} catch {
+			showNotice('读取文件失败。请确认文件没有损坏，或尝试直接粘贴邮件头。');
+		}
+	}
+
+	function clearAll(): void {
+		analysis = null;
+		input.value = '';
+		fileInput.value = '';
+		headerSearch.value = '';
+		headerQuery = '';
+		results.hidden = true;
+		fileNote.hidden = true;
+		fileNote.textContent = '';
+		hideNotice();
+		updateInputCount();
+		maskToggle.checked = false;
+		masked = false;
+		input.focus();
+	}
+
+	function fallbackCopy(text: string): boolean {
+		const area = document.createElement('textarea');
+		area.value = text;
+		area.setAttribute('readonly', '');
+		area.style.position = 'fixed';
+		area.style.opacity = '0';
+		document.body.append(area);
+		area.select();
+		let success = false;
+		try {
+			success = document.execCommand('copy');
+		} catch {
+			success = false;
+		}
+		area.remove();
+		return success;
+	}
+
+	function openReportDialog(report: string): void {
+		reportText.value = report;
+		reportCopyStatus.textContent = '';
+		reportDialog.open = true;
+		requestAnimationFrame(() => {
+			reportText.focus();
+			reportText.select();
+		});
+	}
+
+	async function copyFromDialog(): Promise<void> {
+		const report = reportText.value;
+		let success = false;
+		try {
+			await navigator.clipboard.writeText(report);
+			success = true;
+		} catch {
+			success = fallbackCopy(report);
+		}
+		window.clearTimeout(copyTimer);
+		if (!success) {
+			reportText.focus();
+			reportText.select();
+			reportCopyStatus.textContent = '浏览器仍阻止复制，请按 Ctrl+C 手动复制。';
+			return;
+		}
+		reportCopyStatus.textContent = '已复制到剪贴板';
+		copyStatus.textContent = '已复制';
+		copyTimer = window.setTimeout(() => {
+			reportCopyStatus.textContent = '';
+			copyStatus.textContent = '';
+		}, 2500);
+	}
+
+	async function copyReport(): Promise<void> {
+		if (!analysis) return;
+		const report = buildReport(analysis, masked);
+		let success = false;
+		try {
+			await navigator.clipboard.writeText(report);
+			success = true;
+		} catch {
+			success = fallbackCopy(report);
+		}
+		window.clearTimeout(copyTimer);
+		if (!success) {
+			copyStatus.textContent = '请手动复制';
+			openReportDialog(report);
+			return;
+		}
+		copyStatus.textContent = '已复制';
+		copyTimer = window.setTimeout(() => {
+			copyStatus.textContent = '';
+		}, 2500);
+	}
+
+	analysisButton.addEventListener('click', () => runAnalysis());
+	input.addEventListener('input', updateInputCount);
+	input.addEventListener('keydown', (event) => {
+		if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') {
+			event.preventDefault();
+			runAnalysis();
+		}
+	});
+	$('normalSample').addEventListener('click', () => setInput(normalSample(new Date())));
+	$('suspiciousSample').addEventListener('click', () => setInput(suspiciousSample(new Date())));
+	$('clearBtn').addEventListener('click', clearAll);
+	fileBtn.addEventListener('click', () => fileInput.click());
+	fileInput.addEventListener('change', () => {
+		const file = fileInput.files?.[0];
+		if (file) void handleFile(file);
+		fileInput.value = '';
+	});
+	copyBtn.addEventListener('click', () => void copyReport());
+	$('reportClose').addEventListener('click', () => {
+		reportDialog.open = false;
+	});
+	reportCopy.addEventListener('click', () => void copyFromDialog());
+	maskToggle.addEventListener('change', () => {
+		masked = Boolean(maskToggle.checked);
+		if (analysis) renderAll();
+	});
+	headerSearch.addEventListener('input', () => {
+		headerQuery = headerSearch.value ?? '';
+		renderHeaders();
+	});
+
+	let dragDepth = 0;
+	inputPanel.addEventListener('dragenter', (event) => {
+		event.preventDefault();
+		dragDepth++;
+		inputPanel.classList.add('is-over');
+	});
+	inputPanel.addEventListener('dragover', (event) => {
+		event.preventDefault();
+		if (event.dataTransfer) event.dataTransfer.dropEffect = 'copy';
+	});
+	inputPanel.addEventListener('dragleave', (event) => {
+		event.preventDefault();
+		dragDepth = Math.max(0, dragDepth - 1);
+		if (!dragDepth) inputPanel.classList.remove('is-over');
+	});
+	inputPanel.addEventListener('drop', (event) => {
+		event.preventDefault();
+		dragDepth = 0;
+		inputPanel.classList.remove('is-over');
+		const file = event.dataTransfer?.files?.[0];
+		if (file) void handleFile(file);
+	});
+
+	updateInputCount();
+</script>

@@ -15,6 +15,7 @@
     "test:pdf": "node scripts/pdf-test.mjs",
     "test:media": "node scripts/media-test.mjs",
     "test:guide": "node scripts/guide-test.mjs",
+    "test:mail": "node scripts/mail-test.mjs",
     "icons:sites": "node scripts/fetch-site-icons.mjs",
     "icons:pwa": "node scripts/gen-pwa-icons.mjs"
   },

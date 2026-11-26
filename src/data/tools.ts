@@ -150,6 +150,15 @@ export const builtinTools: Tool[] = [
 		href: '/tools/pdf/',
 	},
 	{
+		slug: 'mail',
+		name: '邮件头分析器',
+		desc: '核对 SPF / DKIM / DMARC 声明、Received 路径与常见伪装手法，全部本地完成',
+		icon: 'mail',
+		category: '工具',
+		status: 'live',
+		href: '/tools/mail/',
+	},
+	{
 		slug: 'mindmap',
 		name: '思维导图',
 		desc: 'My Mind 开源思维导图编辑器',
