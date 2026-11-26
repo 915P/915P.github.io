@@ -1,0 +1,1472 @@
+---
+import Page from '../../layouts/Page.astro';
+---
+
+<Page
+	title="ZIP 工具箱"
+	description="在浏览器里创建、解压 ZIP，支持中文文件名、AES 加密与路径安全校验。文件不上传。"
+	active="tools"
+>
+	<div class="tool-head head-split">
+		<div class="head-title">
+			<h1>ZIP 工具箱</h1>
+			<p class="lede">
+				创建与解压 ZIP，支持中文文件名、AES 加密与路径安全校验，全部在浏览器本地完成。
+			</p>
+		</div>
+		<div class="head-tools">
+			<mdui-chip variant="assist">
+				<mdui-icon-lock></mdui-icon-lock>
+				本地处理
+			</mdui-chip>
+		</div>
+	</div>
+
+	<section class="panel-lg zip-progress" id="progressPanel" hidden>
+		<div class="row-between zip-progress-head">
+			<span class="text-sm" id="progressText" role="status">准备中…</span>
+			<span class="text-xs faint" id="progressPercent"></span>
+		</div>
+		<mdui-linear-progress id="progressBar" value="0" max="1"></mdui-linear-progress>
+	</section>
+
+	<mdui-tabs value="unzip" id="zipTabs" class="zip-tabs">
+		<mdui-tab value="unzip">解压</mdui-tab>
+		<mdui-tab value="zip">压缩</mdui-tab>
+
+		<mdui-tab-panel slot="panel" value="unzip">
+			<section class="zip-tab-body">
+				<div class="zip-picker">
+					<div class="zip-drop" id="unzipDrop">
+						<mdui-button variant="outlined" id="unzipPick">
+							<mdui-icon-upload slot="icon"></mdui-icon-upload>
+							选择 ZIP 文件
+						</mdui-button>
+						<span class="text-xs faint">也可以把文件直接拖到这里</span>
+					</div>
+					<div class="zip-encoding">
+						<mdui-select id="encodingSelect" variant="outlined" label="文件名编码" value="auto">
+							<mdui-menu-item value="auto">自动（UTF-8 / CP437）</mdui-menu-item>
+							<mdui-menu-item value="gbk">GBK / CP936（简体中文 Windows）</mdui-menu-item>
+							<mdui-menu-item value="big5">Big5（繁体中文）</mdui-menu-item>
+							<mdui-menu-item value="shift-jis">Shift-JIS（日文）</mdui-menu-item>
+						</mdui-select>
+						<span class="text-xs faint">
+							只对未标记 UTF-8 的旧式压缩包生效；中文乱码时试试 GBK。
+						</span>
+					</div>
+				</div>
+
+				<div class="zip-fileinfo" id="unzipInfo" hidden></div>
+
+				<div class="zip-toolbar" id="unzipToolbar" hidden>
+					<mdui-text-field
+						id="entrySearch"
+						variant="outlined"
+						label="搜索文件名"
+						class="zip-search"
+					></mdui-text-field>
+					<div class="row zip-toolbar-actions">
+						<mdui-button variant="text" id="selectAll">全选当前</mdui-button>
+						<mdui-button variant="text" id="selectNone">全不选</mdui-button>
+					</div>
+				</div>
+
+				<div class="zip-notice" id="unzipNotice" hidden></div>
+				<ul class="zip-list" id="entryList"></ul>
+				<div class="zip-empty" id="unzipEmpty">
+					还没有载入压缩包。选择一个 .zip 文件查看内容。
+				</div>
+
+				<div class="row zip-actions">
+					<mdui-button variant="filled" id="extractFolder" disabled>
+						<mdui-icon-folder-open slot="icon"></mdui-icon-folder-open>
+						解压到文件夹…
+					</mdui-button>
+					<mdui-button variant="outlined" id="extractDownload" disabled>
+						<mdui-icon-download slot="icon"></mdui-icon-download>
+						逐个下载
+					</mdui-button>
+					<mdui-button variant="text" id="clearUnzip" disabled>清空</mdui-button>
+					<span class="text-xs faint" id="entrySummary"></span>
+				</div>
+				<p class="text-xs faint" id="folderNote"></p>
+			</section>
+		</mdui-tab-panel>
+
+		<mdui-tab-panel slot="panel" value="zip">
+			<section class="zip-tab-body">
+				<div class="zip-picker">
+					<div class="zip-drop" id="compressDrop">
+						<mdui-button variant="outlined" id="compressPick">
+							<mdui-icon-upload slot="icon"></mdui-icon-upload>
+							选择文件（可多选）
+						</mdui-button>
+						<mdui-button variant="outlined" id="compressPickDir">
+							<mdui-icon-folder-open slot="icon"></mdui-icon-folder-open>
+							选择文件夹
+						</mdui-button>
+						<span class="text-xs faint">也可以把文件直接拖到这里；文件夹请用左侧按钮。</span>
+					</div>
+				</div>
+
+				<ul class="zip-list" id="compressList"></ul>
+				<div class="zip-empty" id="compressEmpty">还没有选择文件。</div>
+
+				<div class="zip-option-grid">
+					<mdui-select id="compressLevel" variant="outlined" label="压缩级别" value="6">
+						<mdui-menu-item value="0">仅存储（最快）</mdui-menu-item>
+						<mdui-menu-item value="1">快速</mdui-menu-item>
+						<mdui-menu-item value="6">标准（推荐）</mdui-menu-item>
+						<mdui-menu-item value="9">极限（最慢）</mdui-menu-item>
+					</mdui-select>
+					<mdui-text-field
+						id="archiveName"
+						variant="outlined"
+						label="压缩包名"
+						placeholder="archive.zip"
+					></mdui-text-field>
+					<mdui-text-field
+						id="compressPassword"
+						variant="outlined"
+						label="密码（可选）"
+						type="password"
+						toggle-password
+						helper="AES-256；Windows 资源管理器打不开，需 7-Zip / WinRAR"
+					></mdui-text-field>
+				</div>
+
+				<div class="row zip-actions">
+					<mdui-button variant="filled" id="compressRun" disabled>生成 ZIP 并下载</mdui-button>
+					<mdui-button variant="text" id="compressClear">清空列表</mdui-button>
+					<span class="text-xs faint" id="compressSummary"></span>
+				</div>
+				<p class="text-xs faint">
+					文件名以 UTF-8 写入，现代解压工具都能识别；压缩在浏览器内完成，文件不会上传。
+				</p>
+			</section>
+		</mdui-tab-panel>
+	</mdui-tabs>
+
+	<mdui-dialog id="pwdDialog" headline="需要密码" close-on-esc>
+		<p class="text-sm muted" id="pwdHint">这个压缩包已加密，请输入密码。</p>
+		<mdui-text-field id="pwdInput" type="password" toggle-password label="密码"></mdui-text-field>
+		<mdui-button slot="action" variant="text" id="pwdCancel">取消</mdui-button>
+		<mdui-button slot="action" variant="filled" id="pwdOk">确定</mdui-button>
+	</mdui-dialog>
+
+	<mdui-dialog id="confirmDialog" headline="确认" close-on-esc>
+		<p class="text-sm muted" id="confirmText"></p>
+		<mdui-button slot="action" variant="text" id="confirmCancel">取消</mdui-button>
+		<mdui-button slot="action" variant="filled" id="confirmOk">继续</mdui-button>
+	</mdui-dialog>
+
+	<p class="footnote">
+		ZIP 引擎为 <code class="mono">zip.js</code>（BSD-3-Clause），在本站本地分发；
+		所有文件只在浏览器内处理，不会上传。解压时默认校验 CRC，并拒绝写入
+		<code class="mono">..</code> 等不安全路径。暂不支持 7z / RAR、分卷 ZIP 与
+		加密中央目录；AES 加密的 ZIP 需要 7-Zip / WinRAR 等工具打开。
+		许可与溯源详见仓库内 <code class="mono">THIRD_PARTY_NOTICES.md</code>。
+	</p>
+</Page>
+
+<style is:global>
+.zip-tabs {
+	margin-top: 1.25rem;
+}
+
+.zip-tab-body {
+	display: flex;
+	flex-direction: column;
+	gap: 0.25rem;
+	padding: 1.15rem;
+}
+
+.zip-progress {
+	padding: 0.9rem 1.15rem;
+	margin-bottom: 1rem;
+}
+
+.zip-progress-head {
+	align-items: baseline;
+	gap: 0.5rem;
+	margin-bottom: 0.6rem;
+}
+
+.zip-picker {
+	max-width: 40rem;
+}
+
+.zip-encoding {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: flex-end;
+	gap: 0.5rem 0.85rem;
+	margin-top: 0.75rem;
+}
+
+.zip-encoding mdui-select {
+	flex: 0 1 24rem;
+	width: 24rem;
+	max-width: 100%;
+	min-width: 16rem;
+}
+
+.zip-encoding > .text-xs {
+	flex: 1 1 18rem;
+}
+
+/*
+ * 这两个块自己写了 display:flex，会盖掉浏览器对 [hidden] 的 display:none。
+ * 空状态下必须显式隐藏，否则搜索栏和空的灰色提示条会一直露在页面上。
+ */
+.zip-toolbar[hidden],
+.zip-notice[hidden] {
+	display: none;
+}
+
+/*
+ * 文件选择区 = 按钮 + 可拖放区域。与 PDF 工具箱一致：
+ * 不用 <mdui-text-field type="file">，内部原生 input 会和 outlined 标签打架。
+ */
+.zip-drop {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 0.5rem 0.85rem;
+	padding: 0.85rem;
+	border: 1px dashed rgb(var(--mdui-color-outline-variant));
+	border-radius: var(--mdui-shape-corner-medium);
+	transition:
+		border-color var(--mdui-motion-duration-short2),
+		background-color var(--mdui-motion-duration-short2);
+}
+
+.zip-drop.is-over {
+	border-color: rgb(var(--mdui-color-primary));
+	background-color: rgb(var(--mdui-color-surface-container-high));
+}
+
+.zip-fileinfo {
+	margin-top: 0.9rem;
+	font-size: var(--mdui-typescale-body-medium-size);
+	color: rgb(var(--mdui-color-on-surface-variant));
+	line-height: 1.6;
+	word-break: break-word;
+}
+
+.zip-toolbar {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: flex-end;
+	justify-content: space-between;
+	gap: 0.6rem 1rem;
+	margin-top: 1rem;
+}
+
+.zip-search {
+	flex: 1 1 16rem;
+	max-width: 24rem;
+}
+
+.zip-toolbar-actions {
+	gap: 0.15rem;
+}
+
+.zip-list {
+	display: flex;
+	flex-direction: column;
+	gap: 0.5rem;
+	margin: 1rem 0 0;
+	padding: 0;
+	list-style: none;
+}
+
+.zip-list:empty {
+	display: none;
+}
+
+.zip-item {
+	display: flex;
+	align-items: center;
+	gap: 0.75rem;
+	padding: 0.55rem 0.75rem;
+	border: 1px solid rgb(var(--mdui-color-outline-variant));
+	border-radius: var(--mdui-shape-corner-medium);
+	background-color: rgb(var(--mdui-color-surface-container-lowest));
+}
+
+.zip-item.is-unsafe {
+	border-color: rgb(var(--mdui-color-error));
+}
+
+.zip-item.is-risky {
+	border-color: rgb(var(--mdui-color-tertiary));
+}
+
+.zip-item > mdui-checkbox {
+	flex: none;
+}
+
+.zip-item-icon {
+	flex: none;
+	font-size: 1.4rem;
+	color: rgb(var(--mdui-color-primary));
+}
+
+.zip-item-body {
+	flex: 1;
+	min-width: 0;
+}
+
+.zip-item-name {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	font-size: var(--mdui-typescale-body-medium-size);
+}
+
+.zip-item-meta {
+	margin-top: 0.15rem;
+	font-size: var(--mdui-typescale-label-medium-size);
+	color: rgb(var(--mdui-color-outline));
+}
+
+.zip-badges {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.35rem;
+	margin-top: 0.35rem;
+}
+
+.zip-badge {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.2rem;
+	padding: 0.1rem 0.45rem;
+	border-radius: 999px;
+	background-color: rgb(var(--mdui-color-surface-container-high));
+	color: rgb(var(--mdui-color-on-surface-variant));
+	font-size: var(--mdui-typescale-label-small-size);
+}
+
+.zip-badge.is-warn {
+	background-color: rgb(var(--mdui-color-error-container));
+	color: rgb(var(--mdui-color-on-error-container));
+}
+
+.zip-badge mdui-icon-lock,
+.zip-badge mdui-icon-warning,
+.zip-badge mdui-icon-info {
+	font-size: 0.9rem;
+}
+
+.zip-item-actions {
+	display: flex;
+	align-items: center;
+	gap: 0.15rem;
+}
+
+.zip-actions {
+	gap: 0.6rem;
+	margin-top: 1.1rem;
+}
+
+.zip-option-grid {
+	display: grid;
+	gap: 0.85rem;
+	align-items: start;
+	margin-top: 1.1rem;
+	grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+}
+
+.zip-empty {
+	margin-top: 1.1rem;
+	padding: 1.5rem 1rem;
+	border: 1px dashed rgb(var(--mdui-color-outline-variant));
+	border-radius: var(--mdui-shape-corner-medium);
+	text-align: center;
+	color: rgb(var(--mdui-color-outline));
+}
+
+.zip-notice {
+	display: flex;
+	align-items: flex-start;
+	gap: 0.45rem;
+	margin-top: 0.9rem;
+	padding: 0.65rem 0.8rem;
+	border-radius: var(--mdui-shape-corner-medium);
+	background-color: rgb(var(--mdui-color-surface-container-high));
+	color: rgb(var(--mdui-color-on-surface-variant));
+	font-size: var(--mdui-typescale-body-small-size);
+	line-height: 1.5;
+}
+
+.zip-notice.is-warn {
+	border-left: 3px solid rgb(var(--mdui-color-error));
+}
+
+.zip-notice mdui-icon-warning {
+	flex: none;
+	color: rgb(var(--mdui-color-error));
+}
+
+@media (max-width: 599px) {
+	.zip-toolbar {
+		align-items: stretch;
+	}
+
+	.zip-search {
+		max-width: none;
+	}
+
+	.zip-item {
+		align-items: flex-start;
+	}
+
+	.zip-item-actions {
+		padding-top: 0.1rem;
+	}
+}
+</style>
+
+<script>
+	import {
+		loadZipJs,
+		type ZipEntry,
+		type ZipJs,
+		type ZipReaderInstance,
+		type ZipWriterInstance,
+	} from '../../lib/zip-loader';
+	import * as ops from '../../lib/zip-ops';
+
+	type Button = HTMLElement & { disabled: boolean };
+	type TextField = HTMLElement & { value: string };
+	type Select = HTMLElement & { value: string };
+	type Checkbox = HTMLElement & { checked: boolean };
+	type Dialog = HTMLElement & { open: boolean };
+
+	interface LoadedEntry {
+		info: ops.EntryInfo;
+		raw: ZipEntry;
+	}
+
+	interface ZipProgress {
+		loaded: number;
+		total: number;
+	}
+
+	const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
+
+	const pickerWindow = window as unknown as {
+		showDirectoryPicker?: (options?: {
+			mode?: 'read' | 'readwrite';
+		}) => Promise<FileSystemDirectoryHandle>;
+	};
+	const supportsFolder = typeof pickerWindow.showDirectoryPicker === 'function';
+
+	let reader: ZipReaderInstance | null = null;
+	let readerFile: File | null = null;
+	let entries: LoadedEntry[] = [];
+	let selected = new Set<number>();
+	let encoding: ops.EncodingChoice = 'auto';
+	let cachedPassword = '';
+	let loadToken = 0;
+
+	let compressFiles: { file: File; name: string }[] = [];
+
+	/* ------------------------------------------------------------------ 进度条 */
+
+	const progressPanel = $('progressPanel');
+	const progressBar = $<HTMLElement & { value: number }>('progressBar');
+	const progressText = $('progressText');
+	const progressPercent = $('progressPercent');
+	let progressDepth = 0;
+	let progressActive = false;
+	let hideTimer = 0;
+
+	function beginProgress(label: string): void {
+		window.clearTimeout(hideTimer);
+		progressDepth++;
+		progressActive = true;
+		progressPanel.hidden = false;
+		setProgress(0, 0, label);
+	}
+
+	function setProgress(loaded: number, total: number, label: string): void {
+		// zip.js 的 onprogress 可能在 getData 已经返回后再补一帧；忽略它，
+		// 否则会把「已解压 N 项」覆盖回「解压 xxx…」
+		if (!progressActive) return;
+		progressText.textContent = label;
+		if (total > 0) {
+			const ratio = Math.min(1, loaded / total);
+			progressBar.value = ratio;
+			progressPercent.textContent = `${Math.round(ratio * 100)}%`;
+		} else {
+			progressBar.removeAttribute('value');
+			progressPercent.textContent = '';
+		}
+	}
+
+	function endProgress(text?: string): void {
+		progressDepth = Math.max(0, progressDepth - 1);
+		if (progressDepth > 0) return;
+		if (text) {
+			progressActive = true;
+			setProgress(1, 1, text);
+			progressActive = false;
+			hideTimer = window.setTimeout(() => {
+				progressPanel.hidden = true;
+			}, 1600);
+			return;
+		}
+		progressActive = false;
+		progressPanel.hidden = true;
+	}
+
+	/* ------------------------------------------------------------------ 通用 */
+
+	function toast(message: string): void {
+		const mdui = (window as unknown as { mdui?: { snackbar?: (options: { message: string }) => void } }).mdui;
+		mdui?.snackbar?.({ message });
+	}
+
+	function fail(error: unknown): void {
+		endProgress();
+		toast(ops.describeError(error));
+		console.error(error);
+	}
+
+	function setDisabled(id: string, disabled: boolean): void {
+		const element = document.getElementById(id) as Button | null;
+		if (element) element.disabled = disabled;
+	}
+
+	function baseName(name: string): string {
+		return name.replace(/\\/g, '/').split('/').filter(Boolean).pop() ?? 'file';
+	}
+
+	function stripExtension(name: string): string {
+		return name.replace(/\.[^./]+$/, '');
+	}
+
+	function isAbortError(error: unknown): boolean {
+		return (error as { name?: string })?.name === 'AbortError';
+	}
+
+	function isCancelError(error: unknown): boolean {
+		return /取消/.test(String((error as Error)?.message ?? error));
+	}
+
+	function downloadBlob(blob: Blob, filename: string): void {
+		const url = URL.createObjectURL(blob);
+		const anchor = document.createElement('a');
+		anchor.href = url;
+		anchor.download = filename;
+		document.body.appendChild(anchor);
+		anchor.click();
+		anchor.remove();
+		window.setTimeout(() => URL.revokeObjectURL(url), 4000);
+	}
+
+	function iconButton(icon: string, label: string, onClick: () => void): HTMLElement {
+		const button = document.createElement('mdui-button-icon');
+		button.setAttribute('variant', 'standard');
+		button.setAttribute('aria-label', label);
+		button.setAttribute('title', label);
+		button.appendChild(document.createElement(`mdui-icon-${icon}`));
+		button.addEventListener('click', onClick);
+		return button;
+	}
+
+	function badge(text: string, icon: string, warn = false): HTMLElement {
+		const span = document.createElement('span');
+		span.className = `zip-badge${warn ? ' is-warn' : ''}`;
+		span.appendChild(document.createElement(`mdui-icon-${icon}`));
+		span.appendChild(document.createTextNode(text));
+		return span;
+	}
+
+	function iconFor(kind: ops.EntryKind): string {
+		switch (kind) {
+			case 'folder':
+				return 'folder';
+			case 'image':
+				return 'image';
+			case 'text':
+				return 'article';
+			case 'pdf':
+				return 'picture-as-pdf';
+			case 'audio':
+				return 'audio-file';
+			case 'video':
+				return 'video-file';
+			case 'archive':
+				return 'folder-zip';
+			default:
+				return 'description';
+		}
+	}
+
+	/* ------------------------------------------------------------------ 文件选择 */
+
+	function wirePicker(options: {
+		buttonId: string;
+		dropId?: string;
+		accept: string;
+		multiple: boolean;
+		directory?: boolean;
+		extensions?: string[];
+		onFiles: (files: File[]) => void;
+	}): void {
+		const { buttonId, dropId, accept, multiple, directory, extensions = [], onFiles } = options;
+		const pick = (list: FileList | null | undefined): File[] => {
+			const all = Array.from(list ?? []);
+			const ok = extensions.length
+				? all.filter((file) => {
+						const lower = file.name.toLowerCase();
+						return extensions.some((ext) => lower.endsWith(ext));
+					})
+				: all;
+			if (all.length && ok.length !== all.length) toast('已忽略不支持的文件类型');
+			return multiple ? ok : ok.slice(0, 1);
+		};
+
+		const input = document.createElement('input');
+		input.type = 'file';
+		input.accept = accept;
+		input.multiple = multiple;
+		input.hidden = true;
+		if (directory) input.setAttribute('webkitdirectory', '');
+		input.addEventListener('change', () => {
+			const files = pick(input.files);
+			input.value = '';
+			if (files.length) onFiles(files);
+		});
+		document.body.appendChild(input);
+
+		document.getElementById(buttonId)?.addEventListener('click', () => input.click());
+		const drop = dropId ? document.getElementById(dropId) : null;
+		if (!drop) return;
+
+		drop.addEventListener('dragover', (event) => {
+			event.preventDefault();
+			drop.classList.add('is-over');
+		});
+		drop.addEventListener('dragleave', () => drop.classList.remove('is-over'));
+		drop.addEventListener('drop', (event) => {
+			event.preventDefault();
+			drop.classList.remove('is-over');
+			const files = pick(event.dataTransfer?.files);
+			if (files.length) onFiles(files);
+		});
+	}
+
+	/* ------------------------------------------------------------------ 解压：加载与列表 */
+
+	function toRaw(entry: ZipEntry): ops.RawEntry {
+		return {
+			name: entry.filename,
+			directory: entry.directory,
+			encrypted: entry.encrypted,
+			compressedSize: entry.compressedSize,
+			uncompressedSize: entry.uncompressedSize,
+			lastModDate: entry.lastModDate,
+			compressionMethod: entry.compressionMethod,
+		};
+	}
+
+	async function closeReader(): Promise<void> {
+		if (!reader) return;
+		const current = reader;
+		reader = null;
+		try {
+			await current.close();
+		} catch {
+			// 关闭失败不影响下一次载入
+		}
+	}
+
+	function resetUnzipState(): void {
+		readerFile = null;
+		entries = [];
+		selected.clear();
+		cachedPassword = '';
+		$<TextField>('entrySearch').value = '';
+		renderEntries();
+	}
+
+	async function loadZipFile(file: File): Promise<void> {
+		const token = ++loadToken;
+		beginProgress('读取 ZIP…');
+		let next: ZipReaderInstance | null = null;
+		try {
+			const zip = await getZip();
+			const filenameEncoding = ops.encodingFor(encoding);
+			next = new zip.ZipReader(new zip.BlobReader(file), {
+				...(filenameEncoding ? { filenameEncoding } : {}),
+				// 先完整列出，再由 zip-ops 标记不安全项；写入时永远不会用 unsafe 的路径
+				filenameValidation: 'tolerant',
+				checkCrc32: true,
+			});
+			const rawEntries = await next.getEntries();
+			if (token !== loadToken) {
+				// 同一文件被更快的下一次选择取代：必须结束本次的进度层级，
+				// 否则 progressDepth 会一直大于 0，进度条永远不消失
+				await next.close();
+				endProgress();
+				return;
+			}
+			const guard = ops.validateLoad(rawEntries.map(toRaw));
+			if (guard) throw new Error(guard);
+
+			await closeReader();
+			reader = next;
+			next = null;
+			readerFile = file;
+			cachedPassword = '';
+			entries = ops
+				.classifyEntries(rawEntries.map(toRaw))
+				.map((info, index) => ({ info, raw: rawEntries[index] }));
+			selected = new Set(entries.filter((entry) => entry.info.safePath).map((entry) => entry.info.id));
+			renderEntries();
+			endProgress(`已载入 ${entries.length} 项`);
+		} catch (error) {
+			// 损坏的压缩包上 close() 可能一直不返回；清理不能挡住错误提示
+			if (next) void next.close().catch(() => undefined);
+			await closeReader();
+			resetUnzipState();
+			fail(error);
+		}
+	}
+
+	function renderEntries(): void {
+		const infoBox = $('unzipInfo');
+		infoBox.hidden = !readerFile;
+		if (readerFile) {
+			const summary = ops.summarize(entries.map((entry) => entry.info));
+			infoBox.textContent =
+				`${readerFile.name} · ${summary.total} 项 · ` +
+				`原始 ${ops.formatBytes(summary.totalUncompressed)} · ` +
+				`压缩后 ${ops.formatBytes(summary.totalCompressed)} · ` +
+				`体积比 ${ops.formatPercent(summary.ratio)}`;
+		}
+		$('unzipToolbar').hidden = !readerFile || entries.length === 0;
+		renderEntryList();
+		updateSelectionUi();
+	}
+
+	function renderEntryList(): void {
+		const list = $<HTMLUListElement>('entryList');
+		list.textContent = '';
+		const search = $<TextField>('entrySearch');
+		const windowed = ops.renderWindow(
+			entries.map((entry) => entry.info),
+			search.value,
+		);
+		for (const info of windowed.items) {
+			const loaded = entries[info.id];
+			if (loaded) list.appendChild(createEntryRow(loaded));
+		}
+		renderNotice(windowed, ops.summarize(entries.map((entry) => entry.info)));
+
+		const empty = $('unzipEmpty');
+		if (!readerFile) {
+			empty.hidden = false;
+			empty.textContent = '还没有载入压缩包。选择一个 .zip 文件查看内容。';
+		} else if (entries.length === 0) {
+			empty.hidden = false;
+			empty.textContent = '这个压缩包是空的。';
+		} else if (windowed.matched === 0) {
+			empty.hidden = false;
+			empty.textContent = '没有匹配的文件名。';
+		} else {
+			empty.hidden = true;
+		}
+	}
+
+	function renderNotice(
+		windowed: { matched: number; truncated: boolean },
+		summary: ops.Summary,
+	): void {
+		const notice = $('unzipNotice');
+		const parts: string[] = [];
+		if (summary.unsafe) parts.push(`${summary.unsafe} 个不安全路径已自动排除`);
+		if (summary.highRatio) parts.push(`${summary.highRatio} 个条目压缩比异常，解压前会再次确认`);
+		if (summary.encrypted) parts.push(`${summary.encrypted} 个条目已加密，解压时需要密码`);
+		if (summary.duplicates) parts.push(`${summary.duplicates} 个条目重名`);
+		if (windowed.truncated) {
+			parts.push(
+				`匹配 ${windowed.matched} 项，仅显示前 ${ops.LIMITS.maxRenderedEntries} 项，请用搜索缩小范围`,
+			);
+		}
+
+		notice.hidden = parts.length === 0;
+		notice.textContent = '';
+		notice.classList.toggle('is-warn', summary.unsafe > 0 || summary.highRatio > 0);
+		if (!parts.length) return;
+		notice.appendChild(document.createElement('mdui-icon-warning'));
+		const text = document.createElement('span');
+		text.textContent = parts.join('；');
+		notice.appendChild(text);
+	}
+
+	function createEntryRow(entry: LoadedEntry): HTMLLIElement {
+		const { info } = entry;
+		const li = document.createElement('li');
+		li.className = 'zip-item';
+		if (info.unsafe) li.classList.add('is-unsafe');
+		if (info.highRatio) li.classList.add('is-risky');
+
+		const check = document.createElement('mdui-checkbox') as Checkbox;
+		check.toggleAttribute('checked', selected.has(info.id));
+		if (info.unsafe) {
+			check.setAttribute('disabled', '');
+			check.setAttribute('title', info.unsafe ? ops.unsafeReasonLabel[info.unsafe] : '');
+		}
+		check.setAttribute('aria-label', `选择 ${info.name}`);
+		check.addEventListener('change', () => {
+			if (info.unsafe) return;
+			if (check.checked) selected.add(info.id);
+			else selected.delete(info.id);
+			updateSelectionUi();
+		});
+		li.appendChild(check);
+
+		const icon = document.createElement(`mdui-icon-${iconFor(info.kind)}`);
+		icon.className = 'zip-item-icon';
+		li.appendChild(icon);
+
+		const body = document.createElement('div');
+		body.className = 'zip-item-body';
+		const name = document.createElement('div');
+		name.className = 'zip-item-name';
+		name.textContent = info.name;
+		name.title = info.name;
+		const meta = document.createElement('div');
+		meta.className = 'zip-item-meta';
+		const metaParts = [info.directory ? '目录' : ops.formatBytes(info.uncompressedSize)];
+		if (!info.directory) {
+			metaParts.push(
+				`压缩后 ${ops.formatBytes(info.compressedSize)}（${ops.formatPercent(info.ratio)}）`,
+			);
+		}
+		if (info.lastModDate) metaParts.push(ops.formatDate(info.lastModDate));
+		meta.textContent = metaParts.join(' · ');
+		body.append(name, meta);
+
+		const badges = document.createElement('div');
+		badges.className = 'zip-badges';
+		if (info.encrypted) badges.appendChild(badge('已加密', 'lock'));
+		if (info.unsafe) {
+			badges.appendChild(badge(ops.unsafeReasonLabel[info.unsafe], 'warning', true));
+		}
+		if (info.highRatio) badges.appendChild(badge('高压缩比', 'warning', true));
+		if (info.duplicate) badges.appendChild(badge('重名', 'info'));
+		if (badges.childElementCount) body.appendChild(badges);
+		li.appendChild(body);
+
+		const actions = document.createElement('div');
+		actions.className = 'zip-item-actions';
+		if (!info.directory && !info.unsafe) {
+			actions.appendChild(
+				iconButton('download', '下载此文件', () => {
+					void downloadEntry(entry);
+				}),
+			);
+		}
+		li.appendChild(actions);
+
+		li.addEventListener('click', (event) => {
+			if (info.unsafe) return;
+			const target = event.target as HTMLElement;
+			if (target.closest('mdui-button-icon, mdui-checkbox')) return;
+			const next = !selected.has(info.id);
+			if (next) selected.add(info.id);
+			else selected.delete(info.id);
+			check.checked = next;
+			check.toggleAttribute('checked', next);
+			updateSelectionUi();
+		});
+
+		return li;
+	}
+
+	function updateSelectionUi(): void {
+		const chosen = entries.filter((entry) => selected.has(entry.info.id) && entry.info.safePath);
+		const bytes = chosen.reduce(
+			(sum, entry) => sum + (entry.info.directory ? 0 : entry.info.uncompressedSize),
+			0,
+		);
+		$('entrySummary').textContent = readerFile
+			? `已选 ${chosen.length} 项 · 解压后约 ${ops.formatBytes(bytes)}`
+			: '';
+		setDisabled('extractFolder', !supportsFolder || chosen.length === 0);
+		setDisabled(
+			'extractDownload',
+			!chosen.some((entry) => !entry.info.directory),
+		);
+		setDisabled('clearUnzip', !readerFile);
+	}
+
+	/* ------------------------------------------------------------------ 解压：密码与读取 */
+
+	function askPassword(hint: string): Promise<string | null> {
+		return new Promise((resolve) => {
+			const dialog = $<Dialog>('pwdDialog');
+			const input = $<TextField>('pwdInput');
+			$('pwdHint').textContent = hint;
+			input.value = '';
+			dialog.open = true;
+
+			const finish = (value: string | null) => {
+				$('pwdOk').removeEventListener('click', onOk);
+				$('pwdCancel').removeEventListener('click', onCancel);
+				dialog.removeEventListener('closed', onClosed);
+				// 必须关掉：模态遮罩会盖住整页，后续点击全落在遮罩上
+				dialog.open = false;
+				resolve(value);
+			};
+			const onOk = () => finish(input.value);
+			const onCancel = () => finish(null);
+			/*
+			 * 上一次密码框关闭的 closed 事件可能在下一个密码框打开后才到达。
+			 * 直接把它当取消，会把用户刚输入的正确密码一起吞掉；这里只在
+			 * 对话框确实已经关闭时才视为用户主动关闭。
+			 */
+			const onClosed = () => {
+				if (!dialog.open) finish(null);
+			};
+			$('pwdOk').addEventListener('click', onOk);
+			$('pwdCancel').addEventListener('click', onCancel);
+			dialog.addEventListener('closed', onClosed);
+		});
+	}
+
+	function confirmAction(text: string): Promise<boolean> {
+		return new Promise((resolve) => {
+			const dialog = $<Dialog>('confirmDialog');
+			$('confirmText').textContent = text;
+			dialog.open = true;
+
+			const finish = (value: boolean) => {
+				$('confirmOk').removeEventListener('click', onOk);
+				$('confirmCancel').removeEventListener('click', onCancel);
+				dialog.removeEventListener('closed', onClosed);
+				dialog.open = false;
+				resolve(value);
+			};
+			const onOk = () => finish(true);
+			const onCancel = () => finish(false);
+			const onClosed = () => {
+				if (!dialog.open) finish(false);
+			};
+			$('confirmOk').addEventListener('click', onOk);
+			$('confirmCancel').addEventListener('click', onCancel);
+			dialog.addEventListener('closed', onClosed);
+		});
+	}
+
+	async function withPassword<T>(
+		entry: LoadedEntry,
+		run: (password: string | undefined) => Promise<T>,
+	): Promise<T> {
+		let attempts = 0;
+		for (;;) {
+			try {
+				return await run(cachedPassword || undefined);
+			} catch (error) {
+				if (!ops.isPasswordError(error)) throw error;
+				if (attempts >= 3) throw new Error('密码错误次数过多');
+				attempts++;
+				const hint =
+					attempts === 1
+						? `「${entry.info.name}」已加密，请输入密码。`
+						: '密码不正确，请重试。';
+				// 上一次关闭动画还没结束就重新 open，mdui 会把新框一起关掉
+				if (attempts > 1) await new Promise((resolve) => window.setTimeout(resolve, 350));
+				const password = await askPassword(hint);
+				if (password === null) throw new Error('已取消输入密码');
+				cachedPassword = password;
+			}
+		}
+	}
+
+	async function getZip(): Promise<ZipJs> {
+		return loadZipJs((loaded, total, label) => setProgress(loaded, total, `${label}…`));
+	}
+
+	async function readEntryBlob(entry: LoadedEntry, zip: ZipJs): Promise<Blob> {
+		return withPassword(entry, async (password) => {
+			const writer = new zip.BlobWriter();
+			await entry.raw.getData(writer, {
+				...(password ? { password } : {}),
+				onprogress: (progress: ZipProgress) =>
+					setProgress(
+						Number(progress?.loaded ?? 0),
+						Number(progress?.total ?? 0),
+						`解压 ${baseName(entry.info.name)}…`,
+					),
+			});
+			return writer.getData();
+		});
+	}
+
+	async function downloadEntry(entry: LoadedEntry): Promise<void> {
+		beginProgress(`准备下载 ${baseName(entry.info.name)}…`);
+		try {
+			const zip = await getZip();
+			const blob = await readEntryBlob(entry, zip);
+			downloadBlob(blob, baseName(entry.info.safePath ?? entry.info.name));
+			endProgress('已下载');
+		} catch (error) {
+			fail(error);
+		}
+	}
+
+	/* ------------------------------------------------------------------ 解压：写入文件夹 / 逐个下载 */
+
+	async function ensureDirectory(
+		root: FileSystemDirectoryHandle,
+		segments: string[],
+	): Promise<FileSystemDirectoryHandle> {
+		let dir = root;
+		for (const segment of segments) {
+			if (!segment || segment === '.') continue;
+			dir = await dir.getDirectoryHandle(segment, { create: true });
+		}
+		return dir;
+	}
+
+	async function writeEntryToFolder(
+		root: FileSystemDirectoryHandle,
+		entry: LoadedEntry,
+		state: { total: number },
+		progressLabel: string,
+	): Promise<void> {
+		const safePath = entry.info.safePath;
+		if (!safePath) throw new Error('不安全路径');
+		const segments = safePath.split('/').filter(Boolean);
+		const fileName = segments.pop();
+		if (!fileName) throw new Error('空文件名');
+		const parent = await ensureDirectory(root, segments);
+
+		await withPassword(entry, async (password) => {
+			const fileHandle = await parent.getFileHandle(fileName, { create: true });
+			const writable = await fileHandle.createWritable();
+			let entryBytes = 0;
+			let closed = false;
+
+			const sink = new WritableStream<Uint8Array>({
+				async write(chunk) {
+					entryBytes += chunk.byteLength;
+					if (entryBytes > ops.LIMITS.maxExtractEntryBytes) {
+						throw new Error(`「${fileName}」超过单文件上限`);
+					}
+					if (state.total + entryBytes > ops.LIMITS.maxExtractTotalBytes) {
+						throw new Error('解压总量超过上限');
+					}
+					await writable.write(chunk as BufferSource);
+				},
+				async close() {
+					await writable.close();
+					closed = true;
+				},
+				async abort(reason) {
+					try {
+						await writable.abort(reason);
+					} catch {
+						// 已经关闭或已丢弃
+					}
+				},
+			});
+
+			try {
+				await entry.raw.getData(
+					{ writable: sink, getData: async () => undefined },
+					{
+						...(password ? { password } : {}),
+						onprogress: (progress: ZipProgress) =>
+							setProgress(
+								Number(progress?.loaded ?? 0),
+								Number(progress?.total ?? 0),
+								`${progressLabel} ${fileName}…`,
+							),
+					},
+				);
+				state.total += entryBytes;
+			} catch (error) {
+				if (!closed) {
+					try {
+						await writable.abort(error);
+					} catch {
+						// 忽略
+					}
+				}
+				// 密码错误/CRC 失败时可能已经建了半截文件，删掉再重试
+				try {
+					await parent.removeEntry(fileName);
+				} catch {
+					// 文件可能还没创建
+				}
+				throw error;
+			}
+		});
+	}
+
+	async function extractToFolder(): Promise<void> {
+		const plan = ops.planExtraction(
+			entries.map((entry) => entry.info),
+			selected,
+		);
+		if (plan.error) {
+			toast(plan.error);
+			return;
+		}
+		if (!supportsFolder || !pickerWindow.showDirectoryPicker) {
+			toast('当前浏览器不支持直接写入文件夹，请使用「逐个下载」');
+			return;
+		}
+		if (plan.skippedUnsafe.length) {
+			toast(`已排除 ${plan.skippedUnsafe.length} 个不安全路径`);
+		}
+		if (plan.skippedOversize.length) {
+			const okToContinue = await confirmAction(
+				`${plan.skippedOversize.length} 个条目超过单文件上限，将被跳过。继续解压其余条目吗？`,
+			);
+			if (!okToContinue) return;
+		}
+		const risky = plan.entries.filter((entry) => entry.highRatio);
+		if (risky.length) {
+			const okToContinue = await confirmAction(
+				`${risky.length} 个条目压缩比异常，可能是压缩炸弹。确认继续解压吗？`,
+			);
+			if (!okToContinue) return;
+		}
+
+		let root: FileSystemDirectoryHandle;
+		try {
+			root = await pickerWindow.showDirectoryPicker({ mode: 'readwrite' });
+		} catch (error) {
+			if (!isAbortError(error)) fail(error);
+			return;
+		}
+
+		beginProgress('解压到文件夹…');
+		const state = { total: 0 };
+		let done = 0;
+		let failed = 0;
+		let cancelled = false;
+
+		for (const info of plan.entries) {
+			const entry = entries[info.id];
+			if (!entry) continue;
+			try {
+				if (info.directory) {
+					const path = (info.safePath ?? '').replace(/\/$/, '');
+					await ensureDirectory(root, path.split('/').filter(Boolean));
+				} else {
+					await writeEntryToFolder(root, entry, state, '解压');
+				}
+				done++;
+			} catch (error) {
+				if (isCancelError(error)) {
+					cancelled = true;
+					break;
+				}
+				failed++;
+				console.error(error);
+			}
+			setProgress(
+				done + failed,
+				plan.entries.length,
+				`解压 ${done + failed}/${plan.entries.length}：${baseName(info.name)}`,
+			);
+		}
+
+		endProgress(
+			cancelled
+				? `已取消，完成 ${done} 项`
+				: failed
+					? `完成，${failed} 项失败`
+					: `已解压 ${done} 项`,
+		);
+		if (!cancelled) {
+			toast(failed ? `解压完成，${failed} 项失败（详见控制台）` : `已解压 ${done} 项到所选文件夹`);
+		}
+	}
+
+	async function extractByDownload(): Promise<void> {
+		const plan = ops.planExtraction(
+			entries.map((entry) => entry.info),
+			selected,
+		);
+		if (plan.error) {
+			toast(plan.error);
+			return;
+		}
+		const files = plan.entries.filter((entry) => !entry.directory);
+		if (!files.length) {
+			toast('没有可下载的文件');
+			return;
+		}
+		if (files.length > 10) {
+			const okToContinue = await confirmAction(
+				`将触发 ${files.length} 次下载，浏览器可能拦截。建议使用 Chrome / Edge 的「解压到文件夹」。继续吗？`,
+			);
+			if (!okToContinue) return;
+		}
+
+		const zip = await getZip();
+		beginProgress('准备逐个下载…');
+		const used = new Set<string>();
+		let done = 0;
+		for (const info of files) {
+			const entry = entries[info.id];
+			if (!entry) continue;
+			try {
+				const blob = await readEntryBlob(entry, zip);
+				const name = ops.makeUniqueName(baseName(info.safePath ?? info.name), used);
+				downloadBlob(blob, name);
+			} catch (error) {
+				if (isCancelError(error)) break;
+				console.error(error);
+				toast(ops.describeError(error));
+			}
+			done++;
+			setProgress(done, files.length, `下载 ${done}/${files.length}：${baseName(info.name)}`);
+			// 连续触发下载太快会被浏览器当成弹窗，留一点间隔
+			await new Promise((resolve) => window.setTimeout(resolve, 300));
+		}
+		endProgress(`已触发 ${done} 次下载`);
+	}
+
+	/* ------------------------------------------------------------------ 压缩 */
+
+	function renderCompressList(): void {
+		const list = $<HTMLUListElement>('compressList');
+		list.textContent = '';
+		for (const [index, item] of compressFiles.entries()) {
+			const li = document.createElement('li');
+			li.className = 'zip-item';
+			const icon = document.createElement(`mdui-icon-${iconFor(ops.kindOf(item.name))}`);
+			icon.className = 'zip-item-icon';
+			const body = document.createElement('div');
+			body.className = 'zip-item-body';
+			const name = document.createElement('div');
+			name.className = 'zip-item-name';
+			name.textContent = item.name;
+			name.title = item.name;
+			const meta = document.createElement('div');
+			meta.className = 'zip-item-meta';
+			meta.textContent = ops.formatBytes(item.file.size);
+			body.append(name, meta);
+			const actions = document.createElement('div');
+			actions.className = 'zip-item-actions';
+			actions.appendChild(
+				iconButton('delete', '移除', () => {
+					compressFiles.splice(index, 1);
+					renderCompressList();
+				}),
+			);
+			li.append(icon, body, actions);
+			list.appendChild(li);
+		}
+		$('compressEmpty').hidden = compressFiles.length > 0;
+		const total = compressFiles.reduce((sum, item) => sum + item.file.size, 0);
+		$('compressSummary').textContent = compressFiles.length
+			? `${compressFiles.length} 个文件 · ${ops.formatBytes(total)}`
+			: '';
+		setDisabled('compressRun', compressFiles.length === 0);
+	}
+
+	function defaultArchiveName(): string {
+		const first = compressFiles[0]?.name ?? '';
+		return ops.normalizeArchiveName(stripExtension(baseName(first)) || 'archive');
+	}
+
+	function addCompressFiles(files: File[]): void {
+		const incoming = files.map((file) => ({
+			file,
+			name: (file as File & { webkitRelativePath?: string }).webkitRelativePath || file.name,
+		}));
+		const combined = [...compressFiles, ...incoming];
+		const error = ops.validateCompressionInput(
+			combined.map((item) => ({ name: item.name, size: item.file.size })),
+		);
+		if (error) {
+			toast(error);
+			return;
+		}
+		const names = ops.assignUniqueNames(combined.map((item) => item.name));
+		compressFiles = combined.map((item, index) => ({ ...item, name: names[index] }));
+		if (!$<TextField>('archiveName').value.trim()) {
+			$<TextField>('archiveName').value = defaultArchiveName();
+		}
+		renderCompressList();
+	}
+
+	async function runCompression(): Promise<void> {
+		const error = ops.validateCompressionInput(
+			compressFiles.map((item) => ({ name: item.name, size: item.file.size })),
+		);
+		if (error) {
+			toast(error);
+			return;
+		}
+
+		const level = Number($<Select>('compressLevel').value);
+		const passwordField = $<TextField>('compressPassword');
+		const password = passwordField.value;
+		const archive = ops.normalizeArchiveName(
+			$<TextField>('archiveName').value || defaultArchiveName(),
+		);
+		const total = compressFiles.reduce((sum, item) => sum + item.file.size, 0);
+
+		setDisabled('compressRun', true);
+		setDisabled('compressClear', true);
+		beginProgress('压缩中…');
+		let writer: ZipWriterInstance | null = null;
+		try {
+			const zip = await getZip();
+			writer = new zip.ZipWriter(new zip.BlobWriter('application/zip'), {
+				level: Number.isFinite(level) ? Math.min(9, Math.max(0, level)) : 6,
+				keepOrder: true,
+				...(password ? { password } : {}),
+			});
+
+			let done = 0;
+			for (const [index, item] of compressFiles.entries()) {
+				const label = baseName(item.name);
+				await writer.add(item.name, new zip.BlobReader(item.file), {
+					lastModDate: new Date(item.file.lastModified),
+					onprogress: (progress: ZipProgress) => {
+						setProgress(
+							done + Number(progress?.loaded ?? 0),
+							total,
+							`压缩 ${index + 1}/${compressFiles.length}：${label}`,
+						);
+					},
+				});
+				done += item.file.size;
+				setProgress(done, total, `已压缩 ${index + 1}/${compressFiles.length}：${label}`);
+			}
+
+			const blob = (await writer.close()) as Blob;
+			downloadBlob(blob, archive);
+			passwordField.value = '';
+			cachedPassword = '';
+			endProgress(`已生成 ${archive}（${ops.formatBytes(blob.size)}）`);
+			toast(`已生成 ${archive}`);
+		} catch (error) {
+			if (writer) {
+				try {
+					await writer.close();
+				} catch {
+					// 失败时关闭 writer 只是清理资源
+				}
+			}
+			fail(error);
+		} finally {
+			setDisabled('compressRun', compressFiles.length === 0);
+			setDisabled('compressClear', compressFiles.length === 0);
+		}
+	}
+
+	/* ------------------------------------------------------------------ 绑定事件 */
+
+	wirePicker({
+		buttonId: 'unzipPick',
+		dropId: 'unzipDrop',
+		accept: '.zip,application/zip',
+		multiple: false,
+		extensions: ['.zip'],
+		onFiles: (files) => {
+			const file = files[0];
+			if (file) void loadZipFile(file);
+		},
+	});
+
+	wirePicker({
+		buttonId: 'compressPick',
+		dropId: 'compressDrop',
+		accept: '',
+		multiple: true,
+		onFiles: addCompressFiles,
+	});
+
+	wirePicker({
+		buttonId: 'compressPickDir',
+		accept: '',
+		multiple: true,
+		directory: true,
+		onFiles: addCompressFiles,
+	});
+
+	$('encodingSelect').addEventListener('change', () => {
+		const next = $<Select>('encodingSelect').value as ops.EncodingChoice;
+		if (next === encoding) return;
+		encoding = next;
+		if (readerFile) {
+			toast('正在按新编码重新读取…');
+			void loadZipFile(readerFile);
+		}
+	});
+
+	$('entrySearch').addEventListener('input', renderEntryList);
+
+	$('selectAll').addEventListener('click', () => {
+		const windowed = ops.renderWindow(
+			entries.map((entry) => entry.info),
+			$<TextField>('entrySearch').value,
+		);
+		for (const info of windowed.items) {
+			if (info.safePath) selected.add(info.id);
+		}
+		renderEntryList();
+		updateSelectionUi();
+	});
+
+	$('selectNone').addEventListener('click', () => {
+		const windowed = ops.renderWindow(
+			entries.map((entry) => entry.info),
+			$<TextField>('entrySearch').value,
+		);
+		for (const info of windowed.items) selected.delete(info.id);
+		renderEntryList();
+		updateSelectionUi();
+	});
+
+	$('extractFolder').addEventListener('click', () => {
+		void extractToFolder();
+	});
+
+	$('extractDownload').addEventListener('click', () => {
+		void extractByDownload();
+	});
+
+	$('clearUnzip').addEventListener('click', () => {
+		loadToken++;
+		void closeReader();
+		resetUnzipState();
+		endProgress();
+	});
+
+	$('compressClear').addEventListener('click', () => {
+		compressFiles = [];
+		$<TextField>('compressPassword').value = '';
+		$<TextField>('archiveName').value = '';
+		renderCompressList();
+	});
+
+	$('compressRun').addEventListener('click', () => {
+		void runCompression();
+	});
+
+	$('folderNote').textContent = supportsFolder
+		? '解压到文件夹会把文件直接写入你选择的目录；同名文件会被覆盖。'
+		: '当前浏览器不支持直接写入文件夹，请使用「逐个下载」；建议 Chrome / Edge。';
+
+	renderEntries();
+	renderCompressList();
+</script>

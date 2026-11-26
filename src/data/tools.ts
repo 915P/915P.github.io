@@ -150,6 +150,15 @@ export const builtinTools: Tool[] = [
 		href: '/tools/pdf/',
 	},
 	{
+		slug: 'zip',
+		name: 'ZIP 工具箱',
+		desc: '创建与解压 ZIP，支持中文文件名、AES 加密与路径安全校验，全程本地',
+		icon: 'folder-zip',
+		category: '工具',
+		status: 'live',
+		href: '/tools/zip/',
+	},
+	{
 		slug: 'mindmap',
 		name: '思维导图',
 		desc: 'My Mind 开源思维导图编辑器',

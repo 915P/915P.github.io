@@ -35,12 +35,15 @@ jobs:
       - name: 类型检查
         run: npm run check
 
-      # 四套纯 Node 回归测试；改动若只涉及其中一块，可留到 PR 里说明
+      # 五套纯 Node 回归测试；改动若只涉及其中一块，可留到 PR 里说明
       - name: 单元测试（eval）
         run: npm run test:eval
 
       - name: 单元测试（pdf）
         run: npm run test:pdf
+
+      - name: 单元测试（zip）
+        run: npm run test:zip
 
       - name: 单元测试（media）
         run: npm run test:media

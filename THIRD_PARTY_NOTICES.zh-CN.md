@@ -704,6 +704,11 @@ ffmpeg.wasm 的 `exec()` 只在 worker 本身死掉时才 reject；ffmpeg 自己
   （`captureStream` / `MediaRecorder` / `Blob` 下载），不含 §6 旧版
   RT-Oscilloscope 的任何代码；FFT 为自写的基 2 Cooley–Tukey 实现，
   因此仓库内没有捆绑任何 FFT 库。
+- **`/tools/zip/` ZIP 工具箱** —— 本站从零自研：`src/lib/zip-ops.ts`
+  （路径清洗、重名处理、解压限额与可读错误文案，零浏览器依赖，可在 Node 里测）、
+  `src/lib/zip-loader.ts`（vendor 内 zip.js UMD 构建的懒加载）
+  与 `src/pages/tools/zip.astro`，以及 Node 回归测试 `scripts/zip-test.mjs`。
+  不含任何第三方代码，zip.js 以未经修改的上游构建引入（见 §21）。
 
 > 站内托管的第三方项目（CeJS、3D 流体、思维导图等）**均非本站原创**，
 > 各自适用上文对应章节的许可证。特别注意：
@@ -811,3 +816,19 @@ ffmpeg.wasm 的 `exec()` 只在 worker 本身死掉时才 reject；ffmpeg 自己
 > **不构成对以下内容的再许可**：HCSU 数据（CC BY-NC 4.0）、
 > chinese-calligraphy-dataset（Apache-2.0）、OpenCC（BSD-3-Clause）、
 > OpenCV（Apache-2.0）。
+
+---
+
+## 21. zip.js（ZIP 工具箱：浏览器内创建与解压 ZIP）
+
+- **位置**：`public/vendor/zip/`
+- **上游**：<https://github.com/gildas-lormeau/zip.js>（npm 包 `@zip.js/zip.js`）
+- **版本**：2.25.0
+- **许可证**：**BSD-3-Clause**，Copyright (c) 2023 Gildas Lormeau
+- **文件**：`zip.min.js`（UMD 构建，内嵌 Web Worker 与 WASM）、`LICENSE`
+- **用途**：`/tools/zip/` 通过 `ZipReader` / `ZipWriter` 列出、解压、创建 ZIP。
+  `filenameEncoding` 解码 GBK / Big5 / Shift-JIS 等旧式文件名；
+  `filenameValidation` 配合站内路径校验阻止路径穿越；写出支持 AES-256 与 ZIP64。
+- **本站改动**：无（文件取自包内的 `dist/zip.min.js`）。
+- **说明**：仅在 `/tools/zip/` 按需加载。PDF 工具箱的拆分打包仍使用
+  fflate（见 §13），两个库并存、互不影响。
